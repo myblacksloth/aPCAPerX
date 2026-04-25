@@ -65,7 +65,7 @@ export default function PacketTable({ packets }: PacketTableProps) {
         <h2 className="text-base font-semibold text-slate-200">
           Lista pacchetti{' '}
           <span className="text-slate-500 text-sm font-normal">
-            (primi {packets.length.toLocaleString('it-IT')})
+            ({packets.length.toLocaleString('it-IT')})
           </span>
         </h2>
 
