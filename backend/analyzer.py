@@ -28,6 +28,7 @@ from scapy.layers.dns import DNS                   # protocollo DNS
 from models import (
     AnalysisResult, SummaryStats, ProtocolEntry, IPEntry,
     PortEntry, Conversation, TimelinePoint, PacketEntry,
+    LayerField, LayerInfo,
 )
 
 
@@ -79,6 +80,104 @@ PORT_SERVICES: Dict[int, str] = {
     8443:  "HTTPS-Alt",
     27017: "MongoDB",
 }
+
+
+# ─── Nomi human-readable per i layer Scapy ────────────────────────────────────
+
+_LAYER_DISPLAY: Dict[str, str] = {
+    "Ether":      "Ethernet II",
+    "IP":         "Internet Protocol v4",
+    "IPv6":       "Internet Protocol v6",
+    "TCP":        "Transmission Control Protocol",
+    "UDP":        "User Datagram Protocol",
+    "ICMP":       "Internet Control Message Protocol",
+    "ICMPv6":     "Internet Control Message Protocol v6",
+    "DNS":        "Domain Name System",
+    "DNSQR":      "DNS Query Record",
+    "DNSRR":      "DNS Resource Record",
+    "ARP":        "Address Resolution Protocol",
+    "DHCP":       "Dynamic Host Configuration Protocol",
+    "BOOTP":      "Bootstrap Protocol",
+    "NTP":        "Network Time Protocol",
+    "STP":        "Spanning Tree Protocol",
+    "SNMP":       "Simple Network Management Protocol",
+    "Raw":        "Data",
+    "Padding":    "Padding",
+    "LLC":        "Logical Link Control",
+    "Dot1Q":      "802.1Q Virtual LAN",
+    "GRE":        "Generic Routing Encapsulation",
+    "ESP":        "Encapsulating Security Payload",
+    "AH":         "Authentication Header",
+    "SCTP":       "Stream Control Transmission Protocol",
+}
+
+
+def _extract_layers(pkt) -> List[LayerInfo]:
+    """
+    Percorre lo stack protocollare del pacchetto e restituisce un albero
+    di layer con i relativi campi, pronto per la visualizzazione Wireshark-style.
+    """
+    result: List[LayerInfo] = []
+    layer = pkt
+
+    while layer is not None:
+        cls_name = layer.__class__.__name__
+        if cls_name == "NoPayload":
+            break
+
+        fields: List[LayerField] = []
+
+        try:
+            if hasattr(layer, "fields_desc"):
+                for f in layer.fields_desc:
+                    try:
+                        internal = layer.getfieldval(f.name)
+                        repr_val = f.i2repr(layer, internal)
+
+                        # Converti bytes → hex
+                        if isinstance(repr_val, bytes):
+                            repr_val = repr_val.hex()
+                        elif isinstance(internal, bytes) and str(repr_val).startswith(("b'", 'b"')):
+                            repr_val = internal.hex()
+
+                        val_str = str(repr_val)[:400]
+                        fields.append(LayerField(name=f.name, value=val_str))
+                    except Exception:
+                        pass
+
+            # Layer Raw: aggiungi il payload decodificato se sembra testo
+            if cls_name == "Raw":
+                try:
+                    raw_bytes: bytes = layer.load
+                    try:
+                        text = raw_bytes.decode("utf-8", errors="replace")
+                        # Se almeno il 70% dei caratteri è stampabile, mostralo come testo
+                        printable = sum(32 <= ord(c) < 127 for c in text[:200])
+                        if printable >= len(text[:200]) * 0.7:
+                            fields.append(LayerField(
+                                name="[payload decoded]",
+                                value=text[:1000],
+                            ))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+
+        display_name = _LAYER_DISPLAY.get(cls_name, cls_name)
+        result.append(LayerInfo(name=cls_name, display=display_name, fields=fields))
+
+        try:
+            next_layer = layer.payload
+            if next_layer is None or next_layer.__class__.__name__ == "NoPayload":
+                break
+            layer = next_layer
+        except Exception:
+            break
+
+    return result
 
 
 # ─── Funzioni di supporto private ─────────────────────────────────────────────
@@ -382,6 +481,11 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 except Exception:
                     ts_str = "00:00:00.000"
 
+                try:
+                    raw_hex = bytes(pkt).hex()
+                except Exception:
+                    raw_hex = None
+
                 packet_list.append(PacketEntry(
                     number   = total_packets,
                     timestamp= ts_str,
@@ -392,6 +496,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     src_port = src_port,
                     dst_port = dst_port,
                     info     = _get_info(pkt, protocol),
+                    raw_hex  = raw_hex,
+                    layers   = _extract_layers(pkt),
                 ))
 
     except Exception as exc:
