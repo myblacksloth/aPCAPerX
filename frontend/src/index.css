@@ -1,0 +1,47 @@
+/*
+ * Foglio di stile globale.
+ * Importa le direttive base di Tailwind CSS e definisce gli stili globali
+ * per il tema scuro dell'applicazione.
+ */
+
+/* Direttive Tailwind: base reset, componenti e utility */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Stili globali ──────────────────────────────────────────────────────── */
+@layer base {
+  /* Sfondo scuro e testo chiaro di default per tutta l'app */
+  body {
+    @apply bg-slate-900 text-slate-100 antialiased;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Scrollbar personalizzata per i browser WebKit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-800;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+}
+
+/* ── Componenti riutilizzabili ───────────────────────────────────────────── */
+@layer components {
+  /* Card standard dell'app: sfondo scuro con bordo sottile */
+  .card {
+    @apply bg-slate-800 border border-slate-700 rounded-xl p-4;
+  }
+
+  /* Badge colorato per i nomi dei protocolli */
+  .protocol-badge {
+    @apply inline-block px-2 py-0.5 rounded text-xs font-semibold font-mono;
+  }
+}
