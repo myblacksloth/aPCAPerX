@@ -378,7 +378,7 @@ graph TD
 
 ## 📄 Licenza
 
-MIT License — vedi [LICENSE](LICENSE) per i dettagli.
+GNU Affero General Public License v3.0 — vedi [LICENSE](LICENSE) per i dettagli.
 
 ---
 
