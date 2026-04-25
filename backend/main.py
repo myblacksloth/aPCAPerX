@@ -89,7 +89,7 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
     - **top_src_ports / top_dst_ports**: porte più utilizzate
     - **conversations**: conversazioni bidirezionali tra coppie di IP
     - **timeline**: andamento del traffico nel tempo
-    - **packets**: lista dettagliata dei primi 1000 pacchetti
+    - **packets**: lista dettagliata di tutti i pacchetti
 
     **Limite dimensione**: 100 MB.
     """

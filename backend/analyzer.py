@@ -36,9 +36,6 @@ from models import (
 # Limite massimo dimensione file (100 MB) — file più grandi vengono rifiutati
 MAX_FILE_SIZE: int = 100 * 1024 * 1024
 
-# Numero massimo di pacchetti inclusi nella lista dettagliata del frontend
-# (limitato per non sovraccaricare il browser con migliaia di righe)
-MAX_PACKET_LIST: int = 1_000
 
 # Mappa porta → nome servizio per i protocolli well-known più diffusi.
 # Viene usata per "indovinare" il protocollo applicativo dalla porta TCP/UDP.
@@ -378,25 +375,24 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 ts_buckets[int(ts)]["packets"] += 1
                 ts_buckets[int(ts)]["bytes"]   += pkt_len
 
-                # ── Aggiunta alla lista dettagliata (solo i primi N) ───────
-                if total_packets <= MAX_PACKET_LIST:
-                    try:
-                        ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
-                        ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]  # millisecondi
-                    except Exception:
-                        ts_str = "00:00:00.000"
+                # ── Aggiunta alla lista dettagliata ───────────────────────
+                try:
+                    ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]
+                except Exception:
+                    ts_str = "00:00:00.000"
 
-                    packet_list.append(PacketEntry(
-                        number   = total_packets,
-                        timestamp= ts_str,
-                        src_ip   = src_ip,
-                        dst_ip   = dst_ip,
-                        protocol = protocol,
-                        length   = pkt_len,
-                        src_port = src_port,
-                        dst_port = dst_port,
-                        info     = _get_info(pkt, protocol),
-                    ))
+                packet_list.append(PacketEntry(
+                    number   = total_packets,
+                    timestamp= ts_str,
+                    src_ip   = src_ip,
+                    dst_ip   = dst_ip,
+                    protocol = protocol,
+                    length   = pkt_len,
+                    src_port = src_port,
+                    dst_port = dst_port,
+                    info     = _get_info(pkt, protocol),
+                ))
 
     except Exception as exc:
         # Rilancia l'eccezione con un messaggio comprensibile all'utente
