@@ -82,26 +82,36 @@ export interface TimelinePoint {
   bytes: number
 }
 
+/** Campo singolo di un layer protocollare */
+export interface LayerField {
+  name: string
+  value: string
+}
+
+/** Layer protocollare con i suoi campi */
+export interface LayerInfo {
+  /** Nome tecnico Scapy (es. "TCP") */
+  name: string
+  /** Nome leggibile (es. "Transmission Control Protocol") */
+  display: string
+  fields: LayerField[]
+}
+
 /** Dettagli di un singolo pacchetto */
 export interface PacketEntry {
-  /** Numero progressivo nel file PCAP (parte da 1) */
   number: number
-  /** Orario di cattura nel formato HH:MM:SS.mmm */
   timestamp: string
-  /** Indirizzo IP sorgente (null per pacchetti non-IP) */
   src_ip: string | null
-  /** Indirizzo IP destinatario */
   dst_ip: string | null
-  /** Protocollo di più alto livello rilevato */
   protocol: string
-  /** Lunghezza totale del pacchetto in byte */
   length: number
-  /** Porta sorgente (null per protocolli non TCP/UDP) */
   src_port: number | null
-  /** Porta di destinazione */
   dst_port: number | null
-  /** Stringa descrittiva del contenuto (stile campo Info di Wireshark) */
   info: string
+  /** Byte grezzi del pacchetto come stringa esadecimale */
+  raw_hex: string | null
+  /** Stack protocollare completo per l'inspector Wireshark-style */
+  layers: LayerInfo[]
 }
 
 /** Risultato completo dell'analisi di un file PCAP — oggetto radice */

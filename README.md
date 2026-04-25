@@ -6,7 +6,13 @@
 
 ![](./stuff/i/SCR-20260425-pjrj.png)
 
-<!-- ![](./stuff/i/.png) -->
+![](./stuff/i/SCR-20260425-rptd.png)
+
+![](./stuff/i/SCR-20260425-rwmv.png)
+
+<!--
+![](./stuff/i/.png)
+-->
 
 
 

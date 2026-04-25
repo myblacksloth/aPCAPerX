@@ -86,26 +86,33 @@ class TimelinePoint(BaseModel):
     bytes: int
 
 
+class LayerField(BaseModel):
+    """Singolo campo di un layer protocollare (nome + valore testuale)."""
+    name: str
+    value: str
+
+
+class LayerInfo(BaseModel):
+    """Un layer protocollare con il suo nome e i suoi campi."""
+    name: str          # nome tecnico Scapy, es. "IP", "TCP"
+    display: str       # nome human-readable, es. "Internet Protocol v4"
+    fields: List[LayerField]
+
+
 class PacketEntry(BaseModel):
-    """Dettagli di un singolo pacchetto dalla lista dei primi N pacchetti."""
-    # Numero progressivo del pacchetto nel file (parte da 1)
+    """Dettagli di un singolo pacchetto dalla lista dei pacchetti."""
     number: int
-    # Orario di cattura del pacchetto nel formato HH:MM:SS.mmm
     timestamp: str
-    # Indirizzo IP sorgente (None per pacchetti non-IP come STP)
     src_ip: Optional[str] = None
-    # Indirizzo IP destinatario
     dst_ip: Optional[str] = None
-    # Protocollo di più alto livello rilevato
     protocol: str
-    # Lunghezza totale del pacchetto in byte
     length: int
-    # Porta sorgente (None per protocolli non TCP/UDP)
     src_port: Optional[int] = None
-    # Porta di destinazione
     dst_port: Optional[int] = None
-    # Stringa informativa sul contenuto del pacchetto (stile Wireshark)
     info: str
+    # Dati per l'inspector Wireshark-style
+    raw_hex: Optional[str] = None          # byte grezzi come stringa hex
+    layers: List[LayerInfo] = []           # albero dei layer protocollari
 
 
 class AnalysisResult(BaseModel):
@@ -133,5 +140,4 @@ class AnalysisResult(BaseModel):
     conversations: List[Conversation]
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
-    # Elenco dettagliato dei primi 1000 pacchetti
     packets: List[PacketEntry]
