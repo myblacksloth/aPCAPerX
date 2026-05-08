@@ -150,6 +150,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
   const [error, setError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<SecurityAnalysisResponse | null>(null)
   const enriched = enrichedIpCount(result)
+  const analysisActive = analysis !== null
 
   const topAssessments = useMemo(
     () => analysis?.ip_assessments.filter((item) => item.risk_score > 0).slice(0, 25) ?? [],
@@ -195,16 +196,25 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
             </p>
           </div>
           <button
-            onClick={() => setConfirmOpen(true)}
-            disabled={loading || enriched === 0}
+            onClick={() => {
+              // Dopo un'analisi riuscita il report resta attivo e non viene ricalcolato.
+              if (!analysisActive) setConfirmOpen(true)
+            }}
+            disabled={loading || enriched === 0 || analysisActive}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              loading || enriched === 0
+              analysisActive
+                ? 'cursor-not-allowed border border-emerald-500/30 bg-emerald-500/15 text-emerald-100'
+                : loading || enriched === 0
                 ? 'cursor-not-allowed bg-slate-700 text-slate-400'
                 : 'bg-red-500/90 text-white hover:bg-red-500'
             }`}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-            {loading ? 'Analisi in corso...' : 'Analisi di sicurezza'}
+            {analysisActive
+              ? <CheckCircle2 className="h-4 w-4" />
+              : loading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <ShieldAlert className="h-4 w-4" />}
+            {analysisActive ? 'Analisi attiva' : loading ? 'Analisi in corso...' : 'Analisi di sicurezza'}
           </button>
         </div>
 
@@ -218,6 +228,12 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
         {error && (
           <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {error}
+          </div>
+        )}
+
+        {analysisActive && (
+          <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+            Analisi Security attiva: i risultati sono già stati recuperati e il comando è stato disabilitato.
           </div>
         )}
       </div>

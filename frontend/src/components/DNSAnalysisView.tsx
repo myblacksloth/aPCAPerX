@@ -86,6 +86,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
 
   const dns = result.dns ?? emptyDns()
   const externalIntel = reputation?.results ?? {}
+  const reputationActive = reputation !== null
   const recordTypes = useMemo(() => ['all', ...new Set(dns.queries.map((query) => query.record_type).sort())], [dns.queries])
   const rcodes = useMemo(
     () => ['all', ...new Set(dns.queries.map((query) => query.response_code_name ?? 'NO_RESPONSE').sort())],
@@ -146,16 +147,25 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
             </p>
           </div>
           <button
-            onClick={() => setConfirmOpen(true)}
-            disabled={loading || dns.top_domains.length === 0}
+            onClick={() => {
+              // Dopo un controllo riuscito la reputazione resta attiva e non viene rilanciata.
+              if (!reputationActive) setConfirmOpen(true)
+            }}
+            disabled={loading || dns.top_domains.length === 0 || reputationActive}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              loading || dns.top_domains.length === 0
+              reputationActive
+                ? 'cursor-not-allowed border border-emerald-500/30 bg-emerald-500/15 text-emerald-100'
+                : loading || dns.top_domains.length === 0
                 ? 'cursor-not-allowed bg-slate-700 text-slate-400'
                 : 'bg-emerald-500/90 text-white hover:bg-emerald-500'
             }`}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-            {loading ? 'Controllo liste...' : 'Controlla liste esterne'}
+            {reputationActive
+              ? <ShieldCheck className="h-4 w-4" />
+              : loading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Database className="h-4 w-4" />}
+            {reputationActive ? 'Liste esterne attive' : loading ? 'Controllo liste...' : 'Controlla liste esterne'}
           </button>
         </div>
 
@@ -191,7 +201,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
                 {filteredQueries.length} righe filtrate su {dns.queries.length}
               </p>
             </div>
-            {reputation && (
+            {reputationActive && (
               <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-100">
                 Reputazione esterna attiva
               </span>
@@ -316,7 +326,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
             </div>
           </div>
 
-          {reputation && (
+          {reputationActive && reputation && (
             <div className="card">
               <h3 className="text-sm font-semibold text-slate-200">Fonti esterne</h3>
               <div className="mt-3 space-y-2">
