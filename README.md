@@ -14,7 +14,9 @@
 
 ![](./stuff/i/SCR-20260508-pglq.png)
 
-<!-- 
+![](./stuff/i/SCR-20260508-pips.png)
+
+<!--
 ![](./stuff/i/.png)
 -->
 
