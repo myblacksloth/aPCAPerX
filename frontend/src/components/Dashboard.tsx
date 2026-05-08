@@ -24,6 +24,7 @@ import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } fr
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
 import TopIPsChart        from './TopIPsChart'
+import SecurityPanel      from './SecurityPanel'
 import WorldTrafficMap    from './WorldTrafficMap'
 import TimelineChart      from './TimelineChart'
 import TopPortsChart      from './TopPortsChart'
@@ -236,19 +237,22 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             <TopIPsChart   result={result} />
           </div>
 
-          {/* Riga 4: mappa mondiale del traffico verso IP pubblici */}
+          {/* Riga 4: segnalazioni Security basate sulle informazioni IP raccolte */}
+          <SecurityPanel result={result} />
+
+          {/* Riga 5: mappa mondiale del traffico verso IP pubblici */}
           <WorldTrafficMap result={result} />
 
-          {/* Riga 5: timeline del traffico */}
+          {/* Riga 6: timeline del traffico */}
           <TimelineChart result={result} />
 
-          {/* Riga 6: top porte + conversazioni */}
+          {/* Riga 7: top porte + conversazioni */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <TopPortsChart      result={result} />
             <ConversationsTable conversations={result.conversations} />
           </div>
 
-          {/* Riga 7: lista pacchetti filtrata */}
+          {/* Riga 8: lista pacchetti filtrata */}
           <PacketTable packets={filteredPackets} />
         </>
       )}
