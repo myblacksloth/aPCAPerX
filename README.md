@@ -49,6 +49,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [HTTP anaysis](#http-anaysis)
     - [TLS analysis](#tls-analysis)
     - [Classificazione per host](#classificazione-per-host)
+    - [Analisi dei flussi di rete per singolo stato](#analisi-dei-flussi-di-rete-per-singolo-stato)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -121,7 +122,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
-| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
+| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
 | **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
@@ -148,6 +149,13 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Mappa degli indirizzi IP
 
 ![](./stuff/i/SCR-20260508-pbqj.png)
+
+La sezione **Mappa traffico IP** usa l'arricchimento geografico degli IP pubblici per colorare i paesi in base al traffico osservato. Cliccando su un paese colorato si apre un popup con:
+- IP geolocalizzati in quel paese;
+- flow 5-tuple che coinvolgono quegli IP;
+- endpoint sorgente/destinazione;
+- protocollo, stato, byte e pacchetti del flow;
+- quota di traffico attribuita al paese.
 
 ### Advanced packet tracing
 
@@ -176,6 +184,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Classificazione per host
 
 ![](./stuff/i/SCR-20260509-bcqx.png)
+
+### Analisi dei flussi di rete per singolo stato
+
+![](./stuff/i/SCR-20260509-bigy.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -499,7 +511,7 @@ Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengo
 
 I risultati vengono usati per:
 - arricchire il popup **Top IP**;
-- colorare la **Mappa traffico IP**;
+- colorare la **Mappa traffico IP** e mostrare i flow collegati quando si clicca su un paese;
 - alimentare il pannello **Security**;
 - fornire contesto alla tab **Security avanzata**;
 - includere le informazioni esterne nell'export JSON.
