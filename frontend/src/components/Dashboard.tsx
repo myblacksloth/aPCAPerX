@@ -283,7 +283,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                     : 'text-slate-300 hover:bg-slate-600 hover:text-slate-100'}`}
             >
               {externalFeatureActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-              {externalFeatureActive ? 'Tool esterni attivi' : externalLoading ? 'Analisi...' : 'Analizza con tool esterni'}
+              {externalFeatureActive ? 'Tool esterni attivi' : externalLoading ? 'Ottenimento info...' : 'Analizza con tool esterni'}
             </button>
           </div>
 
