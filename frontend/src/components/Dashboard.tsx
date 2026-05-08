@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -33,9 +33,10 @@ import PacketFilters      from './PacketFilters'
 import PacketTable        from './PacketTable'
 import TracesView         from './TracesView'
 import AdvancedTracesView from './AdvancedTracesView'
+import SecurityAnalysisView from './SecurityAnalysisView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -74,6 +75,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const [externalLoading, setExternalLoading] = useState(false)
   const [externalError, setExternalError] = useState<string | null>(null)
   const [externalSummary, setExternalSummary] = useState<string | null>(null)
+  const [externalConfirmOpen, setExternalConfirmOpen] = useState(false)
   const [packetFilter, setPacketFilter] = useState('')
   const parsedPacketFilter = parsePacketFilter(packetFilter)
   const filteredPackets = parsedPacketFilter.error
@@ -98,6 +100,8 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
    * le informazioni recuperate da RDAP, ASN, reverse DNS e servizi GeoIP.
    */
   const handleExternalAnalysis = async () => {
+    // La chiamata ai servizi esterni parte solo dopo il popup di consenso.
+    setExternalConfirmOpen(false)
     const ips = collectIPs(result)
     if (ips.length === 0) return
 
@@ -192,7 +196,17 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Tracce avanzate
             </button>
             <button
-              onClick={handleExternalAnalysis}
+              onClick={() => setActiveTab('security-analysis')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'security-analysis'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              Security avanzata
+            </button>
+            <button
+              onClick={() => setExternalConfirmOpen(true)}
               disabled={externalLoading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
                 ${externalLoading
@@ -294,6 +308,47 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           />
           <AdvancedTracesView packets={filteredPackets} />
         </>
+      )}
+
+      {/* ── Tab: Security avanzata ────────────────────────────────────── */}
+      {activeTab === 'security-analysis' && (
+        <SecurityAnalysisView result={result} />
+      )}
+
+      {/* Popup privacy per l'arricchimento IP esterno generale */}
+      {externalConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <Search className="mt-0.5 h-5 w-5 flex-shrink-0 text-brand-300" />
+              <div>
+                <h3 className="text-base font-semibold text-white">Conferma analisi con tool esterni</h3>
+                <p className="mt-2 text-sm text-slate-300">
+                  Verranno inviati solo gli IP pubblici osservati nel PCAP a servizi esterni per recuperare ASN,
+                  RDAP, reverse DNS e dati GeoIP. Gli IP privati, locali e riservati saranno scartati dal backend.
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Fonti usate: RDAP/IANA, Team Cymru, resolver DNS inverso e ip-api.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setExternalConfirmOpen(false)}
+                className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleExternalAnalysis}
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-400"
+              >
+                Confermo e analizza
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
