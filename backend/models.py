@@ -412,6 +412,92 @@ class DNSAnalysisResult(BaseModel):
     flow_correlations: List[DNSFlowCorrelation] = Field(default_factory=list)
 
 
+class HTTPRequestEntry(BaseModel):
+    """Richiesta HTTP in chiaro con eventuale risposta correlata."""
+    # Numero pacchetto della richiesta HTTP
+    packet_number: int
+    # Timestamp ISO 8601 della richiesta
+    timestamp: str
+    # IP client
+    client_ip: Optional[str] = None
+    # Porta client
+    client_port: Optional[int] = None
+    # IP server
+    server_ip: Optional[str] = None
+    # Porta server
+    server_port: Optional[int] = None
+    # Metodo HTTP, es. GET, POST, PUT
+    method: str
+    # Host HTTP, se presente
+    host: Optional[str] = None
+    # URI/path richiesto
+    uri: str
+    # Header User-Agent, se presente
+    user_agent: Optional[str] = None
+    # Header Referer/Referrer, se presente
+    referer: Optional[str] = None
+    # Content-Type della richiesta, se presente
+    content_type: Optional[str] = None
+    # Dimensione payload richiesta dedotta da Content-Length o dal segmento
+    payload_size: Optional[int] = None
+    # True se gli header sembrano incompleti nel segmento osservato
+    partial: bool = False
+    # Numero pacchetto della risposta correlata
+    response_packet_number: Optional[int] = None
+    # Status code HTTP della risposta
+    response_status_code: Optional[int] = None
+    # Reason phrase HTTP della risposta
+    response_reason: Optional[str] = None
+    # Header Server della risposta
+    response_server: Optional[str] = None
+    # Content-Type della risposta
+    response_content_type: Optional[str] = None
+    # Content-Length della risposta
+    response_content_length: Optional[int] = None
+    # File name dedotto da URI o Content-Disposition
+    response_file_name: Optional[str] = None
+    # True se la risposta e stata parsata da header incompleti
+    response_partial: bool = False
+
+
+class HTTPTopEntry(BaseModel):
+    """Contatore aggregato HTTP."""
+    # Valore aggregato, ad esempio host o user-agent
+    value: str
+    # Numero occorrenze
+    count: int
+
+
+class HTTPStats(BaseModel):
+    """Statistiche principali dell'analisi HTTP in chiaro."""
+    # Richieste HTTP osservate
+    total_requests: int
+    # Risposte HTTP osservate
+    total_responses: int
+    # Richieste con risposta correlata
+    correlated_responses: int
+    # Richieste parziali/incomplete
+    partial_requests: int
+    # Risposte parziali/incomplete
+    partial_responses: int
+    # Host unici osservati
+    unique_hosts: int
+
+
+class HTTPAnalysisResult(BaseModel):
+    """Risultato completo dell'analisi HTTP in chiaro."""
+    # Riepilogo numerico
+    stats: HTTPStats
+    # Richieste HTTP, arricchite con risposta correlata quando possibile
+    requests: List[HTTPRequestEntry] = Field(default_factory=list)
+    # Host piu contattati
+    top_hosts: List[HTTPTopEntry] = Field(default_factory=list)
+    # User-Agent piu frequenti
+    top_user_agents: List[HTTPTopEntry] = Field(default_factory=list)
+    # Limiti noti del parser, mostrabili in README/UI
+    limitations: List[str] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
@@ -580,6 +666,8 @@ class AnalysisResult(BaseModel):
     flows: List[FlowEntry] = Field(default_factory=list)
     # Analisi DNS locale privacy-by-default
     dns: Optional[DNSAnalysisResult] = None
+    # Analisi HTTP in chiaro privacy-by-default
+    http: Optional[HTTPAnalysisResult] = None
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti

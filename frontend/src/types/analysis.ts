@@ -275,6 +275,57 @@ export interface DNSAnalysisResult {
   flow_correlations: DNSFlowCorrelation[]
 }
 
+/** Richiesta HTTP in chiaro con risposta correlata quando disponibile */
+export interface HTTPRequestEntry {
+  packet_number: number
+  timestamp: string
+  client_ip: string | null
+  client_port: number | null
+  server_ip: string | null
+  server_port: number | null
+  method: string
+  host: string | null
+  uri: string
+  user_agent: string | null
+  referer: string | null
+  content_type: string | null
+  payload_size: number | null
+  partial: boolean
+  response_packet_number: number | null
+  response_status_code: number | null
+  response_reason: string | null
+  response_server: string | null
+  response_content_type: string | null
+  response_content_length: number | null
+  response_file_name: string | null
+  response_partial: boolean
+}
+
+/** Contatore aggregato HTTP */
+export interface HTTPTopEntry {
+  value: string
+  count: number
+}
+
+/** Statistiche principali HTTP */
+export interface HTTPStats {
+  total_requests: number
+  total_responses: number
+  correlated_responses: number
+  partial_requests: number
+  partial_responses: number
+  unique_hosts: number
+}
+
+/** Analisi HTTP in chiaro privacy-by-default */
+export interface HTTPAnalysisResult {
+  stats: HTTPStats
+  requests: HTTPRequestEntry[]
+  top_hosts: HTTPTopEntry[]
+  top_user_agents: HTTPTopEntry[]
+  limitations: string[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */
@@ -441,6 +492,8 @@ export interface AnalysisResult {
   flows: FlowEntry[]
   /** Analisi DNS locale privacy-by-default */
   dns?: DNSAnalysisResult | null
+  /** Analisi HTTP in chiaro privacy-by-default */
+  http?: HTTPAnalysisResult | null
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */

@@ -46,6 +46,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Conferma prima di inviare traffico verso servizi esterni](#conferma-prima-di-inviare-traffico-verso-servizi-esterni)
     - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
     - [DNS analysis](#dns-analysis)
+    - [HTTP anaysis](#http-anaysis)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -79,6 +80,8 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Analisi locale](#analisi-locale)
     - [Controllo liste esterne](#controllo-liste-esterne)
     - [Privacy DNS](#privacy-dns)
+  - [🌍 HTTP analysis](#-http-analysis)
+    - [Limiti HTTP](#limiti-http)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -104,6 +107,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
+| **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
@@ -150,6 +154,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### DNS analysis
 
 ![](./stuff/i/SCR-20260508-twqb.png)
+
+### HTTP anaysis
+
+![](./stuff/i/SCR-20260508-uceg.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -246,10 +254,11 @@ flowchart LR
         E --> M["Lista pacchetti\nmax 1000"]
         E --> Q["Servizi per IP\nDNS, peer, porte"]
         E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
+        E --> HT["HTTP in chiaro\nrequest/response metadata"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q & Z --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z & HT --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -610,6 +619,47 @@ L'analisi DNS locale è privacy-by-default: usa solo il PCAP caricato e non invi
 
 ---
 
+## 🌍 HTTP analysis
+
+La tab **HTTP analysis** mostra metadati HTTP estratti solo da traffico in chiaro. Non decifra HTTPS/TLS e non invia dati a servizi esterni.
+
+Per le richieste HTTP vengono estratti, quando disponibili:
+- timestamp;
+- client IP/porta;
+- server IP/porta;
+- metodo;
+- host;
+- URI/path;
+- user-agent;
+- referer;
+- content-type;
+- dimensione approssimativa payload.
+
+Per le risposte HTTP vengono estratti:
+- status code;
+- reason phrase;
+- header `Server`;
+- content-type;
+- content-length;
+- file name dedotto da `Content-Disposition` o dalla URI della richiesta.
+
+La tab include:
+- tabella richieste con risposta correlata quando possibile;
+- host più contattati;
+- user-agent più frequenti;
+- filtri per host, metodo, status e user-agent.
+
+### Limiti HTTP
+
+Il parser è prudente:
+- analizza solo payload TCP che iniziano come HTTP testuale;
+- non ricostruisce stream TCP completi;
+- header o body frammentati possono essere marcati come parziali;
+- la dimensione payload è stimata da `Content-Length` o dai byte presenti nel segmento osservato;
+- il traffico cifrato HTTPS/TLS non viene interpretato.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -736,6 +786,45 @@ Analizza un file PCAP e restituisce le statistiche.
     "flow_correlations": [
       { "domain": "example.com", "answer_ip": "93.184.216.34", "flow_ids": ["..."], "dns_packet_numbers": [1] }
     ]
+  },
+  "http": {
+    "stats": {
+      "total_requests": 1,
+      "total_responses": 1,
+      "correlated_responses": 1,
+      "partial_requests": 0,
+      "partial_responses": 0,
+      "unique_hosts": 1
+    },
+    "requests": [
+      {
+        "packet_number": 10,
+        "timestamp": "2024-03-15T10:23:02.000000+00:00",
+        "client_ip": "192.168.1.10",
+        "client_port": 52344,
+        "server_ip": "93.184.216.34",
+        "server_port": 80,
+        "method": "GET",
+        "host": "example.com",
+        "uri": "/index.html",
+        "user_agent": "curl/8.0",
+        "referer": null,
+        "content_type": null,
+        "payload_size": 0,
+        "partial": false,
+        "response_packet_number": 11,
+        "response_status_code": 200,
+        "response_reason": "OK",
+        "response_server": "nginx",
+        "response_content_type": "text/html",
+        "response_content_length": 1256,
+        "response_file_name": "index.html",
+        "response_partial": false
+      }
+    ],
+    "top_hosts": [{ "value": "example.com", "count": 1 }],
+    "top_user_agents": [{ "value": "curl/8.0", "count": 1 }],
+    "limitations": ["Analizza solo traffico HTTP in chiaro su TCP.", "Non decifra HTTPS/TLS."]
   },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
@@ -930,6 +1019,7 @@ pcapcaper/
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
 │   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
 │   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
+│   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
@@ -957,6 +1047,7 @@ pcapcaper/
 │   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
 │   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
 │   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
+│   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -992,6 +1083,7 @@ graph TD
     SEC["SecurityPanel\nFinding euristici"]
     SECA["SecurityAnalysisView\nThreat intel opt-in"]
     DNSA["DNSAnalysisView\nDashboard DNS"]
+    HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -1009,6 +1101,7 @@ graph TD
     DB --> SEC
     DB --> SECA
     DB --> DNSA
+    DB --> HTTPA
     DB --> MAP
     DB --> TL
     DB --> TP
