@@ -37,6 +37,92 @@ export interface ProtocolEntry {
 }
 
 /** Statistiche per un singolo indirizzo IP */
+export interface IPExternalInfo {
+  /** Indirizzo IP arricchito */
+  ip: string
+  /** Stato dell'arricchimento: enriched, skipped o error */
+  status: string
+  /** Motivo sintetico in caso di skip o errore */
+  reason: string | null
+  /** Servizi esterni che hanno restituito dati utili */
+  sources: string[]
+  /** Nome reverse DNS ottenuto tramite PTR */
+  reverse_dns: string | null
+  /** Autonomous System Number */
+  asn: string | null
+  /** Nome/descrizione dell'Autonomous System */
+  as_name: string | null
+  /** Prefisso BGP associato all'indirizzo */
+  bgp_prefix: string | null
+  /** Registry RIR o fonte di assegnazione */
+  registry: string | null
+  /** Data di allocazione del prefisso */
+  allocated: string | null
+  /** Nazione stimata o dichiarata */
+  country: string | null
+  /** Codice nazione */
+  country_code: string | null
+  /** Regione geografica */
+  region: string | null
+  /** Città stimata */
+  city: string | null
+  /** Latitudine stimata */
+  lat: number | null
+  /** Longitudine stimata */
+  lon: number | null
+  /** Timezone stimata */
+  timezone: string | null
+  /** ISP rilevato */
+  isp: string | null
+  /** Organizzazione rilevata */
+  org: string | null
+  /** Indicatore mobile */
+  mobile: boolean | null
+  /** Indicatore proxy/VPN */
+  proxy: boolean | null
+  /** Indicatore hosting/datacenter */
+  hosting: boolean | null
+  /** Handle RDAP della risorsa IP */
+  rdap_handle: string | null
+  /** Nome RDAP della risorsa IP */
+  rdap_name: string | null
+  /** Tipo RDAP della risorsa IP */
+  rdap_type: string | null
+  /** Inizio range RDAP */
+  rdap_start_address: string | null
+  /** Fine range RDAP */
+  rdap_end_address: string | null
+  /** Entità/contatti principali esposti da RDAP */
+  rdap_entities: string[]
+  /** Note RDAP sintetiche */
+  rdap_remarks: string[]
+  /** Errori non bloccanti incontrati sui servizi esterni */
+  errors: string[]
+}
+
+/** Risposta dell'arricchimento esterno IP */
+export interface IPEnrichmentResponse {
+  /** Mappa IP -> dati esterni recuperati */
+  results: Record<string, IPExternalInfo>
+}
+
+/** Statistiche per un singolo indirizzo IP */
+export interface IPServiceEntry {
+  /** Nome del servizio dedotto da porta/protocollo */
+  service: string
+  /** Porta TCP/UDP osservata, se disponibile */
+  port: number | null
+  /** Protocollo di trasporto o rete */
+  protocol: string
+  /** Ruolo osservato per l'IP rispetto al servizio */
+  direction: string
+  /** Numero di pacchetti osservati */
+  count: number
+  /** Peer remoti più frequenti per questo servizio */
+  peers: string[]
+}
+
+/** Statistiche per un singolo indirizzo IP */
 export interface IPEntry {
   /** Indirizzo IP in formato stringa (IPv4 o IPv6) */
   ip: string
@@ -44,6 +130,16 @@ export interface IPEntry {
   count: number
   /** Volume totale in byte associato a questo indirizzo */
   bytes: number
+  /** Protocolli osservati per questo IP */
+  protocols: string[]
+  /** Nomi DNS osservati nel PCAP per questo indirizzo */
+  hostnames: string[]
+  /** Peer remoti più frequenti */
+  peers: string[]
+  /** Servizi dedotti dalle porte e dai protocolli osservati */
+  services: IPServiceEntry[]
+  /** Informazioni opzionali ottenute interrogando servizi esterni */
+  external?: IPExternalInfo | null
 }
 
 /** Statistiche per una singola porta di rete */
@@ -136,4 +232,6 @@ export interface AnalysisResult {
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */
   packets: PacketEntry[]
+  /** Informazioni opzionali ottenute con l'arricchimento esterno manuale */
+  external_ip_info?: Record<string, IPExternalInfo>
 }

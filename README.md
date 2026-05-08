@@ -11,20 +11,43 @@
 ![](./stuff/i/SCR-20260425-rwmv.png)
 
 
-![](./stuff/i/SCR-20260508-otsa.png)
-
-<!--
-![](./stuff/i/.png)
--->
-
-
-
 # PCAPCaper 🔍
 
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
 Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni e timeline del traffico.
 
 > Ispirato a [apackets.com](https://apackets.com/), ma completamente open source e auto-ospitabile.
+
+---
+
+- [PCAPCaper 🔍](#pcapcaper-)
+  - [✨ Funzionalità](#-funzionalità)
+  - [Screenshot](#screenshot)
+    - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
+  - [🏗️ Architettura](#️-architettura)
+  - [🧩 Stack tecnologico](#-stack-tecnologico)
+    - [Backend](#backend)
+    - [Frontend](#frontend)
+    - [Infrastruttura](#infrastruttura)
+  - [📊 Flusso di analisi](#-flusso-di-analisi)
+  - [🚀 Avvio locale (senza Docker)](#-avvio-locale-senza-docker)
+    - [Prerequisiti](#prerequisiti)
+    - [1. Clona il repository](#1-clona-il-repository)
+    - [2. Avvia il Backend](#2-avvia-il-backend)
+    - [3. Avvia il Frontend](#3-avvia-il-frontend)
+  - [🐳 Avvio con Docker](#-avvio-con-docker)
+    - [Prerequisiti](#prerequisiti-1)
+    - [Avvio completo](#avvio-completo)
+    - [Comandi utili](#comandi-utili)
+    - [Porte esposte](#porte-esposte)
+  - [📡 API Reference](#-api-reference)
+    - [`GET /api/health`](#get-apihealth)
+    - [`POST /api/analyze`](#post-apianalyze)
+  - [📁 Struttura del progetto](#-struttura-del-progetto)
+  - [🔄 Diagramma dei componenti frontend](#-diagramma-dei-componenti-frontend)
+  - [🤝 Contribuire](#-contribuire)
+  - [📄 Licenza](#-licenza)
+
 
 ---
 
@@ -42,6 +65,26 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
 
 Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
+
+---
+
+## Screenshot
+
+**dettaglio su indirizzi IP**
+
+![](./stuff/i/SCR-20260508-otsa.png)
+
+### Servizio di analisi degli indirizzi IP
+
+![](./stuff/i/SCR-20260508-oxxe.png)
+
+![](./stuff/i/SCR-20260508-oyca.png)
+
+![](./stuff/i/SCR-20260508-oypg.png)
+
+<!--
+![](./stuff/i/.png)
+-->
 
 ---
 

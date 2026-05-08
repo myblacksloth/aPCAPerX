@@ -1,9 +1,10 @@
 """
 Entry point dell'API REST — PCAPCaper Backend.
 
-Espone due endpoint:
+Espone tre endpoint:
   GET  /api/health   → verifica che il servizio sia attivo
   POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
+  POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
 
 Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
 analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
@@ -16,8 +17,9 @@ import logging
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import AnalysisResult
+from models import AnalysisResult, IPEnrichmentRequest, IPEnrichmentResponse
 from analyzer import analyze_pcap, MAX_FILE_SIZE
+from external_enrichment import enrich_ips
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -68,6 +70,38 @@ def health_check():
     Utilizzato dai health-check di Docker Compose e dai proxy inversi.
     """
     return {"status": "ok", "service": "pcap-analyzer"}
+
+
+# ─── Endpoint: arricchimento IP tramite tool esterni ──────────────────────────
+
+@app.post(
+    "/api/enrich-ips",
+    response_model=IPEnrichmentResponse,
+    tags=["Analisi"],
+    summary="Arricchisce indirizzi IP usando servizi esterni",
+    response_description="Mappa IP -> dati esterni recuperati",
+)
+def enrich_ips_endpoint(payload: IPEnrichmentRequest):
+    """
+    Riceve una lista di indirizzi IP già estratti dal PCAP e interroga servizi
+    esterni per recuperare ASN, prefissi BGP, RDAP, reverse DNS e dati GeoIP.
+
+    Nota privacy: gli indirizzi privati, locali e riservati vengono scartati
+    prima di qualunque chiamata esterna. L'endpoint viene chiamato solo su
+    azione esplicita dell'utente dal pulsante "Analizza con tool esterni".
+    """
+    try:
+        logger.info("Avvio arricchimento esterno per %d IP", len(payload.ips))
+        results = enrich_ips(payload.ips)
+        logger.info("Arricchimento esterno completato per %d IP", len(results))
+        return IPEnrichmentResponse(results=results)
+    except Exception as exc:
+        # Un errore inatteso viene loggato per poter diagnosticare problemi di rete/API.
+        logger.exception("Errore imprevisto durante l'arricchimento IP")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'arricchimento esterno degli IP.",
+        ) from exc
 
 
 # ─── Endpoint: analisi PCAP ───────────────────────────────────────────────────

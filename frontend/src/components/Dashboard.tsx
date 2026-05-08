@@ -19,8 +19,8 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch } from 'lucide-react'
-import type { AnalysisResult } from '../types/analysis'
+import { FileText, Download, BarChart2, GitBranch, Search } from 'lucide-react'
+import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
 import TopIPsChart        from './TopIPsChart'
@@ -35,10 +35,40 @@ type ActiveTab = 'overview' | 'traces'
 interface DashboardProps {
   result: AnalysisResult
   onReset: () => void
+  onResultUpdate: (result: AnalysisResult) => void
 }
 
-export default function Dashboard({ result }: DashboardProps) {
+function collectIPs(result: AnalysisResult): string[] {
+  // Raccoglie gli IP da tutte le sezioni disponibili del report evitando duplicati.
+  const ips = new Set<string>()
+
+  result.top_src_ips.forEach((entry) => ips.add(entry.ip))
+  result.top_dst_ips.forEach((entry) => ips.add(entry.ip))
+  result.conversations.forEach((conversation) => {
+    ips.add(conversation.src_ip)
+    ips.add(conversation.dst_ip)
+  })
+  result.packets.forEach((packet) => {
+    if (packet.src_ip) ips.add(packet.src_ip)
+    if (packet.dst_ip) ips.add(packet.dst_ip)
+  })
+
+  return [...ips]
+}
+
+function mergeExternalInfo(entries: IPEntry[], external: Record<string, IPExternalInfo>): IPEntry[] {
+  // Aggiorna solo gli IP per cui il backend ha restituito dati esterni.
+  return entries.map((entry) => ({
+    ...entry,
+    external: external[entry.ip] ?? entry.external ?? null,
+  }))
+}
+
+export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
+  const [externalLoading, setExternalLoading] = useState(false)
+  const [externalError, setExternalError] = useState<string | null>(null)
+  const [externalSummary, setExternalSummary] = useState<string | null>(null)
   /**
    * Esporta il risultato dell'analisi come file JSON scaricabile.
    * Utile per archiviare o condividere i dati estratti dal PCAP.
@@ -51,6 +81,52 @@ export default function Dashboard({ result }: DashboardProps) {
     a.download = result.filename.replace(/\.[^.]+$/, '') + '_analysis.json'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Invia al backend gli IP osservati nel PCAP e fonde nel report corrente
+   * le informazioni recuperate da RDAP, ASN, reverse DNS e servizi GeoIP.
+   */
+  const handleExternalAnalysis = async () => {
+    const ips = collectIPs(result)
+    if (ips.length === 0) return
+
+    setExternalLoading(true)
+    setExternalError(null)
+    setExternalSummary(null)
+
+    try {
+      const response = await fetch('/api/enrich-ips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ips }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
+      }
+
+      const enrichment: IPEnrichmentResponse = await response.json()
+      const enrichedCount = Object.values(enrichment.results).filter((item) => item.status === 'enriched').length
+      const skippedCount = Object.values(enrichment.results).filter((item) => item.status === 'skipped').length
+
+      onResultUpdate({
+        ...result,
+        top_src_ips: mergeExternalInfo(result.top_src_ips, enrichment.results),
+        top_dst_ips: mergeExternalInfo(result.top_dst_ips, enrichment.results),
+        external_ip_info: {
+          ...(result.external_ip_info ?? {}),
+          ...enrichment.results,
+        },
+      })
+
+      setExternalSummary(`${enrichedCount} IP arricchiti, ${skippedCount} IP privati/locali non inviati`)
+    } catch (err) {
+      setExternalError(err instanceof Error ? err.message : "Errore sconosciuto durante l'arricchimento")
+    } finally {
+      setExternalLoading(false)
+    }
   }
 
   return (
@@ -95,6 +171,17 @@ export default function Dashboard({ result }: DashboardProps) {
               <GitBranch className="w-3.5 h-3.5" />
               Tracce
             </button>
+            <button
+              onClick={handleExternalAnalysis}
+              disabled={externalLoading}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${externalLoading
+                  ? 'cursor-wait bg-slate-600 text-slate-300'
+                  : 'text-slate-300 hover:bg-slate-600 hover:text-slate-100'}`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              {externalLoading ? 'Analisi...' : 'Analizza con tool esterni'}
+            </button>
           </div>
 
           {/* Export JSON */}
@@ -108,6 +195,17 @@ export default function Dashboard({ result }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* Stato dell'arricchimento esterno avviato manualmente dall'utente */}
+      {(externalSummary || externalError) && (
+        <div className={`rounded-lg border px-4 py-2 text-xs ${
+          externalError
+            ? 'border-red-500/30 bg-red-500/10 text-red-200'
+            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+        }`}>
+          {externalError ?? externalSummary}
+        </div>
+      )}
 
       {/* ── Tab: Overview ─────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
