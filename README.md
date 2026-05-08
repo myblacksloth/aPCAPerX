@@ -12,6 +12,12 @@
 
 ![](./stuff/i/SCR-20260508-pdch.png)
 
+![](./stuff/i/SCR-20260508-pglq.png)
+
+<!-- 
+![](./stuff/i/.png)
+-->
+
 # PCAPCaper 🔍
 
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
@@ -40,6 +46,12 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [🐳 Avvio con Docker](#-avvio-con-docker)
     - [Prerequisiti](#prerequisiti-1)
     - [Avvio completo](#avvio-completo)
+  - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
+    - [Operatori logici](#operatori-logici)
+    - [Operatori di confronto](#operatori-di-confronto)
+    - [Campi supportati](#campi-supportati)
+    - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
+    - [Esempi utili](#esempi-utili)
     - [Comandi utili](#comandi-utili)
     - [Porte esposte](#porte-esposte)
   - [📡 API Reference](#-api-reference)
@@ -251,6 +263,81 @@ docker-compose up --build
 ```
 
 Apri il browser su **`http://localhost:3000`** 🎉
+
+---
+
+## 🔎 Filtri pacchetti stile Wireshark
+
+La dashboard include una scheda **Filtri pacchetti** applicata alla lista pacchetti e alla vista **Tracce**. I riepiloghi statistici principali restano calcolati sull'intero PCAP, mentre le viste pacchetto mostrano solo gli elementi che corrispondono al filtro.
+
+Puoi usare sia il campo testuale sia i controlli GUI per comporre il filtro.
+
+### Operatori logici
+
+| Operatore | Descrizione | Esempio |
+|-----------|-------------|---------|
+| `and` / `&&` | Entrambe le condizioni devono essere vere | `dns and ip.dst == 8.8.8.8` |
+| `or` / `||` | Almeno una condizione deve essere vera | `http or https` |
+| `not` / `!` | Nega una condizione | `not arp` |
+| `( ... )` | Raggruppa condizioni | `(dns or http) and frame.len > 100` |
+
+### Operatori di confronto
+
+| Operatore | Descrizione | Esempio |
+|-----------|-------------|---------|
+| `==` | Valore uguale | `tcp.port == 443` |
+| `!=` | Valore diverso | `ip.src != 192.168.1.10` |
+| `contains` | Campo testuale che contiene una stringa | `info contains "Query"` |
+| `>` | Maggiore di | `frame.len > 1000` |
+| `>=` | Maggiore o uguale | `frame.number >= 500` |
+| `<` | Minore di | `frame.len < 128` |
+| `<=` | Minore o uguale | `frame.number <= 100` |
+
+### Campi supportati
+
+| Campo | Alias | Descrizione |
+|-------|-------|-------------|
+| `ip.addr` | `ip` | IP sorgente o destinazione |
+| `ip.src` | `src`, `src.ip` | IP sorgente |
+| `ip.dst` | `dst`, `dst.ip` | IP destinazione |
+| `tcp.port` | `port` | Porta sorgente o destinazione nei pacchetti TCP |
+| `udp.port` | `port` | Porta sorgente o destinazione nei pacchetti UDP |
+| `tcp.srcport` | `udp.srcport`, `src.port` | Porta sorgente |
+| `tcp.dstport` | `udp.dstport`, `dst.port` | Porta destinazione |
+| `frame.len` | `len`, `length` | Lunghezza del pacchetto in byte |
+| `frame.number` | `number`, `no` | Numero progressivo del pacchetto |
+| `frame.time` | `time` | Timestamp mostrato nella tabella |
+| `protocol` | `proto` | Protocollo rilevato |
+| `info` | - | Campo informativo del pacchetto |
+
+### Filtri protocollo rapidi
+
+Puoi scrivere direttamente il nome del protocollo senza campo e operatore:
+
+| Filtro | Significato |
+|--------|-------------|
+| `ip` | Pacchetti IP/IPv4/IPv6 |
+| `tcp` | Pacchetti TCP |
+| `udp` | Pacchetti UDP |
+| `dns` | DNS/mDNS |
+| `http` | HTTP/HTTP-Alt |
+| `https` | HTTPS/HTTPS-Alt |
+| `tls` | Traffico classificato come HTTPS/TLS |
+| `arp` | ARP |
+| `icmp` | ICMP |
+| `ssh` | SSH |
+
+### Esempi utili
+
+```text
+ip.addr == 8.8.8.8
+ip.src == 192.168.1.10 and dns
+tcp.port == 443
+udp.dstport == 53
+frame.len > 1000
+info contains "Query"
+(http or https) and not ip.dst == 192.168.1.1
+```
 
 ### Comandi utili
 

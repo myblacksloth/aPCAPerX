@@ -28,8 +28,10 @@ import WorldTrafficMap    from './WorldTrafficMap'
 import TimelineChart      from './TimelineChart'
 import TopPortsChart      from './TopPortsChart'
 import ConversationsTable from './ConversationsTable'
+import PacketFilters      from './PacketFilters'
 import PacketTable        from './PacketTable'
 import TracesView         from './TracesView'
+import { parsePacketFilter } from '../utils/packetFilters'
 
 type ActiveTab = 'overview' | 'traces'
 
@@ -70,6 +72,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const [externalLoading, setExternalLoading] = useState(false)
   const [externalError, setExternalError] = useState<string | null>(null)
   const [externalSummary, setExternalSummary] = useState<string | null>(null)
+  const [packetFilter, setPacketFilter] = useState('')
+  const parsedPacketFilter = parsePacketFilter(packetFilter)
+  const filteredPackets = parsedPacketFilter.error
+    ? result.packets
+    : result.packets.filter(parsedPacketFilter.predicate)
   /**
    * Esporta il risultato dell'analisi come file JSON scaricabile.
    * Utile per archiviare o condividere i dati estratti dal PCAP.
@@ -214,32 +221,50 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           {/* Riga 1: 6 card di riepilogo */}
           <SummaryCards result={result} />
 
-          {/* Riga 2: distribuzione protocolli + top IP */}
+          {/* Riga 2: filtri stile Wireshark applicati alle viste pacchetto */}
+          <PacketFilters
+            filter={packetFilter}
+            filteredCount={filteredPackets.length}
+            totalCount={result.packets.length}
+            error={parsedPacketFilter.error}
+            onFilterChange={setPacketFilter}
+          />
+
+          {/* Riga 3: distribuzione protocolli + top IP */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ProtocolChart result={result} />
             <TopIPsChart   result={result} />
           </div>
 
-          {/* Riga 3: mappa mondiale del traffico verso IP pubblici */}
+          {/* Riga 4: mappa mondiale del traffico verso IP pubblici */}
           <WorldTrafficMap result={result} />
 
-          {/* Riga 4: timeline del traffico */}
+          {/* Riga 5: timeline del traffico */}
           <TimelineChart result={result} />
 
-          {/* Riga 5: top porte + conversazioni */}
+          {/* Riga 6: top porte + conversazioni */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <TopPortsChart      result={result} />
             <ConversationsTable conversations={result.conversations} />
           </div>
 
-          {/* Riga 6: lista pacchetti */}
-          <PacketTable packets={result.packets} />
+          {/* Riga 7: lista pacchetti filtrata */}
+          <PacketTable packets={filteredPackets} />
         </>
       )}
 
       {/* ── Tab: Tracce ───────────────────────────────────────────────── */}
       {activeTab === 'traces' && (
-        <TracesView packets={result.packets} />
+        <>
+          <PacketFilters
+            filter={packetFilter}
+            filteredCount={filteredPackets.length}
+            totalCount={result.packets.length}
+            error={parsedPacketFilter.error}
+            onFilterChange={setPacketFilter}
+          />
+          <TracesView packets={filteredPackets} />
+        </>
       )}
     </div>
   )
