@@ -80,6 +80,18 @@ function getPeers(ip: IPEntry) {
   return Array.isArray(ip.peers) ? ip.peers : []
 }
 
+function externalBadge(value: boolean | null | undefined, label: string) {
+  // Mostra solo indicatori realmente disponibili dai servizi esterni.
+  if (value === null || value === undefined) return null
+  return (
+    <span className={`rounded px-2 py-1 text-[11px] font-medium ${
+      value ? 'bg-amber-500/15 text-amber-200' : 'bg-emerald-500/10 text-emerald-200'
+    }`}>
+      {label}: {value ? 'si' : 'no'}
+    </span>
+  )
+}
+
 function IPDetailsModal({
   title,
   ips,
@@ -146,6 +158,63 @@ function IPDetailsModal({
                         </span>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {ip.external && (
+                  <div className="mt-4 rounded-lg border border-brand-500/20 bg-brand-500/10 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-100">
+                          Informazioni da tool esterni
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {ip.external.status === 'enriched'
+                            ? `Fonti: ${ip.external.sources.join(', ')}`
+                            : ip.external.reason ?? 'Nessun dato esterno disponibile'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {externalBadge(ip.external.proxy, 'Proxy/VPN')}
+                        {externalBadge(ip.external.hosting, 'Hosting')}
+                        {externalBadge(ip.external.mobile, 'Mobile')}
+                      </div>
+                    </div>
+
+                    {ip.external.status === 'enriched' && (
+                      <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
+                        {ip.external.reverse_dns && <p><span className="text-slate-500">Reverse DNS:</span> {ip.external.reverse_dns}</p>}
+                        {ip.external.asn && <p><span className="text-slate-500">ASN:</span> AS{ip.external.asn}</p>}
+                        {ip.external.as_name && <p><span className="text-slate-500">AS name:</span> {ip.external.as_name}</p>}
+                        {ip.external.bgp_prefix && <p><span className="text-slate-500">Prefisso BGP:</span> {ip.external.bgp_prefix}</p>}
+                        {ip.external.registry && <p><span className="text-slate-500">Registry:</span> {ip.external.registry}</p>}
+                        {ip.external.allocated && <p><span className="text-slate-500">Allocato:</span> {ip.external.allocated}</p>}
+                        {ip.external.country && <p><span className="text-slate-500">Paese:</span> {ip.external.country} {ip.external.country_code ? `(${ip.external.country_code})` : ''}</p>}
+                        {(ip.external.region || ip.external.city) && <p><span className="text-slate-500">Area:</span> {[ip.external.city, ip.external.region].filter(Boolean).join(', ')}</p>}
+                        {ip.external.timezone && <p><span className="text-slate-500">Timezone:</span> {ip.external.timezone}</p>}
+                        {ip.external.isp && <p><span className="text-slate-500">ISP:</span> {ip.external.isp}</p>}
+                        {ip.external.org && <p><span className="text-slate-500">Org:</span> {ip.external.org}</p>}
+                        {ip.external.rdap_name && <p><span className="text-slate-500">RDAP:</span> {ip.external.rdap_name}</p>}
+                        {ip.external.rdap_handle && <p><span className="text-slate-500">Handle:</span> {ip.external.rdap_handle}</p>}
+                        {(ip.external.lat !== null && ip.external.lon !== null) && (
+                          <p><span className="text-slate-500">Coordinate:</span> {ip.external.lat}, {ip.external.lon}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {ip.external.rdap_entities.length > 0 && (
+                      <p className="mt-3 text-xs text-slate-400">
+                        Entita RDAP: <span className="text-slate-300">{ip.external.rdap_entities.join(', ')}</span>
+                      </p>
+                    )}
+
+                    {ip.external.rdap_remarks.length > 0 && (
+                      <div className="mt-3 space-y-1 text-xs text-slate-400">
+                        {ip.external.rdap_remarks.map((remark) => (
+                          <p key={remark}>{remark}</p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

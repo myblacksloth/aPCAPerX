@@ -101,7 +101,7 @@ export default function App() {
       <main className="flex-1">
         {result ? (
           // Vista dashboard: mostra i risultati dell'analisi
-          <Dashboard result={result} onReset={handleReset} />
+          <Dashboard result={result} onReset={handleReset} onResultUpdate={setResult} />
         ) : (
           // Vista upload: mostra il form di caricamento file
           <FileUpload
