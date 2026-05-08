@@ -116,6 +116,180 @@ class IPEnrichmentResponse(BaseModel):
     results: Dict[str, IPExternalInfo]
 
 
+class SecurityPacketObservation(BaseModel):
+    """Pacchetto compatto inviato alla pipeline di sicurezza avanzata."""
+    # Numero progressivo del pacchetto nel PCAP
+    number: int
+    # Timestamp mostrato dal frontend
+    timestamp: str
+    # IP sorgente, se disponibile
+    src_ip: Optional[str] = None
+    # IP destinazione, se disponibile
+    dst_ip: Optional[str] = None
+    # Protocollo rilevato dal parser
+    protocol: str
+    # Lunghezza del pacchetto in byte
+    length: int
+    # Porta sorgente TCP/UDP, se disponibile
+    src_port: Optional[int] = None
+    # Porta destinazione TCP/UDP, se disponibile
+    dst_port: Optional[int] = None
+    # Campo informativo sintetico del pacchetto
+    info: str
+
+
+class SecurityAnalysisRequest(BaseModel):
+    """Richiesta per l'analisi di sicurezza avanzata opt-in."""
+    # Pacchetti da analizzare; il frontend invia l'intero traffico disponibile.
+    packets: List[SecurityPacketObservation]
+    # Informazioni IP ottenute in precedenza con "Analizza con tool esterni".
+    external_ip_info: Dict[str, IPExternalInfo] = Field(default_factory=dict)
+    # Limite massimo di IP pubblici interrogati sui servizi di threat intelligence.
+    max_ips: int = 80
+
+
+class SecuritySourceStatus(BaseModel):
+    """Stato di una fonte esterna usata durante l'analisi di sicurezza."""
+    # Nome della fonte o del motore
+    source: str
+    # Stato sintetico: ok, partial, skipped, error
+    status: str
+    # Dettaglio operativo utile al frontend
+    detail: str
+
+
+class SecurityFindingModel(BaseModel):
+    """Finding prodotto dalla correlazione tra traffico e threat intelligence."""
+    # Identificatore stabile del finding
+    id: str
+    # Severita normalizzata: critical, high, medium, low, info
+    severity: str
+    # Categoria del rischio
+    category: str
+    # Titolo leggibile del problema
+    title: str
+    # Descrizione sintetica del perche il traffico e rilevante
+    description: str
+    # IP principale coinvolto
+    ip: Optional[str] = None
+    # Altri IP coinvolti come peer o contesto
+    related_ips: List[str] = Field(default_factory=list)
+    # Evidenze concrete ricavate da traffico/API
+    evidence: List[str] = Field(default_factory=list)
+    # Azioni consigliate per triage o contenimento
+    recommendation: str
+    # Fonti che supportano il finding
+    sources: List[str] = Field(default_factory=list)
+    # Confidenza stimata 0-100
+    confidence: int
+    # Score tecnico 0-100
+    score: int
+    # Riferimenti MITRE ATT&CK quando applicabili
+    mitre: List[str] = Field(default_factory=list)
+
+
+class SecurityIPAssessmentModel(BaseModel):
+    """Valutazione aggregata per singolo indirizzo IP pubblico."""
+    # Indirizzo IP valutato
+    ip: str
+    # Score massimo/aggregato del rischio per IP
+    risk_score: int
+    # Severita derivata dallo score
+    severity: str
+    # Numero pacchetti in cui l'IP compare
+    packets: int
+    # Byte inviati dall'IP verso altri host
+    bytes_out: int
+    # Byte ricevuti dall'IP da altri host
+    bytes_in: int
+    # Porte osservate in relazione all'IP
+    ports: List[int] = Field(default_factory=list)
+    # Protocolli osservati
+    protocols: List[str] = Field(default_factory=list)
+    # Numero di peer distinti
+    peer_count: int
+    # Paese stimato dall'arricchimento precedente
+    country: Optional[str] = None
+    # ASN stimato dall'arricchimento precedente
+    asn: Optional[str] = None
+    # Nome AS/organizzazione
+    as_name: Optional[str] = None
+    # Tag esterni, ad esempio Shodan InternetDB
+    tags: List[str] = Field(default_factory=list)
+    # CVE o vulnerabilita associate all'IP secondo fonti esterne
+    vulnerabilities: List[str] = Field(default_factory=list)
+    # ID dei finding associati
+    findings: List[str] = Field(default_factory=list)
+
+
+class SecurityAnalysisSummary(BaseModel):
+    """Riepilogo numerico dell'analisi di sicurezza avanzata."""
+    # IP totali estratti dai pacchetti
+    total_ips: int
+    # IP pubblici realmente valutati
+    analyzed_public_ips: int
+    # Conteggio finding critici
+    critical: int
+    # Conteggio finding alti
+    high: int
+    # Conteggio finding medi
+    medium: int
+    # Conteggio finding bassi
+    low: int
+    # Conteggio finding informativi
+    info: int
+    # Totale finding prodotti
+    total_findings: int
+
+
+class SecurityAnalysisResponse(BaseModel):
+    """Risposta completa dell'analisi di sicurezza avanzata."""
+    # Riepilogo per dashboard
+    summary: SecurityAnalysisSummary
+    # Finding ordinati per priorita
+    findings: List[SecurityFindingModel]
+    # Valutazione aggregata per IP
+    ip_assessments: List[SecurityIPAssessmentModel]
+    # Stato delle fonti interne/esterne usate
+    sources: List[SecuritySourceStatus]
+    # Errori non bloccanti incontrati
+    errors: List[str] = Field(default_factory=list)
+
+
+class DNSReputationRequest(BaseModel):
+    """Richiesta opt-in per controllare domini DNS su liste esterne."""
+    # Domini osservati nelle query DNS del PCAP
+    domains: List[str]
+    # Numero massimo di domini da confrontare con servizi e liste esterne
+    max_domains: int = 250
+
+
+class DNSDomainIntel(BaseModel):
+    """Risultato di reputazione esterna per un singolo dominio."""
+    # Dominio normalizzato
+    domain: str
+    # Stato: clean, listed o unknown
+    status: str
+    # Categorie assegnate dalle fonti o dal motore
+    categories: List[str] = Field(default_factory=list)
+    # Fonti che hanno prodotto un match
+    sources: List[str] = Field(default_factory=list)
+    # Regole o dettagli sintetici del match
+    matched_rules: List[str] = Field(default_factory=list)
+    # Score esterno 0-100
+    score: int = 0
+
+
+class DNSReputationResponse(BaseModel):
+    """Risposta dell'analisi DNS esterna opt-in."""
+    # Mappa dominio -> reputazione
+    results: Dict[str, DNSDomainIntel]
+    # Stato operativo delle fonti usate
+    sources: List[SecuritySourceStatus]
+    # Errori non bloccanti incontrati durante download/query
+    errors: List[str] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
