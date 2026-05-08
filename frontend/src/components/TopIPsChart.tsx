@@ -9,11 +9,13 @@
  * che permette di confrontare visivamente i volumi di traffico.
  */
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts'
-import type { AnalysisResult } from '../types/analysis'
+import type { AnalysisResult, IPEntry } from '../types/analysis'
 import { formatBytes, formatCount, CHART_COLORS } from '../utils/format'
 
 interface TopIPsChartProps {
@@ -21,13 +23,19 @@ interface TopIPsChartProps {
 }
 
 // Tooltip personalizzato per le barre IP
-function IPTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; payload: { bytes: number } }>; label?: string }) {
+function IPTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; payload: IPEntry }>; label?: string }) {
   if (!active || !payload?.length) return null
+  const services = getServices(payload[0].payload).slice(0, 3)
   return (
     <div className="bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm shadow-xl">
       <p className="font-mono text-white mb-1 text-xs">{label}</p>
       <p className="text-slate-300">{payload[0].value.toLocaleString('it-IT')} pacchetti</p>
       <p className="text-slate-400">{formatBytes(payload[0].payload.bytes)}</p>
+      {services.length > 0 && (
+        <p className="text-slate-300 mt-2 text-xs">
+          {services.map((s) => s.port ? `${s.service}/${s.port}` : s.service).join(', ')}
+        </p>
+      )}
     </div>
   )
 }
@@ -50,9 +58,154 @@ function IPTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: 
   )
 }
 
+function directionLabel(direction: string) {
+  if (direction === 'server') return 'servizio esposto'
+  if (direction === 'client') return 'client'
+  return 'endpoint'
+}
+
+function getServices(ip: IPEntry) {
+  return Array.isArray(ip.services) ? ip.services : []
+}
+
+function getProtocols(ip: IPEntry) {
+  return Array.isArray(ip.protocols) ? ip.protocols : []
+}
+
+function getHostnames(ip: IPEntry) {
+  return Array.isArray(ip.hostnames) ? ip.hostnames : []
+}
+
+function getPeers(ip: IPEntry) {
+  return Array.isArray(ip.peers) ? ip.peers : []
+}
+
+function IPDetailsModal({
+  title,
+  ips,
+  onClose,
+}: {
+  title: string
+  ips: IPEntry[]
+  onClose: () => void
+}) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClose()
+      }}
+    >
+      <div
+        className="w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-100">Dettagli servizi IP</h3>
+            <p className="text-xs text-slate-400">{title} - {ips.length} indirizzi analizzati</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            aria-label="Chiudi dettagli servizi IP"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(85vh-73px)] overflow-y-auto px-5 py-4">
+          <div className="space-y-4">
+            {ips.map((ip) => (
+              <section key={ip.ip} className="rounded-lg border border-slate-700 bg-slate-800/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-sm font-semibold text-white">{ip.ip}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {formatCount(ip.count)} pacchetti - {formatBytes(ip.bytes)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    {getProtocols(ip).slice(0, 8).map((protocol) => (
+                      <span key={protocol} className="rounded bg-slate-700 px-2 py-1 text-[11px] font-medium text-slate-200">
+                        {protocol}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {getHostnames(ip).length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Nomi DNS osservati</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {getHostnames(ip).map((hostname) => (
+                        <span key={hostname} className="rounded bg-emerald-500/10 px-2 py-1 font-mono text-[11px] text-emerald-200">
+                          {hostname}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 overflow-x-auto">
+                  {getServices(ip).length > 0 ? (
+                    <table className="w-full min-w-[720px] text-left text-xs">
+                      <thead className="text-slate-500">
+                        <tr className="border-b border-slate-700">
+                          <th className="pb-2 font-medium">Servizio</th>
+                          <th className="pb-2 font-medium">Porta</th>
+                          <th className="pb-2 font-medium">Protocollo</th>
+                          <th className="pb-2 font-medium">Ruolo</th>
+                          <th className="pb-2 text-right font-medium">Pacchetti</th>
+                          <th className="pb-2 font-medium">Peer principali</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getServices(ip).map((service) => (
+                          <tr
+                            key={`${service.service}-${service.port ?? 'none'}-${service.protocol}-${service.direction}`}
+                            className="border-b border-slate-700/60 last:border-b-0"
+                          >
+                            <td className="py-2 pr-3 font-medium text-slate-100">{service.service}</td>
+                            <td className="py-2 pr-3 font-mono text-slate-300">{service.port ?? '-'}</td>
+                            <td className="py-2 pr-3 text-slate-300">{service.protocol}</td>
+                            <td className="py-2 pr-3 text-slate-300">{directionLabel(service.direction)}</td>
+                            <td className="py-2 pr-3 text-right font-mono text-slate-300">{formatCount(service.count)}</td>
+                            <td className="py-2 text-slate-400">
+                              {service.peers.length > 0 ? service.peers.join(', ') : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
+                      Nessun servizio TCP/UDP identificato per questo indirizzo. Sono disponibili solo protocolli di rete o traffico senza porte.
+                    </p>
+                  )}
+                </div>
+
+                {getPeers(ip).length > 0 && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    Peer osservati: <span className="font-mono text-slate-400">{getPeers(ip).join(', ')}</span>
+                  </p>
+                )}
+              </section>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function TopIPsChart({ result }: TopIPsChartProps) {
   // Stato della tab attiva: 0 = sorgenti, 1 = destinazioni
   const [tab, setTab] = useState<0 | 1>(0)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const tabs = [
     { label: 'IP Sorgenti',     data: result.top_src_ips.slice(0, 10) },
@@ -61,27 +214,52 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
 
   // I dati correnti della tab selezionata
   const currentData = tabs[tab].data
+  const openDetails = () => {
+    if (currentData.length > 0) setDetailsOpen(true)
+  }
 
   return (
-    <div className="card">
+    <div
+      className="card cursor-pointer transition-colors hover:border-slate-600"
+      onClick={openDetails}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && currentData.length > 0) {
+          event.preventDefault()
+          openDetails()
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="Apri dettagli servizi degli IP principali"
+    >
       {/* ── Header con tab selector ──────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-slate-200">Top IP</h2>
-        <div className="flex bg-slate-700 rounded-lg p-0.5 gap-0.5">
-          {tabs.map((t, i) => (
-            <button
-              key={t.label}
-              onClick={() => setTab(i as 0 | 1)}
-              className={[
-                'px-3 py-1 text-xs rounded-md transition-colors',
-                tab === i
-                  ? 'bg-brand-500 text-white font-medium'
-                  : 'text-slate-400 hover:text-slate-200',
-              ].join(' ')}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div>
+          <h2 className="text-base font-semibold text-slate-200">Top IP</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Clicca per vedere servizi, DNS e peer</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-slate-700 rounded-lg p-0.5 gap-0.5">
+            {tabs.map((t, i) => (
+              <button
+                key={t.label}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setTab(i as 0 | 1)
+                }}
+                onKeyDown={(event) => event.stopPropagation()}
+                className={[
+                  'px-3 py-1 text-xs rounded-md transition-colors',
+                  tab === i
+                    ? 'bg-brand-500 text-white font-medium'
+                    : 'text-slate-400 hover:text-slate-200',
+                ].join(' ')}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
         </div>
       </div>
 
@@ -92,6 +270,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
             data={currentData}
             layout="vertical"       /* barre orizzontali per leggere gli IP */
             margin={{ left: 10, right: 40, top: 0, bottom: 0 }}
+            onClick={openDetails}
           >
             {/* Asse Y: indirizzi IP (il valore categorico) */}
             <YAxis
@@ -123,6 +302,24 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
         <p className="text-slate-500 text-sm text-center py-8">
           Nessun indirizzo IP trovato in questa categoria
         </p>
+      )}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          openDetails()
+        }}
+        disabled={currentData.length === 0}
+        className="mt-4 w-full rounded-lg border border-brand-500/40 bg-brand-500/15 px-4 py-2.5 text-sm font-semibold text-brand-100 transition-colors hover:bg-brand-500/25 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+      >
+        Visualizza dettagli servizi IP
+      </button>
+      {detailsOpen && (
+        <IPDetailsModal
+          title={tabs[tab].label}
+          ips={currentData}
+          onClose={() => setDetailsOpen(false)}
+        />
       )}
     </div>
   )
