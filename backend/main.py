@@ -1,11 +1,12 @@
 """
 Entry point dell'API REST — PCAPCaper Backend.
 
-Espone quattro endpoint:
+Espone cinque endpoint:
   GET  /api/health   → verifica che il servizio sia attivo
   POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
   POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
   POST /api/security-analysis → esegue threat intelligence opt-in sul traffico
+  POST /api/dns-reputation → confronta domini DNS con liste esterne opt-in
 
 Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
 analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
@@ -22,12 +23,15 @@ from models import (
     AnalysisResult,
     IPEnrichmentRequest,
     IPEnrichmentResponse,
+    DNSReputationRequest,
+    DNSReputationResponse,
     SecurityAnalysisRequest,
     SecurityAnalysisResponse,
 )
 from analyzer import analyze_pcap, MAX_FILE_SIZE
 from external_enrichment import enrich_ips
 from security_analysis import analyze_security
+from dns_intelligence import analyze_dns_reputation
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -147,6 +151,37 @@ def security_analysis_endpoint(payload: SecurityAnalysisRequest):
         raise HTTPException(
             status_code=500,
             detail="Errore durante l'analisi di sicurezza avanzata.",
+        ) from exc
+
+
+# ─── Endpoint: reputazione DNS esterna ─────────────────────────────────────
+
+@app.post(
+    "/api/dns-reputation",
+    response_model=DNSReputationResponse,
+    tags=["Analisi"],
+    summary="Controlla domini DNS osservati su liste esterne",
+    response_description="Reputazione dominio -> fonti e categorie",
+)
+def dns_reputation_endpoint(payload: DNSReputationRequest):
+    """
+    Confronta i domini richiesti via DNS con liste esterne aperte.
+
+    Nota privacy: l'endpoint viene chiamato solo dopo conferma esplicita
+    dell'utente nella tab DNS. Il backend riceve domini gia estratti dal PCAP
+    e non effettua alcun controllo esterno durante la normale analisi.
+    """
+    try:
+        logger.info("Avvio reputazione DNS per %d domini", len(payload.domains))
+        result = analyze_dns_reputation(payload.domains, payload.max_domains)
+        logger.info("Reputazione DNS completata per %d domini", len(result.results))
+        return result
+    except Exception as exc:
+        # Log completo per distinguere problemi di download liste da errori applicativi.
+        logger.exception("Errore imprevisto durante la reputazione DNS")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'analisi reputazionale DNS.",
         ) from exc
 
 

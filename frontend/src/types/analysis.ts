@@ -183,6 +183,23 @@ export interface SecurityAnalysisResponse {
   errors: string[]
 }
 
+/** Reputazione esterna per un dominio DNS */
+export interface DNSDomainIntel {
+  domain: string
+  status: 'clean' | 'listed' | 'unknown' | string
+  categories: string[]
+  sources: string[]
+  matched_rules: string[]
+  score: number
+}
+
+/** Risposta dell'endpoint /api/dns-reputation */
+export interface DNSReputationResponse {
+  results: Record<string, DNSDomainIntel>
+  sources: SecuritySourceStatus[]
+  errors: string[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */

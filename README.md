@@ -18,6 +18,8 @@
 
 ![](./stuff/i/SCR-20260508-rnut.png)
 
+![](./stuff/i/SCR-20260508-rsrq.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -25,7 +27,7 @@
 # PCAPCaper 🔍
 
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
-Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica, correlazione avanzata dei pacchetti e analisi security con threat intelligence.
+Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, DNS, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica, correlazione avanzata dei pacchetti e analisi security con threat intelligence.
 
 > Ispirato a [apackets.com](https://apackets.com/), ma completamente open source e auto-ospitabile.
 
@@ -67,11 +69,16 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Fonti e dati usati](#fonti-e-dati-usati)
     - [Output della tab](#output-della-tab)
     - [Privacy e controllo](#privacy-e-controllo)
+  - [🌐 Analisi DNS](#-analisi-dns)
+    - [Analisi locale](#analisi-locale)
+    - [Controllo liste esterne](#controllo-liste-esterne)
+    - [Privacy DNS](#privacy-dns)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
     - [`POST /api/enrich-ips`](#post-apienrich-ips)
     - [`POST /api/security-analysis`](#post-apisecurity-analysis)
+    - [`POST /api/dns-reputation`](#post-apidns-reputation)
   - [📁 Struttura del progetto](#-struttura-del-progetto)
   - [🔄 Diagramma dei componenti frontend](#-diagramma-dei-componenti-frontend)
   - [🤝 Contribuire](#-contribuire)
@@ -90,6 +97,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
+| **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
@@ -149,16 +157,20 @@ graph TB
     SC["📦 Scapy\nPCAP Parser\nDecoder protocolli"]
     EXT["🌐 Tool esterni opzionali\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
     SECEXT["🚨 Threat intelligence opt-in\nShodan InternetDB\nFeodo Tracker\nURLhaus opzionale"]
+    DNSEXT["🌐 DNS reputation opt-in\nAdGuard DNS filter\nStevenBlack hosts\nURLhaus opzionale"]
 
     U -->|"Drag & drop file PCAP"| FE
     FE -->|"POST /api/analyze\nmultipart/form-data"| BE
     FE -->|"POST /api/enrich-ips\nsolo su click utente"| BE
     FE -->|"POST /api/security-analysis\nsolo dopo popup consenso"| BE
+    FE -->|"POST /api/dns-reputation\nsolo dopo popup consenso"| BE
     BE -->|"PcapReader streaming"| SC
     BE -->|"IP pubblici"| EXT
     BE -->|"IP pubblici + metadati"| SECEXT
+    BE -->|"Domini DNS osservati"| DNSEXT
     EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
     SECEXT -->|"CVE, IOC, C2, host malware"| BE
+    DNSEXT -->|"Liste ads/tracking/malware"| BE
     SC -->|"Pacchetti decodificati"| BE
     BE -->|"JSON: statistiche complete"| FE
     FE -->|"Dashboard interattivo"| U
@@ -168,6 +180,7 @@ graph TB
     style SC fill:#1e293b,stroke:#eab308,color:#f1f5f9
     style EXT fill:#1e293b,stroke:#f97316,color:#f1f5f9
     style SECEXT fill:#1e293b,stroke:#ef4444,color:#f1f5f9
+    style DNSEXT fill:#1e293b,stroke:#10b981,color:#f1f5f9
 ```
 
 ---
@@ -240,6 +253,13 @@ flowchart LR
         S --> T["Threat intel\nShodan, Feodo, URLhaus opz."]
         S --> U["Scoring, evidenze,\nraccomandazioni"]
         T & U --> O
+    end
+
+    subgraph "Analisi DNS opt-in"
+        O -->|"tab DNS"| V["Classificazione locale\nquery, client, resolver"]
+        V -->|"click + conferma popup"| W["/api/dns-reputation"]
+        W --> X["AdGuard DNS filter,\nStevenBlack, URLhaus opz."]
+        X --> O
     end
 ```
 
@@ -513,6 +533,39 @@ Senza `URLHAUS_AUTH_KEY`, la fonte URLhaus viene mostrata come `skipped` e l'ana
 
 ---
 
+## 🌐 Analisi DNS
+
+La tab **DNS** è dedicata esclusivamente alle richieste DNS osservate nel PCAP. La vista è pensata in stile AdGuard: riepilogo immediato, domini più richiesti, client più attivi, resolver usati e indicatori di tracking, advertising o rischio.
+
+### Analisi locale
+
+Senza inviare dati all'esterno, la tab:
+- estrae solo pacchetti con `DNS Query`;
+- normalizza i domini richiesti;
+- aggrega query per dominio, client e resolver;
+- segnala pattern tipici di tracking/ads come `analytics`, `telemetry`, `pixel`, `doubleclick`;
+- segnala pattern rischiosi come `phish`, `scam`, `botnet`, `c2`, `payload`;
+- evidenzia TLD spesso abusati o domini con label lunghe/anomale;
+- ordina i domini per rischio stimato e frequenza.
+
+### Controllo liste esterne
+
+Il pulsante **Controlla liste esterne** mostra prima un popup di consenso. Solo dopo la conferma, il backend confronta i domini con:
+
+| Fonte | Requisiti | Dati usati |
+|-------|-----------|-----------|
+| AdGuard DNS filter | Nessuna API key | Regole DNS-level per ads, tracking, cryptomining e domini malevoli |
+| StevenBlack hosts | Nessuna API key | Hosts list aggregata con domini ads/tracking/malware |
+| URLhaus | Variabile backend `URLHAUS_AUTH_KEY` | Host associati a URL di distribuzione malware |
+
+La risposta mostra fonti usate, stato dei download, errori non bloccanti, categorie e regole che hanno prodotto il match.
+
+### Privacy DNS
+
+La reputazione DNS è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -722,6 +775,46 @@ Esegue l'analisi di sicurezza avanzata del traffico. L'endpoint viene chiamato d
 
 ---
 
+### `POST /api/dns-reputation`
+
+Confronta i domini DNS osservati con liste esterne aperte. L'endpoint viene chiamato dalla tab **DNS** solo dopo conferma esplicita dell'utente.
+
+**Request:** `Content-Type: application/json`
+
+```json
+{
+  "domains": ["analytics.example.com", "cdn.example.org"],
+  "max_domains": 250
+}
+```
+
+**Risposta (200 OK):**
+
+```json
+{
+  "results": {
+    "analytics.example.com": {
+      "domain": "analytics.example.com",
+      "status": "listed",
+      "categories": ["tracking"],
+      "sources": ["AdGuard DNS filter"],
+      "matched_rules": ["analytics.example.com: ||analytics.example.com^"],
+      "score": 55
+    }
+  },
+  "sources": [
+    { "source": "AdGuard DNS filter", "status": "ok", "detail": "regole dominio caricate" },
+    { "source": "StevenBlack hosts", "status": "ok", "detail": "domini hosts caricati" },
+    { "source": "URLhaus", "status": "skipped", "detail": "Auth-Key non configurata: fonte saltata" }
+  ],
+  "errors": []
+}
+```
+
+**Fonti esterne:** AdGuard DNS filter, StevenBlack hosts e URLhaus opzionale con `URLHAUS_AUTH_KEY`.
+
+---
+
 ## 📁 Struttura del progetto
 
 ```
@@ -731,6 +824,7 @@ pcapcaper/
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
+│   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
 │   ├── models.py        # Modelli Pydantic per request/response
 │   ├── requirements.txt # Dipendenze Python
 │   └── Dockerfile       # Immagine Docker del backend
@@ -754,6 +848,7 @@ pcapcaper/
 │   │       ├── TopIPsChart.tsx         # Bar chart IP + popup servizi e dati esterni
 │   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
 │   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
+│   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -788,6 +883,7 @@ graph TD
     TI["TopIPsChart\nBar chart + popup"]
     SEC["SecurityPanel\nFinding euristici"]
     SECA["SecurityAnalysisView\nThreat intel opt-in"]
+    DNSA["DNSAnalysisView\nDashboard DNS"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -804,6 +900,7 @@ graph TD
     DB --> TI
     DB --> SEC
     DB --> SECA
+    DB --> DNSA
     DB --> MAP
     DB --> TL
     DB --> TP
