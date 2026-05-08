@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, GitBranch, Network, Search } from 'lucide-react'
 import type { FlowEntry, LayerInfo, PacketEntry } from '../types/analysis'
 import { formatBytes, formatCount, protocolColor } from '../utils/format'
+import PacketDetailModal from './PacketDetailModal'
 
 interface AdvancedTracesViewProps {
   packets: PacketEntry[]
@@ -247,14 +248,26 @@ function endpointLabel(endpoint: Endpoint) {
   return `${endpoint.ip}${endpoint.port ? `:${endpoint.port}` : ''}`
 }
 
-function TreePacketRow({ node }: { node: CorrelatedPacket }) {
+function TreePacketRow({ node, onSelect }: { node: CorrelatedPacket; onSelect: (packet: PacketEntry) => void }) {
   const packet = node.packet
   const color = protocolColor(packet.protocol)
   const isResponse = node.parentNumber !== null
   const directionSymbol = node.direction === 'a-to-b' ? '→' : '←'
 
   return (
-    <div className="grid grid-cols-[minmax(18rem,1.2fr)_minmax(18rem,1fr)_minmax(14rem,1fr)] items-start gap-3 border-t border-slate-700/40 px-4 py-2 text-xs">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(packet)}
+      onKeyDown={(event) => {
+        // Permette di aprire l'inspector anche da tastiera quando la riga ha focus.
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect(packet)
+        }
+      }}
+      className="grid cursor-pointer grid-cols-[minmax(18rem,1.2fr)_minmax(18rem,1fr)_minmax(14rem,1fr)] items-start gap-3 border-t border-slate-700/40 px-4 py-2 text-xs transition-colors hover:bg-slate-700/25 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+    >
       <div className="flex min-w-0 items-start gap-2 font-mono">
         <div className="flex shrink-0 items-center" style={{ paddingLeft: `${node.depth * 18}px` }}>
           <span className="text-slate-600">{node.depth === 0 ? '●' : '├─'}</span>
@@ -288,8 +301,16 @@ function TreePacketRow({ node }: { node: CorrelatedPacket }) {
   )
 }
 
-function FlowTree({ flow, backendFlow }: { flow: AdvancedFlow; backendFlow: FlowEntry | null }) {
-  const [expanded, setExpanded] = useState(true)
+function FlowTree({
+  flow,
+  backendFlow,
+  onPacketSelect,
+}: {
+  flow: AdvancedFlow
+  backendFlow: FlowEntry | null
+  onPacketSelect: (packet: PacketEntry) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
   const color = protocolColor(flow.protocol)
   const durationMs = Math.max(0, Math.round((flow.lastTime - flow.firstTime) * 1000))
 
@@ -330,7 +351,7 @@ function FlowTree({ flow, backendFlow }: { flow: AdvancedFlow; backendFlow: Flow
             <span className="text-right">Tempo / byte / figli</span>
           </div>
           {flow.packets.map((node) => (
-            <TreePacketRow key={node.packet.number} node={node} />
+            <TreePacketRow key={node.packet.number} node={node} onSelect={onPacketSelect} />
           ))}
         </div>
       )}
@@ -342,6 +363,7 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
   const [search, setSearch] = useState('')
   const [protocol, setProtocol] = useState('all')
   const [sortBy, setSortBy] = useState<'time' | 'packets' | 'bytes'>('time')
+  const [selectedPacketIndex, setSelectedPacketIndex] = useState<number | null>(null)
   const flows = useMemo(() => buildFlows(packets), [packets])
   const protocols = useMemo(() => ['all', ...new Set(packets.map((packet) => packet.protocol).sort())], [packets])
   const backendFlowByPacket = useMemo(() => {
@@ -373,78 +395,98 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
     return result
   }, [flows, protocol, search, sortBy])
 
+  const openPacketInspector = (packet: PacketEntry) => {
+    // Usa l'array `packets` corrente, gia filtrato dalla dashboard, per mantenere coerente la navigazione del popup.
+    const index = packets.findIndex((item) => item.number === packet.number)
+    if (index >= 0) setSelectedPacketIndex(index)
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="card">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-brand-400" />
-            <div>
-              <h2 className="text-base font-semibold text-slate-200">Tracce avanzate</h2>
-              <p className="text-xs text-slate-500">
-                Alberatura per flow: pacchetto, risposta e ACK correlati quando deducibili
-              </p>
+    <>
+      <div className="space-y-4">
+        <div className="card">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-brand-400" />
+              <div>
+                <h2 className="text-base font-semibold text-slate-200">Tracce avanzate</h2>
+                <p className="text-xs text-slate-500">
+                  Alberatura per flow: pacchetto, risposta e ACK correlati quando deducibili
+                </p>
+              </div>
             </div>
+            <span className="text-xs text-slate-500">
+              {visibleFlows.length} flow visuali · {backendFlows.length} flow 5-tuple backend · {packets.length} pacchetti
+            </span>
           </div>
-          <span className="text-xs text-slate-500">
-            {visibleFlows.length} flow visuali · {backendFlows.length} flow 5-tuple backend · {packets.length} pacchetti
-          </span>
+
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_180px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cerca IP, porta o info pacchetto..."
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
+              />
+            </div>
+
+            <select
+              value={protocol}
+              onChange={(event) => setProtocol(event.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+            >
+              {protocols.map((item) => (
+                <option key={item} value={item}>{item === 'all' ? 'Tutti i protocolli' : item}</option>
+              ))}
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+            >
+              <option value="time">Cronologico</option>
+              <option value="packets">Piu pacchetti</option>
+              <option value="bytes">Piu volume</option>
+            </select>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3 text-xs text-slate-400">
+            <strong className="text-slate-200">Legenda:</strong> il nodo radice e il flow; i nodi figli sono pacchetti.
+            Le etichette "ACK di #N" e "risposta a #N" indicano il pacchetto precedente correlato tramite ACK TCP o risposta logica.
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_180px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cerca IP, porta o info pacchetto..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
+        <div className="space-y-3">
+          {visibleFlows.map((flow) => (
+            <FlowTree
+              key={flow.key}
+              flow={flow}
+              backendFlow={backendFlowByPacket.get(flow.packets[0]?.packet.number ?? -1) ?? null}
+              onPacketSelect={openPacketInspector}
             />
-          </div>
+          ))}
 
-          <select
-            value={protocol}
-            onChange={(event) => setProtocol(event.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
-          >
-            {protocols.map((item) => (
-              <option key={item} value={item}>{item === 'all' ? 'Tutti i protocolli' : item}</option>
-            ))}
-          </select>
-
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
-          >
-            <option value="time">Cronologico</option>
-            <option value="packets">Piu pacchetti</option>
-            <option value="bytes">Piu volume</option>
-          </select>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3 text-xs text-slate-400">
-          <strong className="text-slate-200">Legenda:</strong> il nodo radice e il flow; i nodi figli sono pacchetti.
-          Le etichette "ACK di #N" e "risposta a #N" indicano il pacchetto precedente correlato tramite ACK TCP o risposta logica.
+          {visibleFlows.length === 0 && (
+            <div className="card py-12 text-center text-sm text-slate-500">
+              Nessuna traccia avanzata corrisponde ai filtri applicati
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="space-y-3">
-        {visibleFlows.map((flow) => (
-          <FlowTree
-            key={flow.key}
-            flow={flow}
-            backendFlow={backendFlowByPacket.get(flow.packets[0]?.packet.number ?? -1) ?? null}
-          />
-        ))}
-
-        {visibleFlows.length === 0 && (
-          <div className="card py-12 text-center text-sm text-slate-500">
-            Nessuna traccia avanzata corrisponde ai filtri applicati
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Inspector pacchetto: riusa il popup Wireshark-style gia disponibile nella lista pacchetti. */}
+      {selectedPacketIndex !== null && packets[selectedPacketIndex] && (
+        <PacketDetailModal
+          packet={packets[selectedPacketIndex]}
+          allPackets={packets}
+          currentIndex={selectedPacketIndex}
+          onNavigate={(index) => setSelectedPacketIndex(index)}
+          onClose={() => setSelectedPacketIndex(null)}
+        />
+      )}
+    </>
   )
 }
