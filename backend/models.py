@@ -256,6 +256,40 @@ class SecurityAnalysisResponse(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class DNSReputationRequest(BaseModel):
+    """Richiesta opt-in per controllare domini DNS su liste esterne."""
+    # Domini osservati nelle query DNS del PCAP
+    domains: List[str]
+    # Numero massimo di domini da confrontare con servizi e liste esterne
+    max_domains: int = 250
+
+
+class DNSDomainIntel(BaseModel):
+    """Risultato di reputazione esterna per un singolo dominio."""
+    # Dominio normalizzato
+    domain: str
+    # Stato: clean, listed o unknown
+    status: str
+    # Categorie assegnate dalle fonti o dal motore
+    categories: List[str] = Field(default_factory=list)
+    # Fonti che hanno prodotto un match
+    sources: List[str] = Field(default_factory=list)
+    # Regole o dettagli sintetici del match
+    matched_rules: List[str] = Field(default_factory=list)
+    # Score esterno 0-100
+    score: int = 0
+
+
+class DNSReputationResponse(BaseModel):
+    """Risposta dell'analisi DNS esterna opt-in."""
+    # Mappa dominio -> reputazione
+    results: Dict[str, DNSDomainIntel]
+    # Stato operativo delle fonti usate
+    sources: List[SecuritySourceStatus]
+    # Errori non bloccanti incontrati durante download/query
+    errors: List[str] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")

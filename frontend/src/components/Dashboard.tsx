@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2 } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -34,9 +34,10 @@ import PacketTable        from './PacketTable'
 import TracesView         from './TracesView'
 import AdvancedTracesView from './AdvancedTracesView'
 import SecurityAnalysisView from './SecurityAnalysisView'
+import DNSAnalysisView from './DNSAnalysisView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -206,6 +207,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Security avanzata
             </button>
             <button
+              onClick={() => setActiveTab('dns-analysis')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'dns-analysis'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Globe2 className="w-3.5 h-3.5" />
+              DNS
+            </button>
+            <button
               onClick={() => setExternalConfirmOpen(true)}
               disabled={externalLoading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
@@ -313,6 +324,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       {/* ── Tab: Security avanzata ────────────────────────────────────── */}
       {activeTab === 'security-analysis' && (
         <SecurityAnalysisView result={result} />
+      )}
+
+      {/* ── Tab: DNS ──────────────────────────────────────────────────── */}
+      {activeTab === 'dns-analysis' && (
+        <DNSAnalysisView result={result} />
       )}
 
       {/* Popup privacy per l'arricchimento IP esterno generale */}
