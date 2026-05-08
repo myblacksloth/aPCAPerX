@@ -106,6 +106,83 @@ export interface IPEnrichmentResponse {
   results: Record<string, IPExternalInfo>
 }
 
+/** Pacchetto compatto inviato alla tab Security avanzata */
+export interface SecurityPacketObservation {
+  number: number
+  timestamp: string
+  src_ip: string | null
+  dst_ip: string | null
+  protocol: string
+  length: number
+  src_port: number | null
+  dst_port: number | null
+  info: string
+}
+
+/** Stato di una fonte usata nell'analisi Security */
+export interface SecuritySourceStatus {
+  source: string
+  status: 'ok' | 'partial' | 'skipped' | 'error' | string
+  detail: string
+}
+
+/** Finding prodotto dal motore Security avanzato */
+export interface SecurityFinding {
+  id: string
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info' | string
+  category: string
+  title: string
+  description: string
+  ip: string | null
+  related_ips: string[]
+  evidence: string[]
+  recommendation: string
+  sources: string[]
+  confidence: number
+  score: number
+  mitre: string[]
+}
+
+/** Valutazione aggregata di un singolo IP */
+export interface SecurityIPAssessment {
+  ip: string
+  risk_score: number
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info' | string
+  packets: number
+  bytes_out: number
+  bytes_in: number
+  ports: number[]
+  protocols: string[]
+  peer_count: number
+  country: string | null
+  asn: string | null
+  as_name: string | null
+  tags: string[]
+  vulnerabilities: string[]
+  findings: string[]
+}
+
+/** Riepilogo numerico dell'analisi Security avanzata */
+export interface SecurityAnalysisSummary {
+  total_ips: number
+  analyzed_public_ips: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+  info: number
+  total_findings: number
+}
+
+/** Risposta completa dell'endpoint /api/security-analysis */
+export interface SecurityAnalysisResponse {
+  summary: SecurityAnalysisSummary
+  findings: SecurityFinding[]
+  ip_assessments: SecurityIPAssessment[]
+  sources: SecuritySourceStatus[]
+  errors: string[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */

@@ -1,10 +1,11 @@
 """
 Entry point dell'API REST — PCAPCaper Backend.
 
-Espone tre endpoint:
+Espone quattro endpoint:
   GET  /api/health   → verifica che il servizio sia attivo
   POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
   POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
+  POST /api/security-analysis → esegue threat intelligence opt-in sul traffico
 
 Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
 analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
@@ -17,9 +18,16 @@ import logging
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import AnalysisResult, IPEnrichmentRequest, IPEnrichmentResponse
+from models import (
+    AnalysisResult,
+    IPEnrichmentRequest,
+    IPEnrichmentResponse,
+    SecurityAnalysisRequest,
+    SecurityAnalysisResponse,
+)
 from analyzer import analyze_pcap, MAX_FILE_SIZE
 from external_enrichment import enrich_ips
+from security_analysis import analyze_security
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -101,6 +109,44 @@ def enrich_ips_endpoint(payload: IPEnrichmentRequest):
         raise HTTPException(
             status_code=500,
             detail="Errore durante l'arricchimento esterno degli IP.",
+        ) from exc
+
+
+# ─── Endpoint: analisi di sicurezza avanzata ───────────────────────────────
+
+@app.post(
+    "/api/security-analysis",
+    response_model=SecurityAnalysisResponse,
+    tags=["Analisi"],
+    summary="Analizza il traffico con motore Security e threat intelligence",
+    response_description="Finding, score e raccomandazioni di sicurezza",
+)
+def security_analysis_endpoint(payload: SecurityAnalysisRequest):
+    """
+    Riceve i pacchetti gia estratti dal PCAP e le informazioni IP arricchite.
+
+    Nota privacy: questo endpoint puo interrogare fonti esterne di threat
+    intelligence per gli IP pubblici osservati. Il frontend lo chiama solo dopo
+    conferma esplicita dell'utente nel popup della tab Security avanzata.
+    """
+    try:
+        logger.info(
+            "Avvio analisi di sicurezza avanzata su %d pacchetti",
+            len(payload.packets),
+        )
+        result = analyze_security(payload)
+        logger.info(
+            "Analisi Security completata: %d finding, %d IP pubblici",
+            result.summary.total_findings,
+            result.summary.analyzed_public_ips,
+        )
+        return result
+    except Exception as exc:
+        # L'errore viene loggato per distinguere problemi di rete da bug del motore.
+        logger.exception("Errore imprevisto durante l'analisi Security")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'analisi di sicurezza avanzata.",
         ) from exc
 
 

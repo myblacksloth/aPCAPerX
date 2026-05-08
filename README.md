@@ -16,6 +16,8 @@
 
 ![](./stuff/i/SCR-20260508-pips.png)
 
+![](./stuff/i/SCR-20260508-rnut.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -23,7 +25,7 @@
 # PCAPCaper 🔍
 
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
-Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica e segnalazioni security euristiche.
+Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica, correlazione avanzata dei pacchetti e analisi security con threat intelligence.
 
 > Ispirato a [apackets.com](https://apackets.com/), ma completamente open source e auto-ospitabile.
 
@@ -35,6 +37,8 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
     - [Mappa degli indirizzi IP](#mappa-degli-indirizzi-ip)
     - [Advanced packet tracing](#advanced-packet-tracing)
+    - [Conferma prima di inviare traffico verso servizi esterni](#conferma-prima-di-inviare-traffico-verso-servizi-esterni)
+    - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -59,10 +63,15 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Esempi utili](#esempi-utili)
   - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
   - [🛡️ Security](#️-security)
+  - [🚨 Security avanzata](#-security-avanzata)
+    - [Fonti e dati usati](#fonti-e-dati-usati)
+    - [Output della tab](#output-della-tab)
+    - [Privacy e controllo](#privacy-e-controllo)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
     - [`POST /api/enrich-ips`](#post-apienrich-ips)
+    - [`POST /api/security-analysis`](#post-apisecurity-analysis)
   - [📁 Struttura del progetto](#-struttura-del-progetto)
   - [🔄 Diagramma dei componenti frontend](#-diagramma-dei-componenti-frontend)
   - [🤝 Contribuire](#-contribuire)
@@ -83,7 +92,9 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
+| **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
+| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati in stile git graph |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
@@ -114,6 +125,14 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 
 ![](./stuff/i/SCR-20260508-rhxk.png)
 
+### Conferma prima di inviare traffico verso servizi esterni
+
+![](./stuff/i/SCR-20260508-rneg.png)
+
+### Nuovo tab sui report di sicurezza
+
+![](./stuff/i/SCR-20260508-rnlr.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -129,13 +148,17 @@ graph TB
     BE["⚙️ Backend\nFastAPI + Python 3.11\nUvicorn ASGI\nporta 8000"]
     SC["📦 Scapy\nPCAP Parser\nDecoder protocolli"]
     EXT["🌐 Tool esterni opzionali\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
+    SECEXT["🚨 Threat intelligence opt-in\nShodan InternetDB\nFeodo Tracker\nURLhaus opzionale"]
 
     U -->|"Drag & drop file PCAP"| FE
     FE -->|"POST /api/analyze\nmultipart/form-data"| BE
     FE -->|"POST /api/enrich-ips\nsolo su click utente"| BE
+    FE -->|"POST /api/security-analysis\nsolo dopo popup consenso"| BE
     BE -->|"PcapReader streaming"| SC
     BE -->|"IP pubblici"| EXT
+    BE -->|"IP pubblici + metadati"| SECEXT
     EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
+    SECEXT -->|"CVE, IOC, C2, host malware"| BE
     SC -->|"Pacchetti decodificati"| BE
     BE -->|"JSON: statistiche complete"| FE
     FE -->|"Dashboard interattivo"| U
@@ -144,6 +167,7 @@ graph TB
     style BE fill:#1e293b,stroke:#22c55e,color:#f1f5f9
     style SC fill:#1e293b,stroke:#eab308,color:#f1f5f9
     style EXT fill:#1e293b,stroke:#f97316,color:#f1f5f9
+    style SECEXT fill:#1e293b,stroke:#ef4444,color:#f1f5f9
 ```
 
 ---
@@ -209,6 +233,13 @@ flowchart LR
         O -->|"click utente"| P["/api/enrich-ips"]
         P --> R["RDAP, ASN,\nReverse DNS, GeoIP"]
         R --> O
+    end
+
+    subgraph "Security avanzata opt-in"
+        O -->|"click + conferma popup"| S["/api/security-analysis"]
+        S --> T["Threat intel\nShodan, Feodo, URLhaus opz."]
+        S --> U["Scoring, evidenze,\nraccomandazioni"]
+        T & U --> O
     end
 ```
 
@@ -395,7 +426,7 @@ info contains "Query"
 
 ## 🛰️ Arricchimento IP esterno
 
-Il pulsante **Analizza con tool esterni** invia al backend gli IP osservati nel PCAP e recupera informazioni aggiuntive usando più fonti:
+Il pulsante **Analizza con tool esterni** mostra prima un popup di consenso, poi invia al backend gli IP osservati nel PCAP e recupera informazioni aggiuntive usando più fonti:
 
 | Fonte | Dati recuperati |
 |-------|-----------------|
@@ -404,12 +435,13 @@ Il pulsante **Analizza con tool esterni** invia al backend gli IP osservati nel 
 | Reverse DNS | Nome PTR associato all'indirizzo IP |
 | ip-api | Paese, regione, città, ISP, organizzazione, timezone, proxy/VPN, mobile e hosting |
 
-Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengono scartati e **non vengono inviati a servizi esterni**. L'arricchimento è opt-in: avviene solo quando l'utente preme il pulsante dedicato.
+Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengono scartati e **non vengono inviati a servizi esterni**. L'arricchimento è opt-in: avviene solo quando l'utente conferma il popup dedicato.
 
 I risultati vengono usati per:
 - arricchire il popup **Top IP**;
 - colorare la **Mappa traffico IP**;
 - alimentare il pannello **Security**;
+- fornire contesto alla tab **Security avanzata**;
 - includere le informazioni esterne nell'export JSON.
 
 ---
@@ -429,6 +461,55 @@ Le regole attuali considerano:
 - destinazioni geolocalizzate fuori dal contesto locale.
 
 Ogni finding mostra IP, severità, score, ASN/paese se disponibili, volume, pacchetti e motivazioni concrete.
+
+---
+
+## 🚨 Security avanzata
+
+La tab **Security avanzata** esegue un'analisi più profonda e più simile a un triage professionale. Per ridurre spreco di CPU e richieste esterne, il workflow è esplicito:
+
+1. carica e analizza il PCAP;
+2. premi **Analizza con tool esterni** per arricchire gli IP;
+3. apri **Security avanzata**;
+4. premi **Analisi di sicurezza**;
+5. conferma il popup che informa sull'uso di servizi esterni.
+
+Solo dopo la conferma vengono chiamati i servizi di threat intelligence.
+
+### Fonti e dati usati
+
+| Fonte | Requisiti | Dati usati |
+|-------|-----------|-----------|
+| Shodan InternetDB | Nessuna API key | Porte esposte, CPE, tag, hostname e CVE associate all'IP |
+| Feodo Tracker | Nessuna API key | Indicatori C2 botnet dal feed pubblico JSON |
+| URLhaus | Variabile backend `URLHAUS_AUTH_KEY` | Host associati a URL di distribuzione malware |
+| Motore locale PCAPCaper | Nessuno | Peer, porte, protocolli, volumi, fan-out, campioni pacchetto |
+| Arricchimento IP precedente | Click su "Analizza con tool esterni" | ASN, paese, proxy/VPN, hosting/datacenter, reverse DNS |
+
+### Output della tab
+
+La tab mostra:
+- conteggi per severità: critica, alta, media, bassa;
+- finding ordinati per rischio;
+- score 0-100 e confidenza;
+- evidenze concrete tratte da pacchetti e fonti esterne;
+- raccomandazioni operative per triage, contenimento o verifica;
+- riferimenti MITRE ATT&CK quando pertinenti;
+- stato delle fonti usate e errori non bloccanti;
+- classifica degli IP più rischiosi.
+
+### Privacy e controllo
+
+La chiamata a `/api/security-analysis` è opt-in. Il popup informa l'utente prima di inviare dati a servizi terzi. Il backend analizza solo IP pubblici per le interrogazioni esterne; IP privati, locali o riservati non vengono usati per le query di threat intelligence.
+
+Per abilitare URLhaus:
+
+```bash
+export URLHAUS_AUTH_KEY="la-tua-auth-key"
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Senza `URLHAUS_AUTH_KEY`, la fonte URLhaus viene mostrata come `skipped` e l'analisi prosegue con le altre fonti.
 
 ---
 
@@ -569,6 +650,78 @@ Arricchisce una lista di IP usando tool esterni. L'endpoint è usato dal pulsant
 
 ---
 
+### `POST /api/security-analysis`
+
+Esegue l'analisi di sicurezza avanzata del traffico. L'endpoint viene chiamato dalla tab **Security avanzata** solo dopo conferma esplicita dell'utente.
+
+**Request:** `Content-Type: application/json`
+
+```json
+{
+  "packets": [
+    {
+      "number": 1,
+      "timestamp": "10:23:01.123",
+      "src_ip": "192.168.1.10",
+      "dst_ip": "8.8.8.8",
+      "protocol": "DNS",
+      "length": 74,
+      "src_port": 52341,
+      "dst_port": 53,
+      "info": "DNS Query"
+    }
+  ],
+  "external_ip_info": {
+    "8.8.8.8": {
+      "ip": "8.8.8.8",
+      "status": "enriched",
+      "sources": ["Reverse DNS", "Team Cymru", "RDAP/IANA", "ip-api"]
+    }
+  },
+  "max_ips": 80
+}
+```
+
+**Risposta (200 OK):**
+
+```json
+{
+  "summary": {
+    "total_ips": 12,
+    "analyzed_public_ips": 4,
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+    "info": 0,
+    "total_findings": 6
+  },
+  "findings": [
+    {
+      "id": "vulns-93.184.216.34",
+      "severity": "high",
+      "category": "Exposure",
+      "title": "Servizi esposti con CVE note secondo Shodan InternetDB",
+      "ip": "93.184.216.34",
+      "score": 86,
+      "confidence": 78,
+      "sources": ["Shodan InternetDB", "Traffico PCAP"],
+      "evidence": ["CVE: CVE-..."],
+      "recommendation": "Confermare le CVE con scansione autorizzata..."
+    }
+  ],
+  "ip_assessments": [ ... ],
+  "sources": [
+    { "source": "Shodan InternetDB", "status": "ok", "detail": "4/4 IP con risposta utile o 404 gestito" }
+  ],
+  "errors": []
+}
+```
+
+**Fonti esterne:** Shodan InternetDB, Feodo Tracker e URLhaus opzionale con `URLHAUS_AUTH_KEY`.
+
+---
+
 ## 📁 Struttura del progetto
 
 ```
@@ -577,6 +730,7 @@ pcapcaper/
 │   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
+│   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── models.py        # Modelli Pydantic per request/response
 │   ├── requirements.txt # Dipendenze Python
 │   └── Dockerfile       # Immagine Docker del backend
@@ -599,13 +753,15 @@ pcapcaper/
 │   │       ├── ProtocolChart.tsx       # Donut chart + tabella protocolli
 │   │       ├── TopIPsChart.tsx         # Bar chart IP + popup servizi e dati esterni
 │   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
+│   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
 │   │       ├── ConversationsTable.tsx  # Tabella conversazioni ordinabile
 │   │       ├── PacketTable.tsx         # Lista pacchetti con ricerca e paginazione
 │   │       ├── PacketDetailModal.tsx   # Inspector pacchetto Wireshark-style
-│   │       └── TracesView.tsx          # Vista tracce/flow
+│   │       ├── TracesView.tsx          # Vista tracce/flow
+│   │       └── AdvancedTracesView.tsx  # Alberatura avanzata pacchetti/risposte/ACK
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.ts   # Proxy /api → backend (dev locale)
@@ -631,12 +787,14 @@ graph TD
     PC["ProtocolChart\nDonut + tabella"]
     TI["TopIPsChart\nBar chart + popup"]
     SEC["SecurityPanel\nFinding euristici"]
+    SECA["SecurityAnalysisView\nThreat intel opt-in"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
     CT["ConversationsTable\nOrdinabile"]
     PT["PacketTable\nRicerca + pagine"]
     TV["TracesView\nFlow filtrati"]
+    ATV["AdvancedTracesView\nAlberatura flow"]
 
     App -->|"nessun risultato"| FU
     App -->|"risultato disponibile"| DB
@@ -645,12 +803,14 @@ graph TD
     DB --> PC
     DB --> TI
     DB --> SEC
+    DB --> SECA
     DB --> MAP
     DB --> TL
     DB --> TP
     DB --> CT
     DB --> PT
     DB --> TV
+    DB --> ATV
 
     style App fill:#1e293b,stroke:#6366f1,color:#f1f5f9
     style DB fill:#1e293b,stroke:#334155,color:#f1f5f9
