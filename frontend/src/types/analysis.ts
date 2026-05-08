@@ -326,6 +326,57 @@ export interface HTTPAnalysisResult {
   limitations: string[]
 }
 
+/** Connessione TLS ricostruita dai soli metadati osservabili */
+export interface TLSEntry {
+  packet_number: number
+  timestamp: string
+  client_ip: string | null
+  client_port: number | null
+  server_ip: string | null
+  server_port: number | null
+  sni: string | null
+  tls_version: string | null
+  cipher_suite: string | null
+  alpn: string[]
+  cert_subject: string | null
+  cert_issuer: string | null
+  cert_not_before: string | null
+  cert_not_after: string | null
+  cert_sha256: string | null
+  ja3: string | null
+  ja3_string: string | null
+  ja3s: string | null
+  ja3s_string: string | null
+  anomalies: string[]
+  partial: boolean
+}
+
+/** Statistiche principali TLS */
+export interface TLSStats {
+  total_connections: number
+  with_sni: number
+  with_certificate: number
+  anomalous_connections: number
+  expired_certificates: number
+  legacy_tls: number
+}
+
+/** Contatore aggregato TLS */
+export interface TLSTopEntry {
+  value: string
+  count: number
+}
+
+/** Analisi TLS privacy-by-default basata su handshake osservabili */
+export interface TLSAnalysisResult {
+  stats: TLSStats
+  connections: TLSEntry[]
+  top_sni: TLSTopEntry[]
+  top_issuers: TLSTopEntry[]
+  top_versions: TLSTopEntry[]
+  limitations: string[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */
@@ -494,6 +545,8 @@ export interface AnalysisResult {
   dns?: DNSAnalysisResult | null
   /** Analisi HTTP in chiaro privacy-by-default */
   http?: HTTPAnalysisResult | null
+  /** Analisi TLS basata sui metadati osservabili del handshake */
+  tls?: TLSAnalysisResult | null
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */

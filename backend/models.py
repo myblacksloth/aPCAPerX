@@ -498,6 +498,92 @@ class HTTPAnalysisResult(BaseModel):
     limitations: List[str] = Field(default_factory=list)
 
 
+class TLSEntry(BaseModel):
+    """Connessione TLS ricostruita dai soli metadati osservabili."""
+    # Numero pacchetto del primo ClientHello osservato, se disponibile
+    packet_number: int
+    # Timestamp ISO 8601 del primo handshake osservato
+    timestamp: str
+    # IP client
+    client_ip: Optional[str] = None
+    # Porta client
+    client_port: Optional[int] = None
+    # IP server
+    server_ip: Optional[str] = None
+    # Porta server
+    server_port: Optional[int] = None
+    # Server Name Indication estratto dal ClientHello
+    sni: Optional[str] = None
+    # Versione TLS negoziata o stimata dagli handshake osservati
+    tls_version: Optional[str] = None
+    # Cipher suite negoziata, quando deducibile dal ServerHello
+    cipher_suite: Optional[str] = None
+    # Protocolli ALPN annunciati o negoziati
+    alpn: List[str] = Field(default_factory=list)
+    # Subject del certificato leaf
+    cert_subject: Optional[str] = None
+    # Issuer del certificato leaf
+    cert_issuer: Optional[str] = None
+    # Inizio validita certificato
+    cert_not_before: Optional[str] = None
+    # Fine validita certificato
+    cert_not_after: Optional[str] = None
+    # Fingerprint SHA256 del certificato DER
+    cert_sha256: Optional[str] = None
+    # Fingerprint JA3 del ClientHello, se calcolabile
+    ja3: Optional[str] = None
+    # Stringa JA3 normalizzata usata per il fingerprint
+    ja3_string: Optional[str] = None
+    # Fingerprint JA3S del ServerHello, se calcolabile
+    ja3s: Optional[str] = None
+    # Stringa JA3S normalizzata usata per il fingerprint
+    ja3s_string: Optional[str] = None
+    # Anomalie dedotte dai metadati visibili
+    anomalies: List[str] = Field(default_factory=list)
+    # True se uno o più record TLS erano incompleti nel segmento osservato
+    partial: bool = False
+
+
+class TLSStats(BaseModel):
+    """Statistiche principali dell'analisi TLS."""
+    # Connessioni TLS osservate
+    total_connections: int
+    # Connessioni con SNI disponibile
+    with_sni: int
+    # Connessioni con certificato osservato
+    with_certificate: int
+    # Connessioni con almeno una anomalia
+    anomalous_connections: int
+    # Certificati scaduti rispetto al timestamp della cattura
+    expired_certificates: int
+    # Connessioni che usano TLS vecchio o legacy
+    legacy_tls: int
+
+
+class TLSTopEntry(BaseModel):
+    """Contatore aggregato TLS."""
+    # Valore aggregato, ad esempio SNI, issuer o versione
+    value: str
+    # Numero occorrenze
+    count: int
+
+
+class TLSAnalysisResult(BaseModel):
+    """Risultato completo dell'analisi TLS basata su metadati osservabili."""
+    # Riepilogo numerico
+    stats: TLSStats
+    # Connessioni TLS ricostruite dal handshake
+    connections: List[TLSEntry] = Field(default_factory=list)
+    # SNI piu frequenti
+    top_sni: List[TLSTopEntry] = Field(default_factory=list)
+    # Issuer certificato piu frequenti
+    top_issuers: List[TLSTopEntry] = Field(default_factory=list)
+    # Versioni TLS osservate
+    top_versions: List[TLSTopEntry] = Field(default_factory=list)
+    # Limiti noti del parser, mostrabili in README/UI
+    limitations: List[str] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
@@ -668,6 +754,8 @@ class AnalysisResult(BaseModel):
     dns: Optional[DNSAnalysisResult] = None
     # Analisi HTTP in chiaro privacy-by-default
     http: Optional[HTTPAnalysisResult] = None
+    # Analisi TLS basata sui metadati osservabili del handshake
+    tls: Optional[TLSAnalysisResult] = None
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti
