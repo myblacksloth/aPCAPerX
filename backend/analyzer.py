@@ -33,6 +33,7 @@ from models import (
 )
 from flow_analysis import FlowAnalyzer
 from dns_analysis import DNSAnalyzer
+from http_analysis import HTTPAnalyzer
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -238,6 +239,17 @@ def _safe_dns_name(value) -> Optional[str]:
         if isinstance(value, bytes):
             return value.decode(errors="replace").rstrip(".")
         return str(value).rstrip(".")
+    except Exception:
+        return None
+
+
+def _raw_payload_bytes(pkt) -> Optional[bytes]:
+    """Estrae il payload Raw di Scapy senza introdurre nuove dipendenze nel parser."""
+    try:
+        raw_layer = pkt.getlayer("Raw")
+        if raw_layer is None:
+            return None
+        return bytes(raw_layer.load)
     except Exception:
         return None
 
@@ -563,6 +575,9 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Analizzatore DNS locale: non invia dati all'esterno e lavora solo sul PCAP.
     dns_analyzer = DNSAnalyzer()
 
+    # Analizzatore HTTP in chiaro: usa solo payload TCP leggibili, senza decifrare TLS.
+    http_analyzer = HTTPAnalyzer()
+
     # ── Lettura del file PCAP in modalità streaming ────────────────────────
     try:
         with PcapReader(file_path) as reader:
@@ -683,6 +698,18 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     pkt=pkt,
                     src_ip=src_ip,
                     dst_ip=dst_ip,
+                )
+
+                # ── Aggiornamento analisi HTTP in chiaro ──────────────────
+                # Parsing prudente: solo payload TCP Raw che sembrano HTTP testuale.
+                http_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    payload=_raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None,
                 )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
@@ -827,6 +854,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # ── Flow e DNS derivati dagli accumulatori modulari ───────────────────
     flows = flow_analyzer.to_entries()
     dns_result = dns_analyzer.to_result(flows)
+    http_result = http_analyzer.to_result()
 
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
@@ -840,6 +868,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         conversations = conversations,
         flows         = flows,
         dns           = dns_result,
+        http          = http_result,
         timeline      = timeline,
         packets       = packet_list,
     )
