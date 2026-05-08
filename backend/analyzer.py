@@ -32,6 +32,7 @@ from models import (
     LayerField, LayerInfo, IPServiceEntry,
 )
 from flow_analysis import FlowAnalyzer
+from dns_analysis import DNSAnalyzer
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -559,6 +560,9 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Analizzatore dedicato dei flow 5-tuple, aggiornato pacchetto per pacchetto.
     flow_analyzer = FlowAnalyzer()
 
+    # Analizzatore DNS locale: non invia dati all'esterno e lavora solo sul PCAP.
+    dns_analyzer = DNSAnalyzer()
+
     # ── Lettura del file PCAP in modalità streaming ────────────────────────
     try:
         with PcapReader(file_path) as reader:
@@ -669,6 +673,16 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     protocol="TCP" if pkt.haslayer(TCP) else "UDP" if pkt.haslayer(UDP) else protocol,
                     length=pkt_len,
                     pkt=pkt,
+                )
+
+                # ── Aggiornamento analisi DNS strutturata ─────────────────
+                # Estrae query, risposte, rcode, TTL e indicatori dal layer DNS.
+                dns_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    pkt=pkt,
+                    src_ip=src_ip,
+                    dst_ip=dst_ip,
                 )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
@@ -810,6 +824,10 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         for bk in sorted(agg)
     ]
 
+    # ── Flow e DNS derivati dagli accumulatori modulari ───────────────────
+    flows = flow_analyzer.to_entries()
+    dns_result = dns_analyzer.to_result(flows)
+
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
         filename      = filename,
@@ -820,7 +838,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         top_src_ports = top_src_ports,
         top_dst_ports = top_dst_ports,
         conversations = conversations,
-        flows         = flow_analyzer.to_entries(),
+        flows         = flows,
+        dns           = dns_result,
         timeline      = timeline,
         packets       = packet_list,
     )
