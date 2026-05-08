@@ -98,7 +98,7 @@ export default function App() {
       </header>
 
       {/* ── Contenuto principale ──────────────────────────────────────── */}
-      <main className="flex-1">
+      <main className="flex-1 pb-12">
         {result ? (
           // Vista dashboard: mostra i risultati dell'analisi
           <Dashboard result={result} onReset={handleReset} onResultUpdate={setResult} />
@@ -112,9 +112,20 @@ export default function App() {
         )}
       </main>
 
-      {/* ── Footer minimalista ────────────────────────────────────────── */}
-      <footer className="text-center text-slate-600 text-xs py-3 border-t border-slate-800">
-        PCAPCaper — Open Source PCAP Analyzer
+      {/* ── Footer fisso sempre visibile come l'header ────────────────── */}
+      <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-700 bg-slate-800/95 px-4 py-2 text-center text-xs text-slate-400 backdrop-blur">
+        <span>PCAPCaper - Open Source PCAP Analyzer</span>
+        <span className="mx-2 text-slate-600">|</span>
+        <span>(C) Antonio Maulucci - 2026</span>
+        <span className="mx-2 text-slate-600">|</span>
+        <a
+          href="https://github.com/myblacksloth"
+          target="_blank"
+          rel="noreferrer"
+          className="text-brand-300 hover:text-brand-100"
+        >
+          GitHub: myblacksloth
+        </a>
       </footer>
     </div>
   )

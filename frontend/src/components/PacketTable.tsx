@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import type { PacketEntry } from '../types/analysis'
 import { protocolColor } from '../utils/format'
@@ -34,6 +34,12 @@ export default function PacketTable({ packets }: PacketTableProps) {
     setPage(0)
     setSelectedIndex(null)
   }
+
+  useEffect(() => {
+    // Quando cambia il filtro globale della dashboard, torna alla prima pagina.
+    setPage(0)
+    setSelectedIndex(null)
+  }, [packets])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const pageData   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
