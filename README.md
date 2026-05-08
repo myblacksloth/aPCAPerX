@@ -1,6 +1,10 @@
 ![](./stuff/i/SCR-20260425-pjby.png)
 
+<!-- home -->
+
 ![](./stuff/i/SCR-20260425-pjhs.png)
+
+<!-- home -->
 
 ![](./stuff/i/SCR-20260425-pjla.png)
 
@@ -41,6 +45,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Advanced packet tracing](#advanced-packet-tracing)
     - [Conferma prima di inviare traffico verso servizi esterni](#conferma-prima-di-inviare-traffico-verso-servizi-esterni)
     - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
+    - [DNS analysis](#dns-analysis)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -141,6 +146,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Nuovo tab sui report di sicurezza
 
 ![](./stuff/i/SCR-20260508-rnlr.png)
+
+### DNS analysis
+
+![](./stuff/i/SCR-20260508-twqb.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -569,14 +578,19 @@ La tab **DNS** è dedicata esclusivamente alle richieste DNS osservate nel PCAP.
 
 ### Analisi locale
 
-Senza inviare dati all'esterno, la tab:
-- estrae solo pacchetti con `DNS Query`;
-- normalizza i domini richiesti;
-- aggrega query per dominio, client e resolver;
-- segnala pattern tipici di tracking/ads come `analytics`, `telemetry`, `pixel`, `doubleclick`;
-- segnala pattern rischiosi come `phish`, `scam`, `botnet`, `c2`, `payload`;
-- evidenzia TLD spesso abusati o domini con label lunghe/anomale;
-- ordina i domini per rischio stimato e frequenza.
+Senza inviare dati all'esterno, il backend produce una sezione `dns` nel JSON dell'analisi. La tab:
+- estrae query DNS, tipo record e transaction ID;
+- correla risposte alla query quando possibile;
+- mostra codice risposta (`NOERROR`, `NXDOMAIN`, `SERVFAIL`, `REFUSED`, ecc.);
+- mostra answer e TTL quando disponibili;
+- calcola client richiedente e resolver interrogato;
+- aggrega domini più richiesti, client più attivi e resolver più usati;
+- calcola il rapporto NXDOMAIN;
+- segnala query TXT sospette;
+- evidenzia possibili indicatori di DNS tunneling: label molto lunghe, molti sottodomini unici, entropia approssimata elevata e volume anomalo verso lo stesso dominio;
+- correla dominio -> IP di risposta -> flow successivi quando l'IP restituito compare nei flow 5-tuple.
+
+La vista include filtri per dominio, client, tipo record e rcode.
 
 ### Controllo liste esterne
 
@@ -592,7 +606,7 @@ La risposta mostra fonti usate, stato dei download, errori non bloccanti, catego
 
 ### Privacy DNS
 
-La reputazione DNS è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
+L'analisi DNS locale è privacy-by-default: usa solo il PCAP caricato e non invia domini a servizi esterni. La reputazione DNS esterna è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
 
 ---
 
@@ -683,6 +697,46 @@ Analizza un file PCAP e restituisce le statistiche.
       "packet_numbers": [1, 2]
     }
   ],
+  "dns": {
+    "stats": {
+      "total_queries": 1,
+      "total_responses": 1,
+      "unique_domains": 1,
+      "nxdomain_count": 0,
+      "nxdomain_ratio": 0.0,
+      "txt_query_count": 0,
+      "suspicious_txt_count": 0
+    },
+    "queries": [
+      {
+        "packet_number": 1,
+        "timestamp": "2024-03-15T10:23:01.123000+00:00",
+        "client": "192.168.1.10",
+        "resolver": "8.8.8.8",
+        "transaction_id": 4242,
+        "query": "example.com",
+        "record_type": "A",
+        "response_code": 0,
+        "response_code_name": "NOERROR",
+        "response_packet_number": 2,
+        "answers": [
+          { "name": "example.com", "record_type": "A", "value": "93.184.216.34", "ttl": 300 }
+        ],
+        "ttls": [300],
+        "answer_ips": ["93.184.216.34"],
+        "txt_answers": [],
+        "suspicious_txt": false,
+        "indicators": []
+      }
+    ],
+    "top_domains": [{ "value": "example.com", "count": 1 }],
+    "top_clients": [{ "value": "192.168.1.10", "count": 1 }],
+    "top_resolvers": [{ "value": "8.8.8.8", "count": 1 }],
+    "tunneling_indicators": [],
+    "flow_correlations": [
+      { "domain": "example.com", "answer_ip": "93.184.216.34", "flow_ids": ["..."], "dns_packet_numbers": [1] }
+    ]
+  },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
   ],
@@ -875,6 +929,7 @@ pcapcaper/
 │   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
 │   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
+│   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte

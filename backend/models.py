@@ -290,6 +290,128 @@ class DNSReputationResponse(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class DNSAnswerEntry(BaseModel):
+    """Risposta DNS singola estratta da un record answer."""
+    # Nome del record di risposta
+    name: str
+    # Tipo record leggibile, es. A, AAAA, CNAME, TXT
+    record_type: str
+    # Valore della risposta: IP, nome canonico, testo TXT...
+    value: str
+    # TTL del record, se disponibile
+    ttl: Optional[int] = None
+
+
+class DNSQueryEntry(BaseModel):
+    """Query DNS arricchita con eventuale risposta correlata."""
+    # Numero pacchetto della query
+    packet_number: int
+    # Timestamp ISO 8601 della query
+    timestamp: str
+    # IP client che ha inviato la query
+    client: Optional[str] = None
+    # IP resolver interrogato
+    resolver: Optional[str] = None
+    # Transaction ID DNS
+    transaction_id: Optional[int] = None
+    # Dominio richiesto
+    query: str
+    # Tipo record richiesto
+    record_type: str
+    # Codice risposta numerico, se e stata vista una risposta
+    response_code: Optional[int] = None
+    # Codice risposta leggibile, es. NOERROR, NXDOMAIN, SERVFAIL
+    response_code_name: Optional[str] = None
+    # Numero pacchetto della risposta correlata
+    response_packet_number: Optional[int] = None
+    # Risposte DNS associate alla query
+    answers: List[DNSAnswerEntry] = Field(default_factory=list)
+    # TTL osservati nelle risposte
+    ttls: List[int] = Field(default_factory=list)
+    # IP estratti da risposte A/AAAA
+    answer_ips: List[str] = Field(default_factory=list)
+    # Valori TXT estratti dalle risposte
+    txt_answers: List[str] = Field(default_factory=list)
+    # Flag locale per evidenziare query TXT sospette
+    suspicious_txt: bool = False
+    # Motivi euristici associati alla query
+    indicators: List[str] = Field(default_factory=list)
+
+
+class DNSTopEntry(BaseModel):
+    """Contatore DNS aggregato per domini, client o resolver."""
+    # Valore aggregato
+    value: str
+    # Numero occorrenze
+    count: int
+
+
+class DNSTunnelingIndicator(BaseModel):
+    """Indicatore euristico di possibile DNS tunneling."""
+    # Dominio/base domain osservato
+    domain: str
+    # Score euristico 0-100
+    score: int
+    # Numero query verso questo dominio/base
+    query_count: int
+    # Numero sottodomini unici osservati
+    unique_subdomains: int
+    # Lunghezza massima di una label osservata
+    max_label_length: int
+    # Entropia massima approssimata osservata sulle label
+    max_entropy: float
+    # Motivi che hanno contribuito allo score
+    reasons: List[str] = Field(default_factory=list)
+
+
+class DNSFlowCorrelation(BaseModel):
+    """Correlazione dominio -> IP di risposta -> flow successivi."""
+    # Dominio richiesto
+    domain: str
+    # IP restituito da DNS
+    answer_ip: str
+    # Flow 5-tuple successivi che coinvolgono l'IP
+    flow_ids: List[str] = Field(default_factory=list)
+    # Numeri dei pacchetti DNS sorgente
+    dns_packet_numbers: List[int] = Field(default_factory=list)
+
+
+class DNSStats(BaseModel):
+    """Statistiche principali dell'analisi DNS locale."""
+    # Numero totale di query DNS osservate
+    total_queries: int
+    # Numero totale di risposte DNS osservate
+    total_responses: int
+    # Domini unici richiesti
+    unique_domains: int
+    # Numero risposte NXDOMAIN
+    nxdomain_count: int
+    # Rapporto NXDOMAIN / risposte
+    nxdomain_ratio: float
+    # Query TXT totali
+    txt_query_count: int
+    # Query TXT considerate sospette
+    suspicious_txt_count: int
+
+
+class DNSAnalysisResult(BaseModel):
+    """Risultato completo dell'analisi DNS locale privacy-by-default."""
+    # Riepilogo numerico
+    stats: DNSStats
+    # Query DNS con risposte correlate quando disponibili
+    queries: List[DNSQueryEntry] = Field(default_factory=list)
+    # Domini piu richiesti
+    top_domains: List[DNSTopEntry] = Field(default_factory=list)
+    # Client DNS piu attivi
+    top_clients: List[DNSTopEntry] = Field(default_factory=list)
+    # Resolver piu usati
+    top_resolvers: List[DNSTopEntry] = Field(default_factory=list)
+    # Indicatori di possibile DNS tunneling
+    tunneling_indicators: List[DNSTunnelingIndicator] = Field(default_factory=list)
+    # Correlazioni dominio -> IP risposta -> flow successivi
+    flow_correlations: List[DNSFlowCorrelation] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
@@ -456,6 +578,8 @@ class AnalysisResult(BaseModel):
     conversations: List[Conversation]
     # Flow 5-tuple ricostruiti in backend
     flows: List[FlowEntry] = Field(default_factory=list)
+    # Analisi DNS locale privacy-by-default
+    dns: Optional[DNSAnalysisResult] = None
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti

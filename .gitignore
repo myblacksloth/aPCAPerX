@@ -4,6 +4,8 @@
 *.pyc
 __pycache__/
 
+todo.txt
+todo.md
 
 *.sh.txt
 

@@ -200,6 +200,81 @@ export interface DNSReputationResponse {
   errors: string[]
 }
 
+/** Risposta DNS singola estratta dal backend */
+export interface DNSAnswerEntry {
+  name: string
+  record_type: string
+  value: string
+  ttl: number | null
+}
+
+/** Query DNS locale con risposta correlata quando disponibile */
+export interface DNSQueryEntry {
+  packet_number: number
+  timestamp: string
+  client: string | null
+  resolver: string | null
+  transaction_id: number | null
+  query: string
+  record_type: string
+  response_code: number | null
+  response_code_name: string | null
+  response_packet_number: number | null
+  answers: DNSAnswerEntry[]
+  ttls: number[]
+  answer_ips: string[]
+  txt_answers: string[]
+  suspicious_txt: boolean
+  indicators: string[]
+}
+
+/** Contatore aggregato DNS */
+export interface DNSTopEntry {
+  value: string
+  count: number
+}
+
+/** Indicatore euristico di possibile DNS tunneling */
+export interface DNSTunnelingIndicator {
+  domain: string
+  score: number
+  query_count: number
+  unique_subdomains: number
+  max_label_length: number
+  max_entropy: number
+  reasons: string[]
+}
+
+/** Correlazione dominio -> IP risposta -> flow successivi */
+export interface DNSFlowCorrelation {
+  domain: string
+  answer_ip: string
+  flow_ids: string[]
+  dns_packet_numbers: number[]
+}
+
+/** Statistiche principali DNS */
+export interface DNSStats {
+  total_queries: number
+  total_responses: number
+  unique_domains: number
+  nxdomain_count: number
+  nxdomain_ratio: number
+  txt_query_count: number
+  suspicious_txt_count: number
+}
+
+/** Analisi DNS locale privacy-by-default */
+export interface DNSAnalysisResult {
+  stats: DNSStats
+  queries: DNSQueryEntry[]
+  top_domains: DNSTopEntry[]
+  top_clients: DNSTopEntry[]
+  top_resolvers: DNSTopEntry[]
+  tunneling_indicators: DNSTunnelingIndicator[]
+  flow_correlations: DNSFlowCorrelation[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */
@@ -364,6 +439,8 @@ export interface AnalysisResult {
   conversations: Conversation[]
   /** Flow 5-tuple ricostruiti dal backend */
   flows: FlowEntry[]
+  /** Analisi DNS locale privacy-by-default */
+  dns?: DNSAnalysisResult | null
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */
