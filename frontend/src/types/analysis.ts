@@ -377,6 +377,42 @@ export interface TLSAnalysisResult {
   limitations: string[]
 }
 
+/** Punto temporale di attività di un host */
+export interface HostTimelinePoint {
+  timestamp: string
+  packets_sent: number
+  packets_received: number
+  bytes_sent: number
+  bytes_received: number
+}
+
+/** Profilo aggregato di un host/IP osservato nel PCAP */
+export interface HostEntry {
+  ip: string
+  role: 'client' | 'server' | 'misto' | 'ignoto' | string
+  is_private: boolean
+  hostnames: string[]
+  protocols: string[]
+  contacted_ports: number[]
+  exposed_ports: number[]
+  bytes_sent: number
+  bytes_received: number
+  packets_sent: number
+  packets_received: number
+  flow_ids: string[]
+  dns_queries: string[]
+  sni_hosts: string[]
+  http_hosts: string[]
+  findings: string[]
+  timeline: HostTimelinePoint[]
+}
+
+/** Vista host/IP aggregata */
+export interface HostAnalysisResult {
+  total_hosts: number
+  hosts: HostEntry[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */
@@ -547,6 +583,8 @@ export interface AnalysisResult {
   http?: HTTPAnalysisResult | null
   /** Analisi TLS basata sui metadati osservabili del handshake */
   tls?: TLSAnalysisResult | null
+  /** Vista aggregata host/IP */
+  hosts?: HostAnalysisResult | null
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */

@@ -48,6 +48,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [DNS analysis](#dns-analysis)
     - [HTTP anaysis](#http-anaysis)
     - [TLS analysis](#tls-analysis)
+    - [Classificazione per host](#classificazione-per-host)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -86,6 +87,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [🔐 TLS analysis](#-tls-analysis)
     - [Anomalie TLS](#anomalie-tls)
     - [Limiti TLS](#limiti-tls)
+  - [🖥️ Hosts](#️-hosts)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -110,6 +112,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
+| **Hosts** | Vista dettaglio IP collapsable con ruolo, flow, DNS, HTTP/SNI, ASN/geo e timeline attività |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
 | **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
@@ -167,6 +170,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### TLS analysis
 
 ![](./stuff/i/SCR-20260508-uhnh.png)
+
+### Classificazione per host
+
+![](./stuff/i/SCR-20260509-bcqx.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -265,10 +272,11 @@ flowchart LR
         E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
         E --> HT["HTTP in chiaro\nrequest/response metadata"]
         E --> TLS["TLS handshake\nSNI, cert, JA3"]
+        E --> HOSTS["Host/IP\nprofilo aggregato"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q & Z & HT & TLS --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z & HT & TLS & HOSTS --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -712,6 +720,29 @@ Il parser TLS è volutamente conservativo:
 
 ---
 
+## 🖥️ Hosts
+
+La tab **Hosts** mostra una vista dettaglio per ogni IP osservato nel PCAP. Le sezioni sono collapsable, chiuse di default, e possono essere aperte quando serve approfondire un host specifico. Gli IP nella lista pacchetti sono cliccabili: il click apre direttamente la tab **Hosts** filtrata su quell'indirizzo.
+
+Per ogni host vengono mostrati:
+- ruolo stimato: `client`, `server`, `misto` o `ignoto`;
+- classificazione privato/pubblico;
+- hostname dedotti da DNS osservato nel PCAP e reverse DNS da tool esterni quando disponibile;
+- ASN, organizzazione e geolocalizzazione se l'arricchimento IP è stato abilitato dall'utente;
+- protocolli usati;
+- porte remote contattate;
+- porte esposte/osservate come lato server;
+- byte e pacchetti inviati/ricevuti;
+- flow collegati;
+- query DNS generate;
+- SNI TLS e host HTTP osservati;
+- finding associati, ad esempio HTTP in chiaro o anomalie TLS;
+- timeline attività con byte inviati/ricevuti per bucket temporale.
+
+La sezione `hosts` viene calcolata dal backend durante l'analisi standard e non invia dati a servizi esterni. I dati ASN/geo vengono solo visualizzati quando sono già presenti in `external_ip_info`, cioè dopo il consenso dell'utente tramite **Analizza con tool esterni**.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -917,6 +948,38 @@ Analizza un file PCAP e restituisce le statistiche.
     "top_versions": [{ "value": "TLS 1.3", "count": 1 }],
     "limitations": ["Non decifra il traffico TLS e non recupera contenuti applicativi."]
   },
+  "hosts": {
+    "total_hosts": 2,
+    "hosts": [
+      {
+        "ip": "192.168.1.10",
+        "role": "client",
+        "is_private": true,
+        "hostnames": [],
+        "protocols": ["DNS", "TCP", "TLS"],
+        "contacted_ports": [53, 80, 443],
+        "exposed_ports": [],
+        "bytes_sent": 2450,
+        "bytes_received": 9820,
+        "packets_sent": 22,
+        "packets_received": 24,
+        "flow_ids": ["a1b2c3d4e5f60789"],
+        "dns_queries": ["example.com"],
+        "sni_hosts": ["example.com"],
+        "http_hosts": ["example.com"],
+        "findings": ["HTTP in chiaro verso example.com"],
+        "timeline": [
+          {
+            "timestamp": "10:23:01",
+            "packets_sent": 2,
+            "packets_received": 1,
+            "bytes_sent": 148,
+            "bytes_received": 74
+          }
+        ]
+      }
+    ]
+  },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
   ],
@@ -1112,6 +1175,7 @@ pcapcaper/
 │   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
 │   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
 │   ├── tls_analysis.py  # Analisi TLS metadata-only: SNI, certificati, JA3/JA3S
+│   ├── host_analysis.py # Vista aggregata host/IP con flow, DNS, HTTP, TLS e timeline
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
@@ -1141,6 +1205,7 @@ pcapcaper/
 │   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
 │   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
 │   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
+│   │       ├── HostsView.tsx           # Vista host/IP collapsable
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -1178,6 +1243,7 @@ graph TD
     DNSA["DNSAnalysisView\nDashboard DNS"]
     HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
     TLSA["TLSAnalysisView\nTLS metadata"]
+    HOSTA["HostsView\nDettaglio host/IP"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -1197,6 +1263,7 @@ graph TD
     DB --> DNSA
     DB --> HTTPA
     DB --> TLSA
+    DB --> HOSTA
     DB --> MAP
     DB --> TL
     DB --> TP

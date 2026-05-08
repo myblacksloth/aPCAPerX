@@ -35,6 +35,7 @@ from flow_analysis import FlowAnalyzer
 from dns_analysis import DNSAnalyzer
 from http_analysis import HTTPAnalyzer
 from tls_analysis import TLSAnalyzer
+from host_analysis import build_hosts
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -875,6 +876,14 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     dns_result = dns_analyzer.to_result(flows)
     http_result = http_analyzer.to_result()
     tls_result = tls_analyzer.to_result(dns_hostnames)
+    hosts_result = build_hosts(
+        packets=packet_list,
+        flows=flows,
+        dns=dns_result,
+        http=http_result,
+        tls=tls_result,
+        dns_hostnames=dns_hostnames,
+    )
 
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
@@ -890,6 +899,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         dns           = dns_result,
         http          = http_result,
         tls           = tls_result,
+        hosts         = hosts_result,
         timeline      = timeline,
         packets       = packet_list,
     )
