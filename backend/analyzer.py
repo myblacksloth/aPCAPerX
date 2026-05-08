@@ -35,13 +35,11 @@ from flow_analysis import FlowAnalyzer
 from dns_analysis import DNSAnalyzer
 from http_analysis import HTTPAnalyzer
 from tls_analysis import TLSAnalyzer
+from host_analysis import build_hosts
+from config import MAX_PACKET_LIST
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
-
-# Limite massimo dimensione file (100 MB) — file più grandi vengono rifiutati
-MAX_FILE_SIZE: int = 100 * 1024 * 1024
-
 
 # Mappa porta → nome servizio per i protocolli well-known più diffusi.
 # Viene usata per "indovinare" il protocollo applicativo dalla porta TCP/UDP.
@@ -743,31 +741,36 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 ts_buckets[int(ts)]["packets"] += 1
                 ts_buckets[int(ts)]["bytes"]   += pkt_len
 
-                # ── Aggiunta alla lista dettagliata ───────────────────────
-                try:
-                    ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
-                    ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]
-                except Exception:
-                    ts_str = "00:00:00.000"
+                # Conserviamo solo i primi N pacchetti dettagliati nel JSON per
+                # evitare consumo eccessivo di memoria/browser su PCAP molto grandi.
+                if MAX_PACKET_LIST == 0 or len(packet_list) < MAX_PACKET_LIST:
+                    # ── Aggiunta alla lista dettagliata ───────────────────
+                    # Decodifica layer e raw hex sono costosi: li facciamo solo
+                    # per i pacchetti che finiranno realmente nella risposta.
+                    try:
+                        ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
+                        ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]
+                    except Exception:
+                        ts_str = "00:00:00.000"
 
-                try:
-                    raw_hex = bytes(pkt).hex()
-                except Exception:
-                    raw_hex = None
+                    try:
+                        raw_hex = bytes(pkt).hex()
+                    except Exception:
+                        raw_hex = None
 
-                packet_list.append(PacketEntry(
-                    number   = total_packets,
-                    timestamp= ts_str,
-                    src_ip   = src_ip,
-                    dst_ip   = dst_ip,
-                    protocol = protocol,
-                    length   = pkt_len,
-                    src_port = src_port,
-                    dst_port = dst_port,
-                    info     = _get_info(pkt, protocol),
-                    raw_hex  = raw_hex,
-                    layers   = _extract_layers(pkt),
-                ))
+                    packet_list.append(PacketEntry(
+                        number   = total_packets,
+                        timestamp= ts_str,
+                        src_ip   = src_ip,
+                        dst_ip   = dst_ip,
+                        protocol = protocol,
+                        length   = pkt_len,
+                        src_port = src_port,
+                        dst_port = dst_port,
+                        info     = _get_info(pkt, protocol),
+                        raw_hex  = raw_hex,
+                        layers   = _extract_layers(pkt),
+                    ))
 
     except Exception as exc:
         # Rilancia l'eccezione con un messaggio comprensibile all'utente
@@ -875,6 +878,14 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     dns_result = dns_analyzer.to_result(flows)
     http_result = http_analyzer.to_result()
     tls_result = tls_analyzer.to_result(dns_hostnames)
+    hosts_result = build_hosts(
+        packets=packet_list,
+        flows=flows,
+        dns=dns_result,
+        http=http_result,
+        tls=tls_result,
+        dns_hostnames=dns_hostnames,
+    )
 
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
@@ -890,6 +901,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         dns           = dns_result,
         http          = http_result,
         tls           = tls_result,
+        hosts         = hosts_result,
         timeline      = timeline,
         packets       = packet_list,
     )

@@ -584,6 +584,66 @@ class TLSAnalysisResult(BaseModel):
     limitations: List[str] = Field(default_factory=list)
 
 
+class HostTimelinePoint(BaseModel):
+    """Punto temporale di attivita per un singolo host."""
+    # Orario del bucket nel formato HH:MM:SS UTC
+    timestamp: str
+    # Pacchetti inviati dall'host nel bucket
+    packets_sent: int
+    # Pacchetti ricevuti dall'host nel bucket
+    packets_received: int
+    # Byte inviati dall'host nel bucket
+    bytes_sent: int
+    # Byte ricevuti dall'host nel bucket
+    bytes_received: int
+
+
+class HostEntry(BaseModel):
+    """Profilo aggregato di un host/IP osservato nel PCAP."""
+    # Indirizzo IP dell'host
+    ip: str
+    # Ruolo stimato: client, server, misto o ignoto
+    role: str
+    # True se l'indirizzo appartiene a range privati/locali/riservati
+    is_private: bool
+    # Hostname dedotti da DNS osservato nel PCAP
+    hostnames: List[str] = Field(default_factory=list)
+    # Protocolli osservati per l'host
+    protocols: List[str] = Field(default_factory=list)
+    # Porte remote contattate dall'host come client
+    contacted_ports: List[int] = Field(default_factory=list)
+    # Porte locali osservate come lato server/destinazione del flow
+    exposed_ports: List[int] = Field(default_factory=list)
+    # Byte inviati dall'host
+    bytes_sent: int = 0
+    # Byte ricevuti dall'host
+    bytes_received: int = 0
+    # Pacchetti inviati dall'host
+    packets_sent: int = 0
+    # Pacchetti ricevuti dall'host
+    packets_received: int = 0
+    # Identificativi dei flow collegati
+    flow_ids: List[str] = Field(default_factory=list)
+    # Query DNS generate dall'host
+    dns_queries: List[str] = Field(default_factory=list)
+    # SNI osservati in sessioni TLS dell'host
+    sni_hosts: List[str] = Field(default_factory=list)
+    # Host HTTP osservati in chiaro
+    http_hosts: List[str] = Field(default_factory=list)
+    # Finding o note operative associate all'host
+    findings: List[str] = Field(default_factory=list)
+    # Timeline compatta dell'attivita dell'host
+    timeline: List[HostTimelinePoint] = Field(default_factory=list)
+
+
+class HostAnalysisResult(BaseModel):
+    """Risultato aggregato della vista Hosts."""
+    # Numero host osservati
+    total_hosts: int
+    # Profili host ordinati per volume totale
+    hosts: List[HostEntry] = Field(default_factory=list)
+
+
 class IPServiceEntry(BaseModel):
     """Servizio osservato in associazione a un indirizzo IP."""
     # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
@@ -756,6 +816,8 @@ class AnalysisResult(BaseModel):
     http: Optional[HTTPAnalysisResult] = None
     # Analisi TLS basata sui metadati osservabili del handshake
     tls: Optional[TLSAnalysisResult] = None
+    # Vista host/IP aggregata
+    hosts: Optional[HostAnalysisResult] = None
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti

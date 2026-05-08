@@ -6,11 +6,12 @@ import PacketDetailModal from './PacketDetailModal'
 
 interface PacketTableProps {
   packets: PacketEntry[]
+  onHostClick?: (ip: string) => void
 }
 
 const PAGE_SIZE = 50
 
-export default function PacketTable({ packets }: PacketTableProps) {
+export default function PacketTable({ packets, onHostClick }: PacketTableProps) {
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(0)
   // indice nell'array `filtered` del pacchetto selezionato (null = modale chiuso)
@@ -120,13 +121,37 @@ export default function PacketTable({ packets }: PacketTableProps) {
 
                     <td className="py-1 pr-3 text-slate-300">
                       {pkt.src_ip
-                        ? `${pkt.src_ip}${pkt.src_port ? ':' + pkt.src_port : ''}`
+                        ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              // Rende l'IP cliccabile senza aprire l'inspector del pacchetto.
+                              event.stopPropagation()
+                              onHostClick?.(pkt.src_ip as string)
+                            }}
+                            className="font-mono text-slate-200 underline-offset-2 hover:text-brand-300 hover:underline"
+                          >
+                            {pkt.src_ip}{pkt.src_port ? ':' + pkt.src_port : ''}
+                          </button>
+                        )
                         : <span className="text-slate-600">—</span>}
                     </td>
 
                     <td className="py-1 pr-3 text-slate-300">
                       {pkt.dst_ip
-                        ? `${pkt.dst_ip}${pkt.dst_port ? ':' + pkt.dst_port : ''}`
+                        ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              // Rende l'IP cliccabile senza aprire l'inspector del pacchetto.
+                              event.stopPropagation()
+                              onHostClick?.(pkt.dst_ip as string)
+                            }}
+                            className="font-mono text-slate-200 underline-offset-2 hover:text-brand-300 hover:underline"
+                          >
+                            {pkt.dst_ip}{pkt.dst_port ? ':' + pkt.dst_port : ''}
+                          </button>
+                        )
                         : <span className="text-slate-600">—</span>}
                     </td>
 

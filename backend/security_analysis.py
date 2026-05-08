@@ -25,10 +25,8 @@ from models import (
     SecurityIPAssessmentModel,
     SecuritySourceStatus,
 )
+from config import HTTP_TIMEOUT_SECONDS
 
-
-# Timeout brevi: la tab Security non deve restare appesa a fonti gratuite lente.
-HTTP_TIMEOUT_SECONDS = 7
 
 # Porte note che meritano attenzione quando compaiono verso/da Internet.
 REMOTE_ADMIN_PORTS = {22, 23, 3389, 5900, 5901, 5985, 5986}

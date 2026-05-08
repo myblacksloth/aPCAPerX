@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -37,9 +37,11 @@ import SecurityAnalysisView from './SecurityAnalysisView'
 import DNSAnalysisView from './DNSAnalysisView'
 import HTTPAnalysisView from './HTTPAnalysisView'
 import TLSAnalysisView from './TLSAnalysisView'
+import HostsView from './HostsView'
+import NetworkGraphView from './NetworkGraphView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -80,10 +82,19 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const [externalSummary, setExternalSummary] = useState<string | null>(null)
   const [externalConfirmOpen, setExternalConfirmOpen] = useState(false)
   const [packetFilter, setPacketFilter] = useState('')
+  const [selectedHostIp, setSelectedHostIp] = useState<string | null>(null)
   const parsedPacketFilter = parsePacketFilter(packetFilter)
   const filteredPackets = parsedPacketFilter.error
     ? result.packets
     : result.packets.filter(parsedPacketFilter.predicate)
+  const externalResultsCount = Object.keys(result.external_ip_info ?? {}).length
+  const externalFeatureActive = externalResultsCount > 0 || Boolean(externalSummary && !externalError)
+
+  const openHost = (ip: string) => {
+    // Permette alle viste con IP cliccabili di aprire direttamente la tab Hosts.
+    setSelectedHostIp(ip)
+    setActiveTab('hosts')
+  }
   /**
    * Esporta il risultato dell'analisi come file JSON scaricabile.
    * Utile per archiviare o condividere i dati estratti dal PCAP.
@@ -199,6 +210,26 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Tracce avanzate
             </button>
             <button
+              onClick={() => setActiveTab('hosts')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'hosts'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              Hosts
+            </button>
+            <button
+              onClick={() => setActiveTab('network-graph')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'network-graph'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Network className="w-3.5 h-3.5" />
+              Grafo
+            </button>
+            <button
               onClick={() => setActiveTab('security-analysis')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
                 ${activeTab === 'security-analysis'
@@ -239,15 +270,20 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               TLS
             </button>
             <button
-              onClick={() => setExternalConfirmOpen(true)}
-              disabled={externalLoading}
+              onClick={() => {
+                // Se l'arricchimento e gia stato completato, non riapre il popup.
+                if (!externalFeatureActive) setExternalConfirmOpen(true)
+              }}
+              disabled={externalLoading || externalFeatureActive}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
-                ${externalLoading
-                  ? 'cursor-wait bg-slate-600 text-slate-300'
-                  : 'text-slate-300 hover:bg-slate-600 hover:text-slate-100'}`}
+                ${externalFeatureActive
+                  ? 'cursor-not-allowed border border-emerald-500/30 bg-emerald-500/15 text-emerald-100'
+                  : externalLoading
+                    ? 'cursor-wait bg-slate-600 text-slate-300'
+                    : 'text-slate-300 hover:bg-slate-600 hover:text-slate-100'}`}
             >
-              <Search className="w-3.5 h-3.5" />
-              {externalLoading ? 'Analisi...' : 'Analizza con tool esterni'}
+              {externalFeatureActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
+              {externalFeatureActive ? 'Tool esterni attivi' : externalLoading ? 'Ottenimento info...' : 'Analizza con tool esterni'}
             </button>
           </div>
 
@@ -270,7 +306,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             ? 'border-red-500/30 bg-red-500/10 text-red-200'
             : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
         }`}>
-          {externalError ?? externalSummary}
+          {externalError ?? `Tool esterni attivi: ${externalSummary}`}
         </div>
       )}
 
@@ -311,7 +347,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           </div>
 
           {/* Riga 8: lista pacchetti filtrata */}
-          <PacketTable packets={filteredPackets} />
+          <PacketTable packets={filteredPackets} onHostClick={openHost} />
         </>
       )}
 
@@ -341,6 +377,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           />
           <AdvancedTracesView packets={filteredPackets} flows={result.flows ?? []} />
         </>
+      )}
+
+      {/* ── Tab: Hosts ────────────────────────────────────────────────── */}
+      {activeTab === 'hosts' && (
+        <HostsView result={result} selectedHostIp={selectedHostIp} />
+      )}
+
+      {/* ── Tab: Grafo di rete ────────────────────────────────────────── */}
+      {activeTab === 'network-graph' && (
+        <NetworkGraphView result={result} />
       )}
 
       {/* ── Tab: Security avanzata ────────────────────────────────────── */}

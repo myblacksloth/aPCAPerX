@@ -4,6 +4,9 @@
 *.pyc
 __pycache__/
 
+
+.env
+
 todo.txt
 todo.md
 

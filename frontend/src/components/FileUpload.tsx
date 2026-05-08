@@ -10,6 +10,7 @@
  */
 import { useState, useCallback, useRef } from 'react'
 import { Upload, FileSearch, AlertCircle, Loader2 } from 'lucide-react'
+import type { UploadProgress } from '../App'
 
 interface FileUploadProps {
   /** Callback invocata quando l'utente seleziona un file valido */
@@ -18,12 +19,14 @@ interface FileUploadProps {
   loading: boolean
   /** Messaggio di errore da mostrare (null = nessun errore) */
   error: string | null
+  /** Stato di avanzamento upload/elaborazione */
+  progress: UploadProgress
 }
 
 /** Estensioni file accettate — deve corrispondere al backend */
 const ACCEPTED_EXTENSIONS = ['.pcap', '.pcapng', '.cap']
 
-export default function FileUpload({ onUpload, loading, error }: FileUploadProps) {
+export default function FileUpload({ onUpload, loading, error, progress }: FileUploadProps) {
   // true quando l'utente trascina un file sopra l'area
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -123,8 +126,19 @@ export default function FileUpload({ onUpload, loading, error }: FileUploadProps
             <div>
               <p className="text-white font-semibold text-lg">Analisi in corso…</p>
               <p className="text-slate-400 text-sm mt-1">
-                Lettura e decodifica dei pacchetti, attendere
+                {progress.message}
               </p>
+              <div className="mt-4 w-72 overflow-hidden rounded-full bg-slate-700">
+                <div
+                  className="h-2 rounded-full bg-brand-400 transition-all"
+                  style={{ width: `${Math.max(5, Math.min(progress.percent, 100))}%` }}
+                />
+              </div>
+              <div className="mt-3 grid w-72 grid-cols-3 gap-2 text-[11px] text-slate-500">
+                <span className={progress.phase === 'uploading' ? 'text-brand-300' : ''}>Upload</span>
+                <span className={progress.phase === 'processing' ? 'text-brand-300' : ''}>Elaborazione</span>
+                <span className={progress.phase === 'analyzing' ? 'text-brand-300' : ''}>Analisi</span>
+              </div>
             </div>
           </div>
         ) : isDragOver ? (
@@ -155,7 +169,7 @@ export default function FileUpload({ onUpload, loading, error }: FileUploadProps
       <p className="mt-4 text-slate-500 text-sm">
         Formati supportati: <code className="text-slate-400">.pcap</code>,{' '}
         <code className="text-slate-400">.pcapng</code>,{' '}
-        <code className="text-slate-400">.cap</code> · Dimensione massima: 100 MB
+        <code className="text-slate-400">.cap</code> · Nessun limite applicativo predefinito
       </p>
 
       {/* ── Messaggio di errore ─────────────────────────────────────────── */}

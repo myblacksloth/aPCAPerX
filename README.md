@@ -1,4 +1,5 @@
-![](./stuff/i/SCR-20260425-pjby.png)
+
+![](./stuff/i/SCR-20260509-bmlx.png)
 
 <!-- home -->
 
@@ -48,6 +49,8 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [DNS analysis](#dns-analysis)
     - [HTTP anaysis](#http-anaysis)
     - [TLS analysis](#tls-analysis)
+    - [Classificazione per host](#classificazione-per-host)
+    - [Analisi dei flussi di rete per singolo stato](#analisi-dei-flussi-di-rete-per-singolo-stato)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -64,6 +67,10 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Avvio completo](#avvio-completo)
     - [Comandi utili](#comandi-utili)
     - [Porte esposte](#porte-esposte)
+  - [⚙️ Prestazioni e configurazione](#️-prestazioni-e-configurazione)
+    - [Variabili `.env`](#variabili-env)
+    - [Storage temporaneo](#storage-temporaneo)
+    - [Paginazione e limiti JSON](#paginazione-e-limiti-json)
   - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
     - [Operatori logici](#operatori-logici)
     - [Operatori di confronto](#operatori-di-confronto)
@@ -86,6 +93,8 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [🔐 TLS analysis](#-tls-analysis)
     - [Anomalie TLS](#anomalie-tls)
     - [Limiti TLS](#limiti-tls)
+  - [🖥️ Hosts](#️-hosts)
+  - [🕸️ Grafo di rete](#️-grafo-di-rete)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -110,19 +119,21 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
+| **Hosts** | Vista dettaglio IP collapsable con ruolo, flow, DNS, HTTP/SNI, ASN/geo e timeline attività |
+| **Grafo di rete** | Network graph host-to-host basato sui flow, con filtri per protocollo, scope e finding |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
 | **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
-| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
+| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
 | **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
-| **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
+| **Lista Pacchetti** | Dettaglio pacchetti paginato; il limite JSON è configurabile con `PCAPCAPER_MAX_PACKET_LIST` |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
 
-Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
+Formati supportati: `.pcap`, `.pcapng`, `.cap` · Nessun limite applicativo predefinito sulla dimensione upload.
 
 ---
 
@@ -143,6 +154,13 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Mappa degli indirizzi IP
 
 ![](./stuff/i/SCR-20260508-pbqj.png)
+
+La sezione **Mappa traffico IP** usa l'arricchimento geografico degli IP pubblici per colorare i paesi in base al traffico osservato. Cliccando su un paese colorato si apre un popup con:
+- IP geolocalizzati in quel paese;
+- flow 5-tuple che coinvolgono quegli IP;
+- endpoint sorgente/destinazione;
+- protocollo, stato, byte e pacchetti del flow;
+- quota di traffico attribuita al paese.
 
 ### Advanced packet tracing
 
@@ -167,6 +185,14 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### TLS analysis
 
 ![](./stuff/i/SCR-20260508-uhnh.png)
+
+### Classificazione per host
+
+![](./stuff/i/SCR-20260509-bcqx.png)
+
+### Analisi dei flussi di rete per singolo stato
+
+![](./stuff/i/SCR-20260509-bigy.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -265,10 +291,11 @@ flowchart LR
         E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
         E --> HT["HTTP in chiaro\nrequest/response metadata"]
         E --> TLS["TLS handshake\nSNI, cert, JA3"]
+        E --> HOSTS["Host/IP\nprofilo aggregato"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q & Z & HT & TLS --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z & HT & TLS & HOSTS --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -399,6 +426,46 @@ docker-compose up --build backend
 
 ---
 
+## ⚙️ Prestazioni e configurazione
+
+L'analisi PCAP è stata ottimizzata per ridurre RAM e blocchi del server:
+- upload scritto su disco temporaneo a chunk, senza caricare l'intero file in memoria;
+- limite applicativo di 100 MB rimosso;
+- analisi PCAP eseguita in thread separato rispetto all'event loop FastAPI;
+- dettaglio pacchetti e `packet_numbers` dei flow limitati in modo configurabile per evitare JSON enormi;
+- arricchimento IP esterno parallelizzato con numero di worker limitato;
+- liste DNS esterne scaricate e indicizzate con cache di processo;
+- UI con stati separati per upload, elaborazione, analisi e chiamate esterne.
+
+### Variabili `.env`
+
+Il repository include `.env.example`. Il file `.env` locale è ignorato da git e può essere usato per personalizzare l'ambiente:
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Limite upload in MB. `0` = nessun limite applicativo |
+| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory dei file PCAP temporanei |
+| `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
+| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
+| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
+| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Worker paralleli massimi per arricchimento esterno |
+| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | IP pubblici massimi arricchiti per richiesta |
+| `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
+| `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
+| `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+
+### Storage temporaneo
+
+Durante `/api/analyze`, il backend salva il PCAP in `PCAPCAPER_TEMP_DIR` con `tempfile.NamedTemporaryFile(delete=False)`. Il file viene cancellato nel blocco `finally` dell'endpoint, anche in caso di errore. In Docker la directory `/tmp/pcapcaper` è montata come `tmpfs`, quindi viene eliminata anche allo stop del container.
+
+Redis è stato valutato ma non introdotto: il flusso corrente non richiede persistenza dei risultati tra richieste e Redis aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache risultati.
+
+### Paginazione e limiti JSON
+
+La lista pacchetti nel frontend è paginata a 50 righe per pagina. Il backend invia per default i primi `PCAPCAPER_MAX_PACKET_LIST=1000` pacchetti dettagliati, mentre riepiloghi, flow, DNS, HTTP, TLS e host restano calcolati sull'intero PCAP. Per PCAP molto grandi, aumentare questo valore rende più pesante il JSON e può rallentare il browser.
+
+---
+
 ## 🔎 Filtri pacchetti stile Wireshark
 
 La dashboard include una scheda **Filtri pacchetti** applicata alla lista pacchetti e alla vista **Tracce**. I riepiloghi statistici principali restano calcolati sull'intero PCAP, mentre le viste pacchetto mostrano solo gli elementi che corrispondono al filtro.
@@ -489,7 +556,7 @@ Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengo
 
 I risultati vengono usati per:
 - arricchire il popup **Top IP**;
-- colorare la **Mappa traffico IP**;
+- colorare la **Mappa traffico IP** e mostrare i flow collegati quando si clicca su un paese;
 - alimentare il pannello **Security**;
 - fornire contesto alla tab **Security avanzata**;
 - includere le informazioni esterne nell'export JSON.
@@ -712,6 +779,54 @@ Il parser TLS è volutamente conservativo:
 
 ---
 
+## 🖥️ Hosts
+
+La tab **Hosts** mostra una vista dettaglio per ogni IP osservato nel PCAP. Le sezioni sono collapsable, chiuse di default, e possono essere aperte quando serve approfondire un host specifico. Gli IP nella lista pacchetti sono cliccabili: il click apre direttamente la tab **Hosts** filtrata su quell'indirizzo.
+
+Per ogni host vengono mostrati:
+- ruolo stimato: `client`, `server`, `misto` o `ignoto`;
+- classificazione privato/pubblico;
+- hostname dedotti da DNS osservato nel PCAP e reverse DNS da tool esterni quando disponibile;
+- ASN, organizzazione e geolocalizzazione se l'arricchimento IP è stato abilitato dall'utente;
+- protocolli usati;
+- porte remote contattate;
+- porte esposte/osservate come lato server;
+- byte e pacchetti inviati/ricevuti;
+- flow collegati;
+- query DNS generate;
+- SNI TLS e host HTTP osservati;
+- finding associati, ad esempio HTTP in chiaro o anomalie TLS;
+- timeline attività con byte inviati/ricevuti per bucket temporale.
+
+La sezione `hosts` viene calcolata dal backend durante l'analisi standard e non invia dati a servizi esterni. I dati ASN/geo vengono solo visualizzati quando sono già presenti in `external_ip_info`, cioè dopo il consenso dell'utente tramite **Analizza con tool esterni**.
+
+---
+
+## 🕸️ Grafo di rete
+
+La tab **Grafo** mostra una rappresentazione host-to-host costruita dai flow 5-tuple calcolati dal backend.
+
+Caratteristiche principali:
+- ogni nodo rappresenta un IP/host;
+- ogni arco aggrega uno o più flow tra due host;
+- lo spessore dell'arco può essere basato su byte o pacchetti;
+- il colore del nodo evidenzia host interni/esterni e presenza di finding;
+- il grafo è limitato ai flow più pesanti quando la cattura è molto grande, per mantenere la UI reattiva.
+
+Filtri disponibili:
+- protocollo del flow;
+- comunicazioni interne, esterne o interno ↔ esterno;
+- severità finding dedotta dalle evidenze disponibili;
+- metrica di peso: byte o pacchetti.
+
+Interazioni:
+- click su un nodo: riepilogo host, traffico, protocolli, flow collegati e finding;
+- click su un arco: flow sottostanti, endpoint, traffico, pacchetti e stato del flow.
+
+La vista è implementata in SVG senza introdurre nuove dipendenze frontend.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -733,7 +848,7 @@ Analizza un file PCAP e restituisce le statistiche.
 
 | Campo | Tipo | Descrizione |
 |-------|------|-------------|
-| `file` | File | File `.pcap`, `.pcapng` o `.cap` (max 100 MB) |
+| `file` | File | File `.pcap`, `.pcapng` o `.cap`; limite applicativo configurabile con `PCAPCAPER_UPLOAD_MAX_MB` |
 
 **Risposta (200 OK):**
 ```json
@@ -917,6 +1032,38 @@ Analizza un file PCAP e restituisce le statistiche.
     "top_versions": [{ "value": "TLS 1.3", "count": 1 }],
     "limitations": ["Non decifra il traffico TLS e non recupera contenuti applicativi."]
   },
+  "hosts": {
+    "total_hosts": 2,
+    "hosts": [
+      {
+        "ip": "192.168.1.10",
+        "role": "client",
+        "is_private": true,
+        "hostnames": [],
+        "protocols": ["DNS", "TCP", "TLS"],
+        "contacted_ports": [53, 80, 443],
+        "exposed_ports": [],
+        "bytes_sent": 2450,
+        "bytes_received": 9820,
+        "packets_sent": 22,
+        "packets_received": 24,
+        "flow_ids": ["a1b2c3d4e5f60789"],
+        "dns_queries": ["example.com"],
+        "sni_hosts": ["example.com"],
+        "http_hosts": ["example.com"],
+        "findings": ["HTTP in chiaro verso example.com"],
+        "timeline": [
+          {
+            "timestamp": "10:23:01",
+            "packets_sent": 2,
+            "packets_received": 1,
+            "bytes_sent": 148,
+            "bytes_received": 74
+          }
+        ]
+      }
+    ]
+  },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
   ],
@@ -936,7 +1083,7 @@ Analizza un file PCAP e restituisce le statistiche.
 | Codice | Causa |
 |--------|-------|
 | 400 | Estensione file non supportata o file vuoto |
-| 413 | File troppo grande (> 100 MB) |
+| 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
 
@@ -1112,6 +1259,7 @@ pcapcaper/
 │   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
 │   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
 │   ├── tls_analysis.py  # Analisi TLS metadata-only: SNI, certificati, JA3/JA3S
+│   ├── host_analysis.py # Vista aggregata host/IP con flow, DNS, HTTP, TLS e timeline
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
@@ -1141,6 +1289,8 @@ pcapcaper/
 │   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
 │   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
 │   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
+│   │       ├── HostsView.tsx           # Vista host/IP collapsable
+│   │       ├── NetworkGraphView.tsx    # Grafo host-to-host basato sui flow
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -1178,6 +1328,8 @@ graph TD
     DNSA["DNSAnalysisView\nDashboard DNS"]
     HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
     TLSA["TLSAnalysisView\nTLS metadata"]
+    HOSTA["HostsView\nDettaglio host/IP"]
+    NETG["NetworkGraphView\nGrafo host-to-host"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -1197,6 +1349,8 @@ graph TD
     DB --> DNSA
     DB --> HTTPA
     DB --> TLSA
+    DB --> HOSTA
+    DB --> NETG
     DB --> MAP
     DB --> TL
     DB --> TP

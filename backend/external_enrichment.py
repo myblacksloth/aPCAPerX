@@ -12,18 +12,12 @@ import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
 
 from models import IPExternalInfo
-
-
-# Timeout breve: un servizio esterno lento non deve bloccare l'intera interfaccia.
-HTTP_TIMEOUT_SECONDS = 5
-SOCKET_TIMEOUT_SECONDS = 5
-
-# Limite prudente per evitare richieste troppo aggressive verso servizi gratuiti.
-MAX_ENRICHMENT_IPS = 80
+from config import EXTERNAL_MAX_WORKERS, HTTP_TIMEOUT_SECONDS, MAX_ENRICHMENT_IPS, SOCKET_TIMEOUT_SECONDS
 
 
 def _fetch_json(url: str) -> Dict:
@@ -250,7 +244,25 @@ def enrich_ip(ip: str) -> IPExternalInfo:
 
 
 def enrich_ips(ips: List[str]) -> Dict[str, IPExternalInfo]:
-    """Arricchisce una lista di IP preservando l'ordine e rimuovendo duplicati."""
+    """Arricchisce una lista di IP con concorrenza limitata e ordine stabile."""
     unique_ips = list(dict.fromkeys(ip.strip() for ip in ips if isinstance(ip, str) and ip.strip()))
     selected_ips = unique_ips[:MAX_ENRICHMENT_IPS]
-    return {ip: enrich_ip(ip) for ip in selected_ips}
+    if not selected_ips:
+        return {}
+
+    results: Dict[str, IPExternalInfo] = {}
+    # Parallelizza per IP, ma con pochi worker per non stressare servizi gratuiti.
+    with ThreadPoolExecutor(max_workers=min(EXTERNAL_MAX_WORKERS, len(selected_ips))) as executor:
+        future_to_ip = {executor.submit(enrich_ip, ip): ip for ip in selected_ips}
+        for future in as_completed(future_to_ip):
+            ip = future_to_ip[future]
+            try:
+                results[ip] = future.result()
+            except Exception as exc:
+                results[ip] = IPExternalInfo(
+                    ip=ip,
+                    status="error",
+                    reason=f"Errore imprevisto durante l'arricchimento: {exc}",
+                )
+
+    return {ip: results[ip] for ip in selected_ips if ip in results}

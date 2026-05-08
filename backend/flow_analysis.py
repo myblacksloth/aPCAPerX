@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
+from config import MAX_FLOW_PACKET_NUMBERS
+
 
 EndpointTuple = Tuple[str, Optional[int], str, Optional[int], str]
 BidirectionalKey = Tuple[Tuple[str, Optional[int]], Tuple[str, Optional[int]], str]
@@ -203,7 +205,10 @@ class FlowAnalyzer:
         flow.first_ts = min(flow.first_ts, ts)
         flow.packets_total += 1
         flow.bytes_total += length
-        flow.packet_numbers.append(packet_number)
+        # Evita liste enormi nei flow su catture molto grandi. I contatori restano
+        # completi, ma il dettaglio packet_numbers viene campionato ai primi N.
+        if MAX_FLOW_PACKET_NUMBERS == 0 or len(flow.packet_numbers) < MAX_FLOW_PACKET_NUMBERS:
+            flow.packet_numbers.append(packet_number)
 
         is_client_to_server = (
             src_ip == flow.src_ip
