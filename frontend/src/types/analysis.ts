@@ -200,6 +200,183 @@ export interface DNSReputationResponse {
   errors: string[]
 }
 
+/** Risposta DNS singola estratta dal backend */
+export interface DNSAnswerEntry {
+  name: string
+  record_type: string
+  value: string
+  ttl: number | null
+}
+
+/** Query DNS locale con risposta correlata quando disponibile */
+export interface DNSQueryEntry {
+  packet_number: number
+  timestamp: string
+  client: string | null
+  resolver: string | null
+  transaction_id: number | null
+  query: string
+  record_type: string
+  response_code: number | null
+  response_code_name: string | null
+  response_packet_number: number | null
+  answers: DNSAnswerEntry[]
+  ttls: number[]
+  answer_ips: string[]
+  txt_answers: string[]
+  suspicious_txt: boolean
+  indicators: string[]
+}
+
+/** Contatore aggregato DNS */
+export interface DNSTopEntry {
+  value: string
+  count: number
+}
+
+/** Indicatore euristico di possibile DNS tunneling */
+export interface DNSTunnelingIndicator {
+  domain: string
+  score: number
+  query_count: number
+  unique_subdomains: number
+  max_label_length: number
+  max_entropy: number
+  reasons: string[]
+}
+
+/** Correlazione dominio -> IP risposta -> flow successivi */
+export interface DNSFlowCorrelation {
+  domain: string
+  answer_ip: string
+  flow_ids: string[]
+  dns_packet_numbers: number[]
+}
+
+/** Statistiche principali DNS */
+export interface DNSStats {
+  total_queries: number
+  total_responses: number
+  unique_domains: number
+  nxdomain_count: number
+  nxdomain_ratio: number
+  txt_query_count: number
+  suspicious_txt_count: number
+}
+
+/** Analisi DNS locale privacy-by-default */
+export interface DNSAnalysisResult {
+  stats: DNSStats
+  queries: DNSQueryEntry[]
+  top_domains: DNSTopEntry[]
+  top_clients: DNSTopEntry[]
+  top_resolvers: DNSTopEntry[]
+  tunneling_indicators: DNSTunnelingIndicator[]
+  flow_correlations: DNSFlowCorrelation[]
+}
+
+/** Richiesta HTTP in chiaro con risposta correlata quando disponibile */
+export interface HTTPRequestEntry {
+  packet_number: number
+  timestamp: string
+  client_ip: string | null
+  client_port: number | null
+  server_ip: string | null
+  server_port: number | null
+  method: string
+  host: string | null
+  uri: string
+  user_agent: string | null
+  referer: string | null
+  content_type: string | null
+  payload_size: number | null
+  partial: boolean
+  response_packet_number: number | null
+  response_status_code: number | null
+  response_reason: string | null
+  response_server: string | null
+  response_content_type: string | null
+  response_content_length: number | null
+  response_file_name: string | null
+  response_partial: boolean
+}
+
+/** Contatore aggregato HTTP */
+export interface HTTPTopEntry {
+  value: string
+  count: number
+}
+
+/** Statistiche principali HTTP */
+export interface HTTPStats {
+  total_requests: number
+  total_responses: number
+  correlated_responses: number
+  partial_requests: number
+  partial_responses: number
+  unique_hosts: number
+}
+
+/** Analisi HTTP in chiaro privacy-by-default */
+export interface HTTPAnalysisResult {
+  stats: HTTPStats
+  requests: HTTPRequestEntry[]
+  top_hosts: HTTPTopEntry[]
+  top_user_agents: HTTPTopEntry[]
+  limitations: string[]
+}
+
+/** Connessione TLS ricostruita dai soli metadati osservabili */
+export interface TLSEntry {
+  packet_number: number
+  timestamp: string
+  client_ip: string | null
+  client_port: number | null
+  server_ip: string | null
+  server_port: number | null
+  sni: string | null
+  tls_version: string | null
+  cipher_suite: string | null
+  alpn: string[]
+  cert_subject: string | null
+  cert_issuer: string | null
+  cert_not_before: string | null
+  cert_not_after: string | null
+  cert_sha256: string | null
+  ja3: string | null
+  ja3_string: string | null
+  ja3s: string | null
+  ja3s_string: string | null
+  anomalies: string[]
+  partial: boolean
+}
+
+/** Statistiche principali TLS */
+export interface TLSStats {
+  total_connections: number
+  with_sni: number
+  with_certificate: number
+  anomalous_connections: number
+  expired_certificates: number
+  legacy_tls: number
+}
+
+/** Contatore aggregato TLS */
+export interface TLSTopEntry {
+  value: string
+  count: number
+}
+
+/** Analisi TLS privacy-by-default basata su handshake osservabili */
+export interface TLSAnalysisResult {
+  stats: TLSStats
+  connections: TLSEntry[]
+  top_sni: TLSTopEntry[]
+  top_issuers: TLSTopEntry[]
+  top_versions: TLSTopEntry[]
+  limitations: string[]
+}
+
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
   /** Nome del servizio dedotto da porta/protocollo */
@@ -262,6 +439,46 @@ export interface Conversation {
   protocols: string[]
 }
 
+/** Flow 5-tuple ricostruito dal backend */
+export interface FlowEntry {
+  /** Identificativo stabile del flow */
+  flow_id: string
+  /** IP sorgente del primo verso osservato */
+  src_ip: string
+  /** Porta sorgente */
+  src_port: number | null
+  /** IP destinazione del primo verso osservato */
+  dst_ip: string
+  /** Porta destinazione */
+  dst_port: number | null
+  /** Protocollo L4 */
+  protocol: string
+  /** Timestamp ISO del primo pacchetto */
+  first_seen: string
+  /** Timestamp ISO dell'ultimo pacchetto */
+  last_seen: string
+  /** Durata in secondi */
+  duration_seconds: number
+  /** Pacchetti totali */
+  packets_total: number
+  /** Byte totali */
+  bytes_total: number
+  /** Pacchetti client -> server */
+  packets_client_to_server: number
+  /** Pacchetti server -> client */
+  packets_server_to_client: number
+  /** Byte client -> server */
+  bytes_client_to_server: number
+  /** Byte server -> client */
+  bytes_server_to_client: number
+  /** Flag TCP aggregati */
+  tcp_flags: string[]
+  /** Stato approssimativo dedotto dal backend */
+  state: string
+  /** Numeri dei pacchetti associati */
+  packet_numbers: number[]
+}
+
 /** Un punto della timeline di traffico */
 export interface TimelinePoint {
   /** Orario nel formato HH:MM:SS (UTC) */
@@ -322,6 +539,14 @@ export interface AnalysisResult {
   top_dst_ports: PortEntry[]
   /** Conversazioni bidirezionali più attive (top 20) */
   conversations: Conversation[]
+  /** Flow 5-tuple ricostruiti dal backend */
+  flows: FlowEntry[]
+  /** Analisi DNS locale privacy-by-default */
+  dns?: DNSAnalysisResult | null
+  /** Analisi HTTP in chiaro privacy-by-default */
+  http?: HTTPAnalysisResult | null
+  /** Analisi TLS basata sui metadati osservabili del handshake */
+  tls?: TLSAnalysisResult | null
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */

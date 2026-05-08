@@ -1,6 +1,10 @@
 ![](./stuff/i/SCR-20260425-pjby.png)
 
+<!-- home -->
+
 ![](./stuff/i/SCR-20260425-pjhs.png)
+
+<!-- home -->
 
 ![](./stuff/i/SCR-20260425-pjla.png)
 
@@ -41,6 +45,9 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Advanced packet tracing](#advanced-packet-tracing)
     - [Conferma prima di inviare traffico verso servizi esterni](#conferma-prima-di-inviare-traffico-verso-servizi-esterni)
     - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
+    - [DNS analysis](#dns-analysis)
+    - [HTTP anaysis](#http-anaysis)
+    - [TLS analysis](#tls-analysis)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -64,6 +71,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
     - [Esempi utili](#esempi-utili)
   - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
+  - [🌳 Flow 5-tuple e Tracce avanzate](#-flow-5-tuple-e-tracce-avanzate)
   - [🛡️ Security](#️-security)
   - [🚨 Security avanzata](#-security-avanzata)
     - [Fonti e dati usati](#fonti-e-dati-usati)
@@ -73,6 +81,11 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Analisi locale](#analisi-locale)
     - [Controllo liste esterne](#controllo-liste-esterne)
     - [Privacy DNS](#privacy-dns)
+  - [🌍 HTTP analysis](#-http-analysis)
+    - [Limiti HTTP](#limiti-http)
+  - [🔐 TLS analysis](#-tls-analysis)
+    - [Anomalie TLS](#anomalie-tls)
+    - [Limiti TLS](#limiti-tls)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -98,11 +111,13 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
+| **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
+| **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
-| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati in stile git graph |
+| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
@@ -140,6 +155,18 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Nuovo tab sui report di sicurezza
 
 ![](./stuff/i/SCR-20260508-rnlr.png)
+
+### DNS analysis
+
+![](./stuff/i/SCR-20260508-twqb.png)
+
+### HTTP anaysis
+
+![](./stuff/i/SCR-20260508-uceg.png)
+
+### TLS analysis
+
+![](./stuff/i/SCR-20260508-uhnh.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -235,10 +262,13 @@ flowchart LR
         E --> L["Bucket\ntimeline"]
         E --> M["Lista pacchetti\nmax 1000"]
         E --> Q["Servizi per IP\nDNS, peer, porte"]
+        E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
+        E --> HT["HTTP in chiaro\nrequest/response metadata"]
+        E --> TLS["TLS handshake\nSNI, cert, JA3"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z & HT & TLS --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -466,6 +496,34 @@ I risultati vengono usati per:
 
 ---
 
+## 🌳 Flow 5-tuple e Tracce avanzate
+
+Il backend ricostruisce veri flow 5-tuple TCP/UDP durante la lettura streaming del PCAP. Ogni flow è identificato dal primo verso osservato:
+
+```text
+src_ip, src_port, dst_ip, dst_port, protocollo L4
+```
+
+I pacchetti nel verso inverso vengono associati allo stesso flow tramite una chiave bidirezionale, ma il JSON conserva il 5-tuple originale e un `flow_id` stabile.
+
+Per ogni elemento in `flows` vengono calcolati:
+- `flow_id`;
+- IP e porta sorgente;
+- IP e porta destinazione;
+- protocollo L4;
+- primo e ultimo timestamp;
+- durata;
+- pacchetti e byte totali;
+- pacchetti e byte client -> server;
+- pacchetti e byte server -> client;
+- flag TCP aggregati;
+- stato approssimativo (`opening`, `established`, `closing`, `closed`, `reset`, `request_response`, `one_way`, ecc.);
+- numeri dei pacchetti appartenenti al flow.
+
+La tab **Tracce avanzate** usa questi dati per mostrare sulle radici dell'alberatura l'ID del flow, lo stato calcolato dal backend e i contatori direzionali C->S/S->C. La correlazione visuale pacchetto-risposta-ACK resta disponibile come albero navigabile.
+
+---
+
 ## 🛡️ Security
 
 Il container **Security** segnala connessioni potenzialmente rischiose usando le informazioni raccolte localmente e tramite arricchimento esterno. Le segnalazioni sono euristiche e non sostituiscono feed di threat intelligence o blacklist dedicate.
@@ -539,14 +597,19 @@ La tab **DNS** è dedicata esclusivamente alle richieste DNS osservate nel PCAP.
 
 ### Analisi locale
 
-Senza inviare dati all'esterno, la tab:
-- estrae solo pacchetti con `DNS Query`;
-- normalizza i domini richiesti;
-- aggrega query per dominio, client e resolver;
-- segnala pattern tipici di tracking/ads come `analytics`, `telemetry`, `pixel`, `doubleclick`;
-- segnala pattern rischiosi come `phish`, `scam`, `botnet`, `c2`, `payload`;
-- evidenzia TLD spesso abusati o domini con label lunghe/anomale;
-- ordina i domini per rischio stimato e frequenza.
+Senza inviare dati all'esterno, il backend produce una sezione `dns` nel JSON dell'analisi. La tab:
+- estrae query DNS, tipo record e transaction ID;
+- correla risposte alla query quando possibile;
+- mostra codice risposta (`NOERROR`, `NXDOMAIN`, `SERVFAIL`, `REFUSED`, ecc.);
+- mostra answer e TTL quando disponibili;
+- calcola client richiedente e resolver interrogato;
+- aggrega domini più richiesti, client più attivi e resolver più usati;
+- calcola il rapporto NXDOMAIN;
+- segnala query TXT sospette;
+- evidenzia possibili indicatori di DNS tunneling: label molto lunghe, molti sottodomini unici, entropia approssimata elevata e volume anomalo verso lo stesso dominio;
+- correla dominio -> IP di risposta -> flow successivi quando l'IP restituito compare nei flow 5-tuple.
+
+La vista include filtri per dominio, client, tipo record e rcode.
 
 ### Controllo liste esterne
 
@@ -562,7 +625,90 @@ La risposta mostra fonti usate, stato dei download, errori non bloccanti, catego
 
 ### Privacy DNS
 
-La reputazione DNS è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
+L'analisi DNS locale è privacy-by-default: usa solo il PCAP caricato e non invia domini a servizi esterni. La reputazione DNS esterna è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
+
+---
+
+## 🌍 HTTP analysis
+
+La tab **HTTP analysis** mostra metadati HTTP estratti solo da traffico in chiaro. Non decifra HTTPS/TLS e non invia dati a servizi esterni.
+
+Per le richieste HTTP vengono estratti, quando disponibili:
+- timestamp;
+- client IP/porta;
+- server IP/porta;
+- metodo;
+- host;
+- URI/path;
+- user-agent;
+- referer;
+- content-type;
+- dimensione approssimativa payload.
+
+Per le risposte HTTP vengono estratti:
+- status code;
+- reason phrase;
+- header `Server`;
+- content-type;
+- content-length;
+- file name dedotto da `Content-Disposition` o dalla URI della richiesta.
+
+La tab include:
+- tabella richieste con risposta correlata quando possibile;
+- host più contattati;
+- user-agent più frequenti;
+- filtri per host, metodo, status e user-agent.
+
+### Limiti HTTP
+
+Il parser è prudente:
+- analizza solo payload TCP che iniziano come HTTP testuale;
+- non ricostruisce stream TCP completi;
+- header o body frammentati possono essere marcati come parziali;
+- la dimensione payload è stimata da `Content-Length` o dai byte presenti nel segmento osservato;
+- il traffico cifrato HTTPS/TLS non viene interpretato.
+
+---
+
+## 🔐 TLS analysis
+
+La tab **TLS analysis** analizza SSL/TLS usando solo metadati osservabili nei record di handshake presenti nel PCAP. Non decifra traffico, non richiede chiavi private e non mostra contenuti applicativi cifrati.
+
+Quando disponibili vengono estratti:
+- SNI dal `ClientHello`;
+- versione TLS offerta o negoziata;
+- cipher suite negoziata dal `ServerHello`;
+- ALPN annunciato o negoziato;
+- subject e issuer del certificato leaf;
+- validità del certificato;
+- fingerprint SHA256 del certificato DER;
+- fingerprint JA3 e JA3S quando i messaggi necessari sono completi;
+- stato parziale quando record o handshake risultano frammentati.
+
+La tab include:
+- tabella connessioni TLS con client, server, SNI, versione, cipher, certificato e fingerprint;
+- filtri per SNI, server IP, versione e presenza anomalie;
+- riepilogo SNI più frequenti, versioni TLS e issuer certificato;
+- pannello limiti parser per distinguere chiaramente cosa è osservabile e cosa non lo è.
+
+### Anomalie TLS
+
+Le anomalie sono euristiche e basate sui soli metadati disponibili:
+- certificato scaduto rispetto al timestamp della cattura;
+- certificato non ancora valido;
+- certificato self-signed;
+- SNI mancante;
+- TLS legacy (`SSL 3.0`, `TLS 1.0`, `TLS 1.1`);
+- mismatch approssimato tra DNS osservato nel PCAP e SNI, quando entrambi sono disponibili.
+
+### Limiti TLS
+
+Il parser TLS è volutamente conservativo:
+- non decifra payload TLS e non recupera URL, header HTTP o contenuti cifrati;
+- non ricostruisce stream TCP completi;
+- record TLS frammentati su più segmenti possono essere marcati come parziali;
+- subject e issuer sono disponibili solo se il certificato è presente nel PCAP e decodificabile dalla libreria standard Python;
+- il mismatch DNS/SNI usa solo risposte DNS viste nella cattura, quindi può produrre falsi positivi se il DNS è assente, cacheato o risolto fuori cattura.
 
 ---
 
@@ -631,6 +777,146 @@ Analizza un file PCAP e restituisce le statistiche.
   "conversations": [
     { "src_ip": "10.0.0.1", "dst_ip": "8.8.8.8", "packets": 120, "bytes": 9800, "protocols": ["DNS"] }
   ],
+  "flows": [
+    {
+      "flow_id": "a1b2c3d4e5f60789",
+      "src_ip": "192.168.1.10",
+      "src_port": 52341,
+      "dst_ip": "8.8.8.8",
+      "dst_port": 53,
+      "protocol": "UDP",
+      "first_seen": "2024-03-15T10:23:01.123000+00:00",
+      "last_seen": "2024-03-15T10:23:01.190000+00:00",
+      "duration_seconds": 0.067,
+      "packets_total": 2,
+      "bytes_total": 148,
+      "packets_client_to_server": 1,
+      "packets_server_to_client": 1,
+      "bytes_client_to_server": 74,
+      "bytes_server_to_client": 74,
+      "tcp_flags": [],
+      "state": "request_response",
+      "packet_numbers": [1, 2]
+    }
+  ],
+  "dns": {
+    "stats": {
+      "total_queries": 1,
+      "total_responses": 1,
+      "unique_domains": 1,
+      "nxdomain_count": 0,
+      "nxdomain_ratio": 0.0,
+      "txt_query_count": 0,
+      "suspicious_txt_count": 0
+    },
+    "queries": [
+      {
+        "packet_number": 1,
+        "timestamp": "2024-03-15T10:23:01.123000+00:00",
+        "client": "192.168.1.10",
+        "resolver": "8.8.8.8",
+        "transaction_id": 4242,
+        "query": "example.com",
+        "record_type": "A",
+        "response_code": 0,
+        "response_code_name": "NOERROR",
+        "response_packet_number": 2,
+        "answers": [
+          { "name": "example.com", "record_type": "A", "value": "93.184.216.34", "ttl": 300 }
+        ],
+        "ttls": [300],
+        "answer_ips": ["93.184.216.34"],
+        "txt_answers": [],
+        "suspicious_txt": false,
+        "indicators": []
+      }
+    ],
+    "top_domains": [{ "value": "example.com", "count": 1 }],
+    "top_clients": [{ "value": "192.168.1.10", "count": 1 }],
+    "top_resolvers": [{ "value": "8.8.8.8", "count": 1 }],
+    "tunneling_indicators": [],
+    "flow_correlations": [
+      { "domain": "example.com", "answer_ip": "93.184.216.34", "flow_ids": ["..."], "dns_packet_numbers": [1] }
+    ]
+  },
+  "http": {
+    "stats": {
+      "total_requests": 1,
+      "total_responses": 1,
+      "correlated_responses": 1,
+      "partial_requests": 0,
+      "partial_responses": 0,
+      "unique_hosts": 1
+    },
+    "requests": [
+      {
+        "packet_number": 10,
+        "timestamp": "2024-03-15T10:23:02.000000+00:00",
+        "client_ip": "192.168.1.10",
+        "client_port": 52344,
+        "server_ip": "93.184.216.34",
+        "server_port": 80,
+        "method": "GET",
+        "host": "example.com",
+        "uri": "/index.html",
+        "user_agent": "curl/8.0",
+        "referer": null,
+        "content_type": null,
+        "payload_size": 0,
+        "partial": false,
+        "response_packet_number": 11,
+        "response_status_code": 200,
+        "response_reason": "OK",
+        "response_server": "nginx",
+        "response_content_type": "text/html",
+        "response_content_length": 1256,
+        "response_file_name": "index.html",
+        "response_partial": false
+      }
+    ],
+    "top_hosts": [{ "value": "example.com", "count": 1 }],
+    "top_user_agents": [{ "value": "curl/8.0", "count": 1 }],
+    "limitations": ["Analizza solo traffico HTTP in chiaro su TCP.", "Non decifra HTTPS/TLS."]
+  },
+  "tls": {
+    "stats": {
+      "total_connections": 1,
+      "with_sni": 1,
+      "with_certificate": 1,
+      "anomalous_connections": 0,
+      "expired_certificates": 0,
+      "legacy_tls": 0
+    },
+    "connections": [
+      {
+        "packet_number": 20,
+        "timestamp": "2024-03-15T10:23:03.000000+00:00",
+        "client_ip": "192.168.1.10",
+        "client_port": 52345,
+        "server_ip": "93.184.216.34",
+        "server_port": 443,
+        "sni": "example.com",
+        "tls_version": "TLS 1.3",
+        "cipher_suite": "TLS_AES_128_GCM_SHA256",
+        "alpn": ["h2", "http/1.1"],
+        "cert_subject": "commonName=example.com",
+        "cert_issuer": "commonName=Example CA",
+        "cert_not_before": "Mar 01 00:00:00 2024 GMT",
+        "cert_not_after": "Mar 01 23:59:59 2025 GMT",
+        "cert_sha256": "012345...",
+        "ja3": "d4f...",
+        "ja3_string": "771,...",
+        "ja3s": "15a...",
+        "ja3s_string": "771,4865,...",
+        "anomalies": [],
+        "partial": false
+      }
+    ],
+    "top_sni": [{ "value": "example.com", "count": 1 }],
+    "top_issuers": [{ "value": "commonName=Example CA", "count": 1 }],
+    "top_versions": [{ "value": "TLS 1.3", "count": 1 }],
+    "limitations": ["Non decifra il traffico TLS e non recupera contenuti applicativi."]
+  },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
   ],
@@ -822,6 +1108,10 @@ pcapcaper/
 ├── backend/
 │   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
+│   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
+│   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
+│   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
+│   ├── tls_analysis.py  # Analisi TLS metadata-only: SNI, certificati, JA3/JA3S
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
@@ -849,6 +1139,8 @@ pcapcaper/
 │   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
 │   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
 │   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
+│   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
+│   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -884,6 +1176,8 @@ graph TD
     SEC["SecurityPanel\nFinding euristici"]
     SECA["SecurityAnalysisView\nThreat intel opt-in"]
     DNSA["DNSAnalysisView\nDashboard DNS"]
+    HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
+    TLSA["TLSAnalysisView\nTLS metadata"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -901,6 +1195,8 @@ graph TD
     DB --> SEC
     DB --> SECA
     DB --> DNSA
+    DB --> HTTPA
+    DB --> TLSA
     DB --> MAP
     DB --> TL
     DB --> TP

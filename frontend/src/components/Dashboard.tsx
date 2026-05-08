@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2 } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -35,9 +35,11 @@ import TracesView         from './TracesView'
 import AdvancedTracesView from './AdvancedTracesView'
 import SecurityAnalysisView from './SecurityAnalysisView'
 import DNSAnalysisView from './DNSAnalysisView'
+import HTTPAnalysisView from './HTTPAnalysisView'
+import TLSAnalysisView from './TLSAnalysisView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -217,6 +219,26 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               DNS
             </button>
             <button
+              onClick={() => setActiveTab('http-analysis')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'http-analysis'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Server className="w-3.5 h-3.5" />
+              HTTP analysis
+            </button>
+            <button
+              onClick={() => setActiveTab('tls-analysis')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'tls-analysis'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              TLS
+            </button>
+            <button
               onClick={() => setExternalConfirmOpen(true)}
               disabled={externalLoading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
@@ -317,7 +339,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             error={parsedPacketFilter.error}
             onFilterChange={setPacketFilter}
           />
-          <AdvancedTracesView packets={filteredPackets} />
+          <AdvancedTracesView packets={filteredPackets} flows={result.flows ?? []} />
         </>
       )}
 
@@ -329,6 +351,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       {/* ── Tab: DNS ──────────────────────────────────────────────────── */}
       {activeTab === 'dns-analysis' && (
         <DNSAnalysisView result={result} />
+      )}
+
+      {/* ── Tab: HTTP analysis ────────────────────────────────────────── */}
+      {activeTab === 'http-analysis' && (
+        <HTTPAnalysisView result={result} />
+      )}
+
+      {/* ── Tab: TLS analysis ─────────────────────────────────────────── */}
+      {activeTab === 'tls-analysis' && (
+        <TLSAnalysisView result={result} />
       )}
 
       {/* Popup privacy per l'arricchimento IP esterno generale */}

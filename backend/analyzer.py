@@ -31,6 +31,10 @@ from models import (
     PortEntry, Conversation, TimelinePoint, PacketEntry,
     LayerField, LayerInfo, IPServiceEntry,
 )
+from flow_analysis import FlowAnalyzer
+from dns_analysis import DNSAnalyzer
+from http_analysis import HTTPAnalyzer
+from tls_analysis import TLSAnalyzer
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -236,6 +240,17 @@ def _safe_dns_name(value) -> Optional[str]:
         if isinstance(value, bytes):
             return value.decode(errors="replace").rstrip(".")
         return str(value).rstrip(".")
+    except Exception:
+        return None
+
+
+def _raw_payload_bytes(pkt) -> Optional[bytes]:
+    """Estrae il payload Raw di Scapy senza introdurre nuove dipendenze nel parser."""
+    try:
+        raw_layer = pkt.getlayer("Raw")
+        if raw_layer is None:
+            return None
+        return bytes(raw_layer.load)
     except Exception:
         return None
 
@@ -555,6 +570,18 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Lista dettagliata dei pacchetti (limitata a MAX_PACKET_LIST elementi)
     packet_list: List[PacketEntry] = []
 
+    # Analizzatore dedicato dei flow 5-tuple, aggiornato pacchetto per pacchetto.
+    flow_analyzer = FlowAnalyzer()
+
+    # Analizzatore DNS locale: non invia dati all'esterno e lavora solo sul PCAP.
+    dns_analyzer = DNSAnalyzer()
+
+    # Analizzatore HTTP in chiaro: usa solo payload TCP leggibili, senza decifrare TLS.
+    http_analyzer = HTTPAnalyzer()
+
+    # Analizzatore TLS: estrae solo metadati visibili nel handshake, senza decifrare.
+    tls_analyzer = TLSAnalyzer()
+
     # ── Lettura del file PCAP in modalità streaming ────────────────────────
     try:
         with PcapReader(file_path) as reader:
@@ -641,6 +668,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                         dst_ip, src_ip, service_name, service_port, "UDP",
                         "server" if server_side == "dst" else "client",
                     )
+
                 elif src_ip or dst_ip:
                     _remember_ip_activity(
                         ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
@@ -650,6 +678,58 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                         ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
                         dst_ip, src_ip, protocol, None, protocol, "endpoint",
                     )
+
+                # ── Aggiornamento flow 5-tuple ────────────────────────────
+                # Il modulo flow_analysis mantiene una vista bidirezionale del flow
+                # ma conserva il 5-tuple della prima direzione osservata.
+                flow_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    protocol="TCP" if pkt.haslayer(TCP) else "UDP" if pkt.haslayer(UDP) else protocol,
+                    length=pkt_len,
+                    pkt=pkt,
+                )
+
+                # ── Aggiornamento analisi DNS strutturata ─────────────────
+                # Estrae query, risposte, rcode, TTL e indicatori dal layer DNS.
+                dns_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    pkt=pkt,
+                    src_ip=src_ip,
+                    dst_ip=dst_ip,
+                )
+
+                raw_tcp_payload = _raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None
+
+                # ── Aggiornamento analisi HTTP in chiaro ──────────────────
+                # Parsing prudente: solo payload TCP Raw che sembrano HTTP testuale.
+                http_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    payload=raw_tcp_payload,
+                )
+
+                # ── Aggiornamento analisi TLS/SSL ────────────────────────
+                # Il parser lavora sui record handshake TLS presenti nel Raw TCP
+                # e non tenta mai di leggere contenuti cifrati.
+                tls_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    payload=raw_tcp_payload,
+                )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
                 # Raggruppa sempre nella stessa chiave indipendentemente dalla direzione
@@ -790,6 +870,12 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         for bk in sorted(agg)
     ]
 
+    # ── Flow e DNS derivati dagli accumulatori modulari ───────────────────
+    flows = flow_analyzer.to_entries()
+    dns_result = dns_analyzer.to_result(flows)
+    http_result = http_analyzer.to_result()
+    tls_result = tls_analyzer.to_result(dns_hostnames)
+
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
         filename      = filename,
@@ -800,6 +886,10 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         top_src_ports = top_src_ports,
         top_dst_ports = top_dst_ports,
         conversations = conversations,
+        flows         = flows,
+        dns           = dns_result,
+        http          = http_result,
+        tls           = tls_result,
         timeline      = timeline,
         packets       = packet_list,
     )
