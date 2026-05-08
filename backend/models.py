@@ -352,6 +352,46 @@ class Conversation(BaseModel):
     protocols: List[str]
 
 
+class FlowEntry(BaseModel):
+    """Flow 5-tuple bidirezionale ricostruito dal backend."""
+    # Identificativo stabile generato dal 5-tuple direzionale iniziale
+    flow_id: str
+    # IP sorgente del flow, considerato lato client/primo mittente osservato
+    src_ip: str
+    # Porta sorgente del flow
+    src_port: Optional[int] = None
+    # IP destinazione del flow, considerato lato server/primo destinatario osservato
+    dst_ip: str
+    # Porta destinazione del flow
+    dst_port: Optional[int] = None
+    # Protocollo L4 del flow (TCP o UDP)
+    protocol: str
+    # Timestamp ISO 8601 del primo pacchetto osservato
+    first_seen: str
+    # Timestamp ISO 8601 dell'ultimo pacchetto osservato
+    last_seen: str
+    # Durata del flow in secondi
+    duration_seconds: float
+    # Numero totale di pacchetti nel flow
+    packets_total: int
+    # Byte totali nel flow
+    bytes_total: int
+    # Pacchetti nel verso client -> server
+    packets_client_to_server: int
+    # Pacchetti nel verso server -> client
+    packets_server_to_client: int
+    # Byte nel verso client -> server
+    bytes_client_to_server: int
+    # Byte nel verso server -> client
+    bytes_server_to_client: int
+    # Flag TCP aggregati, vuoto per UDP
+    tcp_flags: List[str] = Field(default_factory=list)
+    # Stato approssimativo dedotto dai flag/direzionalita
+    state: str
+    # Numeri dei pacchetti appartenenti al flow, usati dalla tab Tracce avanzate
+    packet_numbers: List[int] = Field(default_factory=list)
+
+
 class TimelinePoint(BaseModel):
     """Un punto della timeline di traffico, aggregato per intervallo temporale."""
     # Orario del bucket nel formato HH:MM:SS (UTC)
@@ -414,6 +454,8 @@ class AnalysisResult(BaseModel):
     top_dst_ports: List[PortEntry]
     # Conversazioni più attive per volume di dati (top 20)
     conversations: List[Conversation]
+    # Flow 5-tuple ricostruiti in backend
+    flows: List[FlowEntry] = Field(default_factory=list)
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti

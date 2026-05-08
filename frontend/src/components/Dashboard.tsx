@@ -317,7 +317,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             error={parsedPacketFilter.error}
             onFilterChange={setPacketFilter}
           />
-          <AdvancedTracesView packets={filteredPackets} />
+          <AdvancedTracesView packets={filteredPackets} flows={result.flows ?? []} />
         </>
       )}
 

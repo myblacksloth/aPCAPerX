@@ -8,11 +8,12 @@
  */
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, GitBranch, Network, Search } from 'lucide-react'
-import type { LayerInfo, PacketEntry } from '../types/analysis'
+import type { FlowEntry, LayerInfo, PacketEntry } from '../types/analysis'
 import { formatBytes, formatCount, protocolColor } from '../utils/format'
 
 interface AdvancedTracesViewProps {
   packets: PacketEntry[]
+  flows?: FlowEntry[]
 }
 
 interface Endpoint {
@@ -287,7 +288,7 @@ function TreePacketRow({ node }: { node: CorrelatedPacket }) {
   )
 }
 
-function FlowTree({ flow }: { flow: AdvancedFlow }) {
+function FlowTree({ flow, backendFlow }: { flow: AdvancedFlow; backendFlow: FlowEntry | null }) {
   const [expanded, setExpanded] = useState(true)
   const color = protocolColor(flow.protocol)
   const durationMs = Math.max(0, Math.round((flow.lastTime - flow.firstTime) * 1000))
@@ -309,7 +310,9 @@ function FlowTree({ flow }: { flow: AdvancedFlow }) {
             <span className="font-mono text-sm text-slate-100">{endpointLabel(flow.b)}</span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Flow principale: connessione bidirezionale con pacchetti correlati in alberatura
+            {backendFlow
+              ? `Flow 5-tuple ${backendFlow.flow_id} · stato ${backendFlow.state} · C→S ${backendFlow.packets_client_to_server} pkt / S→C ${backendFlow.packets_server_to_client} pkt`
+              : 'Flow principale: connessione bidirezionale con pacchetti correlati in alberatura'}
           </p>
         </div>
         <div className="flex shrink-0 gap-4 text-xs text-slate-500">
@@ -335,12 +338,20 @@ function FlowTree({ flow }: { flow: AdvancedFlow }) {
   )
 }
 
-export default function AdvancedTracesView({ packets }: AdvancedTracesViewProps) {
+export default function AdvancedTracesView({ packets, flows: backendFlows = [] }: AdvancedTracesViewProps) {
   const [search, setSearch] = useState('')
   const [protocol, setProtocol] = useState('all')
   const [sortBy, setSortBy] = useState<'time' | 'packets' | 'bytes'>('time')
   const flows = useMemo(() => buildFlows(packets), [packets])
   const protocols = useMemo(() => ['all', ...new Set(packets.map((packet) => packet.protocol).sort())], [packets])
+  const backendFlowByPacket = useMemo(() => {
+    // Collega i flow backend ai flow visuali usando i numeri pacchetto già inclusi nel JSON.
+    const map = new Map<number, FlowEntry>()
+    backendFlows.forEach((flow) => {
+      flow.packet_numbers.forEach((packetNumber) => map.set(packetNumber, flow))
+    })
+    return map
+  }, [backendFlows])
 
   const visibleFlows = useMemo(() => {
     // Applica filtri locali alla lista dei flow avanzati.
@@ -375,7 +386,9 @@ export default function AdvancedTracesView({ packets }: AdvancedTracesViewProps)
               </p>
             </div>
           </div>
-          <span className="text-xs text-slate-500">{visibleFlows.length} flow · {packets.length} pacchetti</span>
+          <span className="text-xs text-slate-500">
+            {visibleFlows.length} flow visuali · {backendFlows.length} flow 5-tuple backend · {packets.length} pacchetti
+          </span>
         </div>
 
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_180px]">
@@ -419,7 +432,11 @@ export default function AdvancedTracesView({ packets }: AdvancedTracesViewProps)
 
       <div className="space-y-3">
         {visibleFlows.map((flow) => (
-          <FlowTree key={flow.key} flow={flow} />
+          <FlowTree
+            key={flow.key}
+            flow={flow}
+            backendFlow={backendFlowByPacket.get(flow.packets[0]?.packet.number ?? -1) ?? null}
+          />
         ))}
 
         {visibleFlows.length === 0 && (

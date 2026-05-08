@@ -64,6 +64,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
     - [Esempi utili](#esempi-utili)
   - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
+  - [🌳 Flow 5-tuple e Tracce avanzate](#-flow-5-tuple-e-tracce-avanzate)
   - [🛡️ Security](#️-security)
   - [🚨 Security avanzata](#-security-avanzata)
     - [Fonti e dati usati](#fonti-e-dati-usati)
@@ -102,7 +103,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
-| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati in stile git graph |
+| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
@@ -235,10 +236,11 @@ flowchart LR
         E --> L["Bucket\ntimeline"]
         E --> M["Lista pacchetti\nmax 1000"]
         E --> Q["Servizi per IP\nDNS, peer, porte"]
+        E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -466,6 +468,34 @@ I risultati vengono usati per:
 
 ---
 
+## 🌳 Flow 5-tuple e Tracce avanzate
+
+Il backend ricostruisce veri flow 5-tuple TCP/UDP durante la lettura streaming del PCAP. Ogni flow è identificato dal primo verso osservato:
+
+```text
+src_ip, src_port, dst_ip, dst_port, protocollo L4
+```
+
+I pacchetti nel verso inverso vengono associati allo stesso flow tramite una chiave bidirezionale, ma il JSON conserva il 5-tuple originale e un `flow_id` stabile.
+
+Per ogni elemento in `flows` vengono calcolati:
+- `flow_id`;
+- IP e porta sorgente;
+- IP e porta destinazione;
+- protocollo L4;
+- primo e ultimo timestamp;
+- durata;
+- pacchetti e byte totali;
+- pacchetti e byte client -> server;
+- pacchetti e byte server -> client;
+- flag TCP aggregati;
+- stato approssimativo (`opening`, `established`, `closing`, `closed`, `reset`, `request_response`, `one_way`, ecc.);
+- numeri dei pacchetti appartenenti al flow.
+
+La tab **Tracce avanzate** usa questi dati per mostrare sulle radici dell'alberatura l'ID del flow, lo stato calcolato dal backend e i contatori direzionali C->S/S->C. La correlazione visuale pacchetto-risposta-ACK resta disponibile come albero navigabile.
+
+---
+
 ## 🛡️ Security
 
 Il container **Security** segnala connessioni potenzialmente rischiose usando le informazioni raccolte localmente e tramite arricchimento esterno. Le segnalazioni sono euristiche e non sostituiscono feed di threat intelligence o blacklist dedicate.
@@ -630,6 +660,28 @@ Analizza un file PCAP e restituisce le statistiche.
   "top_dst_ports": [ ... ],
   "conversations": [
     { "src_ip": "10.0.0.1", "dst_ip": "8.8.8.8", "packets": 120, "bytes": 9800, "protocols": ["DNS"] }
+  ],
+  "flows": [
+    {
+      "flow_id": "a1b2c3d4e5f60789",
+      "src_ip": "192.168.1.10",
+      "src_port": 52341,
+      "dst_ip": "8.8.8.8",
+      "dst_port": 53,
+      "protocol": "UDP",
+      "first_seen": "2024-03-15T10:23:01.123000+00:00",
+      "last_seen": "2024-03-15T10:23:01.190000+00:00",
+      "duration_seconds": 0.067,
+      "packets_total": 2,
+      "bytes_total": 148,
+      "packets_client_to_server": 1,
+      "packets_server_to_client": 1,
+      "bytes_client_to_server": 74,
+      "bytes_server_to_client": 74,
+      "tcp_flags": [],
+      "state": "request_response",
+      "packet_numbers": [1, 2]
+    }
   ],
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
@@ -822,6 +874,7 @@ pcapcaper/
 ├── backend/
 │   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
+│   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte

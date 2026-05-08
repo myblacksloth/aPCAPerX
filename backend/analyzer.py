@@ -31,6 +31,7 @@ from models import (
     PortEntry, Conversation, TimelinePoint, PacketEntry,
     LayerField, LayerInfo, IPServiceEntry,
 )
+from flow_analysis import FlowAnalyzer
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -555,6 +556,9 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Lista dettagliata dei pacchetti (limitata a MAX_PACKET_LIST elementi)
     packet_list: List[PacketEntry] = []
 
+    # Analizzatore dedicato dei flow 5-tuple, aggiornato pacchetto per pacchetto.
+    flow_analyzer = FlowAnalyzer()
+
     # ── Lettura del file PCAP in modalità streaming ────────────────────────
     try:
         with PcapReader(file_path) as reader:
@@ -641,6 +645,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                         dst_ip, src_ip, service_name, service_port, "UDP",
                         "server" if server_side == "dst" else "client",
                     )
+
                 elif src_ip or dst_ip:
                     _remember_ip_activity(
                         ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
@@ -650,6 +655,21 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                         ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
                         dst_ip, src_ip, protocol, None, protocol, "endpoint",
                     )
+
+                # ── Aggiornamento flow 5-tuple ────────────────────────────
+                # Il modulo flow_analysis mantiene una vista bidirezionale del flow
+                # ma conserva il 5-tuple della prima direzione osservata.
+                flow_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    protocol="TCP" if pkt.haslayer(TCP) else "UDP" if pkt.haslayer(UDP) else protocol,
+                    length=pkt_len,
+                    pkt=pkt,
+                )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
                 # Raggruppa sempre nella stessa chiave indipendentemente dalla direzione
@@ -800,6 +820,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         top_src_ports = top_src_ports,
         top_dst_ports = top_dst_ports,
         conversations = conversations,
+        flows         = flow_analyzer.to_entries(),
         timeline      = timeline,
         packets       = packet_list,
     )
