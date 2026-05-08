@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2 } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -38,9 +38,10 @@ import DNSAnalysisView from './DNSAnalysisView'
 import HTTPAnalysisView from './HTTPAnalysisView'
 import TLSAnalysisView from './TLSAnalysisView'
 import HostsView from './HostsView'
+import NetworkGraphView from './NetworkGraphView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -219,6 +220,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Hosts
             </button>
             <button
+              onClick={() => setActiveTab('network-graph')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'network-graph'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Network className="w-3.5 h-3.5" />
+              Grafo
+            </button>
+            <button
               onClick={() => setActiveTab('security-analysis')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
                 ${activeTab === 'security-analysis'
@@ -371,6 +382,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       {/* ── Tab: Hosts ────────────────────────────────────────────────── */}
       {activeTab === 'hosts' && (
         <HostsView result={result} selectedHostIp={selectedHostIp} />
+      )}
+
+      {/* ── Tab: Grafo di rete ────────────────────────────────────────── */}
+      {activeTab === 'network-graph' && (
+        <NetworkGraphView result={result} />
       )}
 
       {/* ── Tab: Security avanzata ────────────────────────────────────── */}

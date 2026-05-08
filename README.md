@@ -88,6 +88,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Anomalie TLS](#anomalie-tls)
     - [Limiti TLS](#limiti-tls)
   - [🖥️ Hosts](#️-hosts)
+  - [🕸️ Grafo di rete](#️-grafo-di-rete)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -113,6 +114,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
 | **Hosts** | Vista dettaglio IP collapsable con ruolo, flow, DNS, HTTP/SNI, ASN/geo e timeline attività |
+| **Grafo di rete** | Network graph host-to-host basato sui flow, con filtri per protocollo, scope e finding |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
 | **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
@@ -743,6 +745,31 @@ La sezione `hosts` viene calcolata dal backend durante l'analisi standard e non 
 
 ---
 
+## 🕸️ Grafo di rete
+
+La tab **Grafo** mostra una rappresentazione host-to-host costruita dai flow 5-tuple calcolati dal backend.
+
+Caratteristiche principali:
+- ogni nodo rappresenta un IP/host;
+- ogni arco aggrega uno o più flow tra due host;
+- lo spessore dell'arco può essere basato su byte o pacchetti;
+- il colore del nodo evidenzia host interni/esterni e presenza di finding;
+- il grafo è limitato ai flow più pesanti quando la cattura è molto grande, per mantenere la UI reattiva.
+
+Filtri disponibili:
+- protocollo del flow;
+- comunicazioni interne, esterne o interno ↔ esterno;
+- severità finding dedotta dalle evidenze disponibili;
+- metrica di peso: byte o pacchetti.
+
+Interazioni:
+- click su un nodo: riepilogo host, traffico, protocolli, flow collegati e finding;
+- click su un arco: flow sottostanti, endpoint, traffico, pacchetti e stato del flow.
+
+La vista è implementata in SVG senza introdurre nuove dipendenze frontend.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -1206,6 +1233,7 @@ pcapcaper/
 │   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
 │   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
 │   │       ├── HostsView.tsx           # Vista host/IP collapsable
+│   │       ├── NetworkGraphView.tsx    # Grafo host-to-host basato sui flow
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -1244,6 +1272,7 @@ graph TD
     HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
     TLSA["TLSAnalysisView\nTLS metadata"]
     HOSTA["HostsView\nDettaglio host/IP"]
+    NETG["NetworkGraphView\nGrafo host-to-host"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -1264,6 +1293,7 @@ graph TD
     DB --> HTTPA
     DB --> TLSA
     DB --> HOSTA
+    DB --> NETG
     DB --> MAP
     DB --> TL
     DB --> TP
