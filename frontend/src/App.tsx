@@ -15,12 +15,23 @@ import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
 import type { AnalysisResult } from './types/analysis'
 
+export interface UploadProgress {
+  phase: 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete'
+  percent: number
+  message: string
+}
+
 export default function App() {
   // Risultato dell'ultima analisi (null = nessuna analisi ancora eseguita)
   const [result, setResult] = useState<AnalysisResult | null>(null)
 
   // true durante la chiamata HTTP al backend
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState<UploadProgress>({
+    phase: 'idle',
+    percent: 0,
+    message: 'In attesa del file',
+  })
 
   // Messaggio di errore dell'ultima operazione (null = nessun errore)
   const [error, setError] = useState<string | null>(null)
@@ -32,30 +43,78 @@ export default function App() {
   const handleUpload = async (file: File) => {
     setLoading(true)
     setError(null)
+    setProgress({
+      phase: 'uploading',
+      percent: 0,
+      message: 'Caricamento del file PCAP',
+    })
 
     // Costruisce il form multipart richiesto dall'endpoint /api/analyze
     const formData = new FormData()
     formData.append('file', file)
 
     try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        body: formData,
+      const analysisResult = await new Promise<AnalysisResult>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/api/analyze')
+
+        xhr.upload.onprogress = (event) => {
+          // Il browser espone il progresso di upload; il backend analizza dopo
+          // aver ricevuto il file, quindi le fasi successive sono determinate.
+          if (event.lengthComputable) {
+            const uploadPercent = Math.round((event.loaded / event.total) * 70)
+            setProgress({
+              phase: 'uploading',
+              percent: uploadPercent,
+              message: `Caricamento file: ${Math.min(100, Math.round((event.loaded / event.total) * 100))}%`,
+            })
+          }
+        }
+
+        xhr.onloadstart = () => {
+          setProgress({ phase: 'uploading', percent: 5, message: 'Caricamento del file PCAP' })
+        }
+
+        xhr.upload.onload = () => {
+          setProgress({ phase: 'processing', percent: 75, message: 'File ricevuto, preparazione elaborazione' })
+        }
+
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+            setProgress({ phase: 'analyzing', percent: 85, message: 'Analisi del PCAP in corso' })
+          }
+        }
+
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            try {
+              const data = JSON.parse(xhr.responseText || '{}')
+              reject(new Error(data.detail ?? `Errore ${xhr.status}: ${xhr.statusText}`))
+            } catch {
+              reject(new Error(`Errore ${xhr.status}: ${xhr.statusText}`))
+            }
+            return
+          }
+
+          try {
+            setProgress({ phase: 'complete', percent: 100, message: 'Analisi completata' })
+            resolve(JSON.parse(xhr.responseText) as AnalysisResult)
+          } catch {
+            reject(new Error('Risposta del backend non valida'))
+          }
+        }
+
+        xhr.onerror = () => reject(new Error('Errore di rete durante il caricamento'))
+        xhr.send(formData)
       })
 
-      if (!response.ok) {
-        // Il backend ha restituito un codice di errore HTTP (4xx / 5xx)
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
-      }
-
       // Analisi completata: deserializza il JSON e aggiorna il dashboard
-      const analysisResult: AnalysisResult = await response.json()
       setResult(analysisResult)
 
     } catch (err) {
       // Errori di rete (backend non raggiungibile) o errori HTTP
       setError(err instanceof Error ? err.message : 'Errore sconosciuto')
+      setProgress({ phase: 'idle', percent: 0, message: 'Analisi non completata' })
     } finally {
       setLoading(false)
     }
@@ -65,6 +124,7 @@ export default function App() {
   const handleReset = () => {
     setResult(null)
     setError(null)
+    setProgress({ phase: 'idle', percent: 0, message: 'In attesa del file' })
   }
 
   return (
@@ -108,6 +168,7 @@ export default function App() {
             onUpload={handleUpload}
             loading={loading}
             error={error}
+            progress={progress}
           />
         )}
       </main>

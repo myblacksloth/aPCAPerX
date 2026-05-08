@@ -18,6 +18,7 @@ import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from models import (
     AnalysisResult,
@@ -28,10 +29,11 @@ from models import (
     SecurityAnalysisRequest,
     SecurityAnalysisResponse,
 )
-from analyzer import analyze_pcap, MAX_FILE_SIZE
+from analyzer import analyze_pcap
 from external_enrichment import enrich_ips
 from security_analysis import analyze_security
 from dns_intelligence import analyze_dns_reputation
+from config import TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -206,7 +208,8 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
     - **timeline**: andamento del traffico nel tempo
     - **packets**: lista dettagliata di tutti i pacchetti
 
-    **Limite dimensione**: 100 MB.
+    Il file viene copiato su disco temporaneo in streaming per non tenerlo in RAM.
+    Se `PCAPCAPER_UPLOAD_MAX_MB=0` non viene applicato alcun limite applicativo.
     """
 
     # ── Validazione dell'estensione del file ──────────────────────────────
@@ -222,37 +225,44 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
             ),
         )
 
-    # ── Lettura del contenuto e controllo dimensione ──────────────────────
+    # ── Lettura streaming e controllo dimensione opzionale ────────────────
     logger.info("File ricevuto: %s", filename)
-    content = await file.read()
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    max_bytes = UPLOAD_MAX_MB * 1_048_576 if UPLOAD_MAX_MB > 0 else 0
+    total_bytes = 0
 
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="Il file è vuoto.")
-
-    if len(content) > MAX_FILE_SIZE:
-        size_mb = len(content) / 1_048_576
-        raise HTTPException(
-            status_code=413,
-            detail=f"File troppo grande ({size_mb:.1f} MB). Limite massimo: 100 MB.",
-        )
-
-    # ── Scrittura del file temporaneo ed esecuzione dell'analisi ─────────
-    # Il file temporaneo viene eliminato nel blocco `finally`, anche in caso di errore.
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+    # Il file temporaneo viene eliminato nel blocco `finally`, anche in caso di
+    # errore. Usiamo dir configurabile per Docker/produzione.
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=TEMP_DIR)
 
     try:
-        # Scrivi il contenuto del file caricato sul disco temporaneo
-        tmp_file.write(content)
+        # Scrive l'upload a chunk per evitare di caricare PCAP grandi in memoria.
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if max_bytes and total_bytes > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File troppo grande ({total_bytes / 1_048_576:.1f} MB). Limite configurato: {UPLOAD_MAX_MB} MB.",
+                )
+            tmp_file.write(chunk)
+
         tmp_file.flush()
         tmp_file.close()
 
+        if total_bytes == 0:
+            raise HTTPException(status_code=400, detail="Il file è vuoto.")
+
         logger.info(
             "Avvio analisi: %s (%d byte, %.2f MB)",
-            filename, len(content), len(content) / 1_048_576
+            filename, total_bytes, total_bytes / 1_048_576
         )
 
-        # Delega l'analisi al modulo analyzer.py
-        result = analyze_pcap(tmp_file.name, filename)
+        # Delega l'analisi CPU-bound a un thread per non bloccare l'event loop
+        # FastAPI mentre altri endpoint servono richieste leggere o progress UI.
+        result = await run_in_threadpool(analyze_pcap, tmp_file.name, filename)
 
         logger.info(
             "Analisi completata: %d pacchetti, %.3f s di cattura",
@@ -260,6 +270,9 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
             result.summary.duration_seconds,
         )
         return result
+
+    except HTTPException:
+        raise
 
     except ValueError as exc:
         # Errori noti: file corrotto, nessun pacchetto, formato non valido
@@ -275,6 +288,10 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
 
     finally:
         # Elimina sempre il file temporaneo per non lasciare dati sul server
+        try:
+            tmp_file.close()
+        except OSError:
+            pass
         try:
             os.unlink(tmp_file.name)
         except OSError:

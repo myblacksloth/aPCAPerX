@@ -1,4 +1,5 @@
-![](./stuff/i/SCR-20260425-pjby.png)
+
+![](./stuff/i/SCR-20260509-bmlx.png)
 
 <!-- home -->
 
@@ -66,6 +67,10 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Avvio completo](#avvio-completo)
     - [Comandi utili](#comandi-utili)
     - [Porte esposte](#porte-esposte)
+  - [⚙️ Prestazioni e configurazione](#️-prestazioni-e-configurazione)
+    - [Variabili `.env`](#variabili-env)
+    - [Storage temporaneo](#storage-temporaneo)
+    - [Paginazione e limiti JSON](#paginazione-e-limiti-json)
   - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
     - [Operatori logici](#operatori-logici)
     - [Operatori di confronto](#operatori-di-confronto)
@@ -125,10 +130,10 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
 | **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
-| **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
+| **Lista Pacchetti** | Dettaglio pacchetti paginato; il limite JSON è configurabile con `PCAPCAPER_MAX_PACKET_LIST` |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
 
-Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
+Formati supportati: `.pcap`, `.pcapng`, `.cap` · Nessun limite applicativo predefinito sulla dimensione upload.
 
 ---
 
@@ -418,6 +423,46 @@ docker-compose up --build backend
 |-----------|-----------|-----------------|------|
 | Frontend  | 3000      | 80              | Interfaccia web |
 | Backend   | 8000      | 8000            | API REST (opzionale, per debug) |
+
+---
+
+## ⚙️ Prestazioni e configurazione
+
+L'analisi PCAP è stata ottimizzata per ridurre RAM e blocchi del server:
+- upload scritto su disco temporaneo a chunk, senza caricare l'intero file in memoria;
+- limite applicativo di 100 MB rimosso;
+- analisi PCAP eseguita in thread separato rispetto all'event loop FastAPI;
+- dettaglio pacchetti e `packet_numbers` dei flow limitati in modo configurabile per evitare JSON enormi;
+- arricchimento IP esterno parallelizzato con numero di worker limitato;
+- liste DNS esterne scaricate e indicizzate con cache di processo;
+- UI con stati separati per upload, elaborazione, analisi e chiamate esterne.
+
+### Variabili `.env`
+
+Il repository include `.env.example`. Il file `.env` locale è ignorato da git e può essere usato per personalizzare l'ambiente:
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Limite upload in MB. `0` = nessun limite applicativo |
+| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory dei file PCAP temporanei |
+| `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
+| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
+| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
+| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Worker paralleli massimi per arricchimento esterno |
+| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | IP pubblici massimi arricchiti per richiesta |
+| `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
+| `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
+| `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+
+### Storage temporaneo
+
+Durante `/api/analyze`, il backend salva il PCAP in `PCAPCAPER_TEMP_DIR` con `tempfile.NamedTemporaryFile(delete=False)`. Il file viene cancellato nel blocco `finally` dell'endpoint, anche in caso di errore. In Docker la directory `/tmp/pcapcaper` è montata come `tmpfs`, quindi viene eliminata anche allo stop del container.
+
+Redis è stato valutato ma non introdotto: il flusso corrente non richiede persistenza dei risultati tra richieste e Redis aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache risultati.
+
+### Paginazione e limiti JSON
+
+La lista pacchetti nel frontend è paginata a 50 righe per pagina. Il backend invia per default i primi `PCAPCAPER_MAX_PACKET_LIST=1000` pacchetti dettagliati, mentre riepiloghi, flow, DNS, HTTP, TLS e host restano calcolati sull'intero PCAP. Per PCAP molto grandi, aumentare questo valore rende più pesante il JSON e può rallentare il browser.
 
 ---
 
@@ -803,7 +848,7 @@ Analizza un file PCAP e restituisce le statistiche.
 
 | Campo | Tipo | Descrizione |
 |-------|------|-------------|
-| `file` | File | File `.pcap`, `.pcapng` o `.cap` (max 100 MB) |
+| `file` | File | File `.pcap`, `.pcapng` o `.cap`; limite applicativo configurabile con `PCAPCAPER_UPLOAD_MAX_MB` |
 
 **Risposta (200 OK):**
 ```json
@@ -1038,7 +1083,7 @@ Analizza un file PCAP e restituisce le statistiche.
 | Codice | Causa |
 |--------|-------|
 | 400 | Estensione file non supportata o file vuoto |
-| 413 | File troppo grande (> 100 MB) |
+| 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
 
