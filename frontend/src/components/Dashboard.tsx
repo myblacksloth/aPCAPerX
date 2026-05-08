@@ -32,9 +32,10 @@ import ConversationsTable from './ConversationsTable'
 import PacketFilters      from './PacketFilters'
 import PacketTable        from './PacketTable'
 import TracesView         from './TracesView'
+import AdvancedTracesView from './AdvancedTracesView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -181,6 +182,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Tracce
             </button>
             <button
+              onClick={() => setActiveTab('advanced-traces')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'advanced-traces'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              Tracce avanzate
+            </button>
+            <button
               onClick={handleExternalAnalysis}
               disabled={externalLoading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
@@ -268,6 +279,20 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             onFilterChange={setPacketFilter}
           />
           <TracesView packets={filteredPackets} />
+        </>
+      )}
+
+      {/* ── Tab: Tracce avanzate ──────────────────────────────────────── */}
+      {activeTab === 'advanced-traces' && (
+        <>
+          <PacketFilters
+            filter={packetFilter}
+            filteredCount={filteredPackets.length}
+            totalCount={result.packets.length}
+            error={parsedPacketFilter.error}
+            onFilterChange={setPacketFilter}
+          />
+          <AdvancedTracesView packets={filteredPackets} />
         </>
       )}
     </div>

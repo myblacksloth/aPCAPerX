@@ -34,6 +34,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [Screenshot](#screenshot)
     - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
     - [Mappa degli indirizzi IP](#mappa-degli-indirizzi-ip)
+    - [Advanced packet tracing](#advanced-packet-tracing)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -108,6 +109,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### Mappa degli indirizzi IP
 
 ![](./stuff/i/SCR-20260508-pbqj.png)
+
+### Advanced packet tracing
+
+![](./stuff/i/SCR-20260508-rhxk.png)
 
 <!--
 ![](./stuff/i/.png)
