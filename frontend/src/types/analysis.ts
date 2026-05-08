@@ -262,6 +262,46 @@ export interface Conversation {
   protocols: string[]
 }
 
+/** Flow 5-tuple ricostruito dal backend */
+export interface FlowEntry {
+  /** Identificativo stabile del flow */
+  flow_id: string
+  /** IP sorgente del primo verso osservato */
+  src_ip: string
+  /** Porta sorgente */
+  src_port: number | null
+  /** IP destinazione del primo verso osservato */
+  dst_ip: string
+  /** Porta destinazione */
+  dst_port: number | null
+  /** Protocollo L4 */
+  protocol: string
+  /** Timestamp ISO del primo pacchetto */
+  first_seen: string
+  /** Timestamp ISO dell'ultimo pacchetto */
+  last_seen: string
+  /** Durata in secondi */
+  duration_seconds: number
+  /** Pacchetti totali */
+  packets_total: number
+  /** Byte totali */
+  bytes_total: number
+  /** Pacchetti client -> server */
+  packets_client_to_server: number
+  /** Pacchetti server -> client */
+  packets_server_to_client: number
+  /** Byte client -> server */
+  bytes_client_to_server: number
+  /** Byte server -> client */
+  bytes_server_to_client: number
+  /** Flag TCP aggregati */
+  tcp_flags: string[]
+  /** Stato approssimativo dedotto dal backend */
+  state: string
+  /** Numeri dei pacchetti associati */
+  packet_numbers: number[]
+}
+
 /** Un punto della timeline di traffico */
 export interface TimelinePoint {
   /** Orario nel formato HH:MM:SS (UTC) */
@@ -322,6 +362,8 @@ export interface AnalysisResult {
   top_dst_ports: PortEntry[]
   /** Conversazioni bidirezionali più attive (top 20) */
   conversations: Conversation[]
+  /** Flow 5-tuple ricostruiti dal backend */
+  flows: FlowEntry[]
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */
