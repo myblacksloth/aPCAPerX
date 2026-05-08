@@ -34,6 +34,7 @@ from models import (
 from flow_analysis import FlowAnalyzer
 from dns_analysis import DNSAnalyzer
 from http_analysis import HTTPAnalyzer
+from tls_analysis import TLSAnalyzer
 
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
@@ -578,6 +579,9 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Analizzatore HTTP in chiaro: usa solo payload TCP leggibili, senza decifrare TLS.
     http_analyzer = HTTPAnalyzer()
 
+    # Analizzatore TLS: estrae solo metadati visibili nel handshake, senza decifrare.
+    tls_analyzer = TLSAnalyzer()
+
     # ── Lettura del file PCAP in modalità streaming ────────────────────────
     try:
         with PcapReader(file_path) as reader:
@@ -700,6 +704,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     dst_ip=dst_ip,
                 )
 
+                raw_tcp_payload = _raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None
+
                 # ── Aggiornamento analisi HTTP in chiaro ──────────────────
                 # Parsing prudente: solo payload TCP Raw che sembrano HTTP testuale.
                 http_analyzer.add_packet(
@@ -709,7 +715,20 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     src_port=src_port,
                     dst_ip=dst_ip,
                     dst_port=dst_port,
-                    payload=_raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None,
+                    payload=raw_tcp_payload,
+                )
+
+                # ── Aggiornamento analisi TLS/SSL ────────────────────────
+                # Il parser lavora sui record handshake TLS presenti nel Raw TCP
+                # e non tenta mai di leggere contenuti cifrati.
+                tls_analyzer.add_packet(
+                    packet_number=total_packets,
+                    ts=ts,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    payload=raw_tcp_payload,
                 )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
@@ -855,6 +874,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     flows = flow_analyzer.to_entries()
     dns_result = dns_analyzer.to_result(flows)
     http_result = http_analyzer.to_result()
+    tls_result = tls_analyzer.to_result(dns_hostnames)
 
     # ── Restituzione del risultato completo ───────────────────────────────
     return AnalysisResult(
@@ -869,6 +889,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         flows         = flows,
         dns           = dns_result,
         http          = http_result,
+        tls           = tls_result,
         timeline      = timeline,
         packets       = packet_list,
     )

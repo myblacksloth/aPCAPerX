@@ -47,6 +47,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
     - [DNS analysis](#dns-analysis)
     - [HTTP anaysis](#http-anaysis)
+    - [TLS analysis](#tls-analysis)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -82,6 +83,9 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Privacy DNS](#privacy-dns)
   - [🌍 HTTP analysis](#-http-analysis)
     - [Limiti HTTP](#limiti-http)
+  - [🔐 TLS analysis](#-tls-analysis)
+    - [Anomalie TLS](#anomalie-tls)
+    - [Limiti TLS](#limiti-tls)
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
@@ -108,6 +112,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
+| **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
@@ -158,6 +163,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ### HTTP anaysis
 
 ![](./stuff/i/SCR-20260508-uceg.png)
+
+### TLS analysis
+
+![](./stuff/i/SCR-20260508-uhnh.png)
 
 <!--
 ![](./stuff/i/.png)
@@ -255,10 +264,11 @@ flowchart LR
         E --> Q["Servizi per IP\nDNS, peer, porte"]
         E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
         E --> HT["HTTP in chiaro\nrequest/response metadata"]
+        E --> TLS["TLS handshake\nSNI, cert, JA3"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M & Q & Z & HT --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q & Z & HT & TLS --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
     end
 
@@ -660,6 +670,48 @@ Il parser è prudente:
 
 ---
 
+## 🔐 TLS analysis
+
+La tab **TLS analysis** analizza SSL/TLS usando solo metadati osservabili nei record di handshake presenti nel PCAP. Non decifra traffico, non richiede chiavi private e non mostra contenuti applicativi cifrati.
+
+Quando disponibili vengono estratti:
+- SNI dal `ClientHello`;
+- versione TLS offerta o negoziata;
+- cipher suite negoziata dal `ServerHello`;
+- ALPN annunciato o negoziato;
+- subject e issuer del certificato leaf;
+- validità del certificato;
+- fingerprint SHA256 del certificato DER;
+- fingerprint JA3 e JA3S quando i messaggi necessari sono completi;
+- stato parziale quando record o handshake risultano frammentati.
+
+La tab include:
+- tabella connessioni TLS con client, server, SNI, versione, cipher, certificato e fingerprint;
+- filtri per SNI, server IP, versione e presenza anomalie;
+- riepilogo SNI più frequenti, versioni TLS e issuer certificato;
+- pannello limiti parser per distinguere chiaramente cosa è osservabile e cosa non lo è.
+
+### Anomalie TLS
+
+Le anomalie sono euristiche e basate sui soli metadati disponibili:
+- certificato scaduto rispetto al timestamp della cattura;
+- certificato non ancora valido;
+- certificato self-signed;
+- SNI mancante;
+- TLS legacy (`SSL 3.0`, `TLS 1.0`, `TLS 1.1`);
+- mismatch approssimato tra DNS osservato nel PCAP e SNI, quando entrambi sono disponibili.
+
+### Limiti TLS
+
+Il parser TLS è volutamente conservativo:
+- non decifra payload TLS e non recupera URL, header HTTP o contenuti cifrati;
+- non ricostruisce stream TCP completi;
+- record TLS frammentati su più segmenti possono essere marcati come parziali;
+- subject e issuer sono disponibili solo se il certificato è presente nel PCAP e decodificabile dalla libreria standard Python;
+- il mismatch DNS/SNI usa solo risposte DNS viste nella cattura, quindi può produrre falsi positivi se il DNS è assente, cacheato o risolto fuori cattura.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -825,6 +877,45 @@ Analizza un file PCAP e restituisce le statistiche.
     "top_hosts": [{ "value": "example.com", "count": 1 }],
     "top_user_agents": [{ "value": "curl/8.0", "count": 1 }],
     "limitations": ["Analizza solo traffico HTTP in chiaro su TCP.", "Non decifra HTTPS/TLS."]
+  },
+  "tls": {
+    "stats": {
+      "total_connections": 1,
+      "with_sni": 1,
+      "with_certificate": 1,
+      "anomalous_connections": 0,
+      "expired_certificates": 0,
+      "legacy_tls": 0
+    },
+    "connections": [
+      {
+        "packet_number": 20,
+        "timestamp": "2024-03-15T10:23:03.000000+00:00",
+        "client_ip": "192.168.1.10",
+        "client_port": 52345,
+        "server_ip": "93.184.216.34",
+        "server_port": 443,
+        "sni": "example.com",
+        "tls_version": "TLS 1.3",
+        "cipher_suite": "TLS_AES_128_GCM_SHA256",
+        "alpn": ["h2", "http/1.1"],
+        "cert_subject": "commonName=example.com",
+        "cert_issuer": "commonName=Example CA",
+        "cert_not_before": "Mar 01 00:00:00 2024 GMT",
+        "cert_not_after": "Mar 01 23:59:59 2025 GMT",
+        "cert_sha256": "012345...",
+        "ja3": "d4f...",
+        "ja3_string": "771,...",
+        "ja3s": "15a...",
+        "ja3s_string": "771,4865,...",
+        "anomalies": [],
+        "partial": false
+      }
+    ],
+    "top_sni": [{ "value": "example.com", "count": 1 }],
+    "top_issuers": [{ "value": "commonName=Example CA", "count": 1 }],
+    "top_versions": [{ "value": "TLS 1.3", "count": 1 }],
+    "limitations": ["Non decifra il traffico TLS e non recupera contenuti applicativi."]
   },
   "timeline": [
     { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
@@ -1020,6 +1111,7 @@ pcapcaper/
 │   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
 │   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
 │   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
+│   ├── tls_analysis.py  # Analisi TLS metadata-only: SNI, certificati, JA3/JA3S
 │   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── security_analysis.py # Motore Security avanzato + threat intelligence
 │   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
@@ -1048,6 +1140,7 @@ pcapcaper/
 │   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
 │   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
 │   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
+│   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
 │   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
@@ -1084,6 +1177,7 @@ graph TD
     SECA["SecurityAnalysisView\nThreat intel opt-in"]
     DNSA["DNSAnalysisView\nDashboard DNS"]
     HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
+    TLSA["TLSAnalysisView\nTLS metadata"]
     MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
@@ -1102,6 +1196,7 @@ graph TD
     DB --> SECA
     DB --> DNSA
     DB --> HTTPA
+    DB --> TLSA
     DB --> MAP
     DB --> TL
     DB --> TP
