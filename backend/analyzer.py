@@ -14,6 +14,7 @@ Flusso di elaborazione per ogni pacchetto:
 """
 
 import os
+import socket
 from datetime import datetime, timezone
 from collections import defaultdict, Counter
 from typing import Dict, List, Optional, Tuple
@@ -28,7 +29,7 @@ from scapy.layers.dns import DNS                   # protocollo DNS
 from models import (
     AnalysisResult, SummaryStats, ProtocolEntry, IPEntry,
     PortEntry, Conversation, TimelinePoint, PacketEntry,
-    LayerField, LayerInfo,
+    LayerField, LayerInfo, IPServiceEntry,
 )
 
 
@@ -182,12 +183,161 @@ def _extract_layers(pkt) -> List[LayerInfo]:
 
 # ─── Funzioni di supporto private ─────────────────────────────────────────────
 
-def _get_service(port: int) -> str:
+def _get_service(port: int, protocol: Optional[str] = None) -> str:
     """
     Restituisce il nome del servizio per la porta indicata.
     Se la porta non è tra quelle note, restituisce il numero come stringa.
     """
-    return PORT_SERVICES.get(port, str(port))
+    service = PORT_SERVICES.get(port)
+    if service:
+        return service
+
+    if protocol:
+        try:
+            return socket.getservbyport(port, protocol.lower()).upper()
+        except OSError:
+            pass
+
+    return str(port)
+
+
+def _is_named_service_port(port: int, protocol: str) -> bool:
+    """Indica se una porta ha un nome servizio noto."""
+    if port in PORT_SERVICES:
+        return True
+    try:
+        socket.getservbyport(port, protocol.lower())
+        return True
+    except OSError:
+        return False
+
+
+def _service_endpoint(
+    src_port: int,
+    dst_port: int,
+    protocol: str,
+) -> Tuple[int, str, str]:
+    """
+    Deduce quale porta rappresenta il servizio applicativo nel pacchetto.
+    Ritorna porta, nome servizio e lato server ("src" o "dst").
+    """
+    src_known = _is_named_service_port(src_port, protocol)
+    dst_known = _is_named_service_port(dst_port, protocol)
+
+    if src_known and not dst_known:
+        return src_port, _get_service(src_port, protocol), "src"
+
+    return dst_port, _get_service(dst_port, protocol), "dst"
+
+
+def _safe_dns_name(value) -> Optional[str]:
+    """Converte nomi DNS bytes/string in testo pulito."""
+    try:
+        if isinstance(value, bytes):
+            return value.decode(errors="replace").rstrip(".")
+        return str(value).rstrip(".")
+    except Exception:
+        return None
+
+
+def _record_dns_hostnames(pkt, dns_hostnames: Dict[str, set]) -> None:
+    """
+    Estrae associazioni IP -> hostname dalle risposte DNS presenti nel PCAP.
+    Non effettua query esterne: usa solo evidenze contenute nella cattura.
+    """
+    if not pkt.haslayer(DNS):
+        return
+
+    try:
+        dns = pkt[DNS]
+        if dns.qr != 1 or dns.ancount <= 0:
+            return
+
+        for idx in range(int(dns.ancount)):
+            try:
+                answer = dns.an[idx]
+                if getattr(answer, "type", None) not in (1, 28):
+                    continue
+
+                ip_value = str(answer.rdata)
+                hostname = _safe_dns_name(answer.rrname)
+                if ip_value and hostname:
+                    dns_hostnames[ip_value].add(hostname)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def _remember_ip_activity(
+    ip_service_counts: Counter,
+    ip_service_peers: Dict[Tuple[str, str, Optional[int], str, str], Counter],
+    ip_protocols: Dict[str, set],
+    ip_peers: Dict[str, Counter],
+    ip: Optional[str],
+    peer: Optional[str],
+    service: str,
+    port: Optional[int],
+    protocol: str,
+    direction: str,
+) -> None:
+    """Aggiorna gli accumulatori di dettaglio associati a un IP."""
+    if not ip:
+        return
+
+    key = (ip, service, port, protocol, direction)
+    ip_service_counts[key] += 1
+    ip_protocols[ip].add(protocol)
+    if service and service != protocol:
+        ip_protocols[ip].add(service)
+
+    if peer:
+        ip_peers[ip][peer] += 1
+        ip_service_peers[key][peer] += 1
+
+
+def _build_ip_entry(
+    ip: str,
+    count: int,
+    byte_count: int,
+    ip_service_counts: Counter,
+    ip_service_peers: Dict[Tuple[str, str, Optional[int], str, str], Counter],
+    ip_protocols: Dict[str, set],
+    dns_hostnames: Dict[str, set],
+    ip_peers: Dict[str, Counter],
+) -> IPEntry:
+    """Costruisce l'entry IP completa di servizi, peer, protocolli e nomi DNS."""
+    services: List[IPServiceEntry] = []
+    relevant = [
+        (key, svc_count)
+        for key, svc_count in ip_service_counts.items()
+        if key[0] == ip
+    ]
+
+    for (_, service, port, protocol, direction), svc_count in sorted(
+        relevant,
+        key=lambda item: item[1],
+        reverse=True,
+    )[:12]:
+        peers = [peer for peer, _ in ip_service_peers[(ip, service, port, protocol, direction)].most_common(8)]
+        services.append(IPServiceEntry(
+            service=service,
+            port=port,
+            protocol=protocol,
+            direction=direction,
+            count=svc_count,
+            peers=peers,
+        ))
+
+    return IPEntry(
+        ip=ip,
+        count=count,
+        bytes=byte_count,
+        protocols=sorted(ip_protocols.get(ip, set())),
+        hostnames=sorted(dns_hostnames.get(ip, set()))[:8],
+        peers=[peer for peer, _ in ip_peers.get(ip, Counter()).most_common(10)],
+        services=services,
+    )
 
 
 def _get_protocol(pkt) -> str:
@@ -386,6 +536,13 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     src_port_count: Counter = Counter()
     dst_port_count: Counter = Counter()
 
+    # Dettagli associati agli IP per il popup Top IP
+    ip_service_counts: Counter = Counter()
+    ip_service_peers: Dict[Tuple[str, str, Optional[int], str, str], Counter] = defaultdict(Counter)
+    ip_protocols: Dict[str, set] = defaultdict(set)
+    ip_peers: Dict[str, Counter] = defaultdict(Counter)
+    dns_hostnames: Dict[str, set] = defaultdict(set)
+
     # Conversazioni bidirezionali tra coppie di IP.
     # Chiave: (min(ip1,ip2), max(ip1,ip2)) così A→B e B→A sono la stessa coppia.
     conv_data: Dict[Tuple[str, str], Dict] = defaultdict(
@@ -422,6 +579,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 protocol = _get_protocol(pkt)
                 proto_count[protocol] += 1
                 proto_bytes[protocol] += pkt_len
+                _record_dns_hostnames(pkt, dns_hostnames)
 
                 # ── Estrazione indirizzi IP ────────────────────────────────
                 src_ip: Optional[str] = None
@@ -456,11 +614,42 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     dst_port = pkt[TCP].dport
                     src_port_count[(src_port, "TCP")] += 1
                     dst_port_count[(dst_port, "TCP")] += 1
+                    service_port, service_name, server_side = _service_endpoint(src_port, dst_port, "TCP")
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        src_ip, dst_ip, service_name, service_port, "TCP",
+                        "server" if server_side == "src" else "client",
+                    )
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        dst_ip, src_ip, service_name, service_port, "TCP",
+                        "server" if server_side == "dst" else "client",
+                    )
                 elif pkt.haslayer(UDP):
                     src_port = pkt[UDP].sport
                     dst_port = pkt[UDP].dport
                     src_port_count[(src_port, "UDP")] += 1
                     dst_port_count[(dst_port, "UDP")] += 1
+                    service_port, service_name, server_side = _service_endpoint(src_port, dst_port, "UDP")
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        src_ip, dst_ip, service_name, service_port, "UDP",
+                        "server" if server_side == "src" else "client",
+                    )
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        dst_ip, src_ip, service_name, service_port, "UDP",
+                        "server" if server_side == "dst" else "client",
+                    )
+                elif src_ip or dst_ip:
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        src_ip, dst_ip, protocol, None, protocol, "endpoint",
+                    )
+                    _remember_ip_activity(
+                        ip_service_counts, ip_service_peers, ip_protocols, ip_peers,
+                        dst_ip, src_ip, protocol, None, protocol, "endpoint",
+                    )
 
                 # ── Aggiornamento conversazioni ────────────────────────────
                 # Raggruppa sempre nella stessa chiave indipendentemente dalla direzione
@@ -543,21 +732,29 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
 
     # ── Top 20 indirizzi IP sorgente e destinazione ───────────────────────
     top_src_ips = [
-        IPEntry(ip=ip, count=cnt, bytes=src_ip_bytes[ip])
+        _build_ip_entry(
+            ip, cnt, src_ip_bytes[ip],
+            ip_service_counts, ip_service_peers, ip_protocols,
+            dns_hostnames, ip_peers,
+        )
         for ip, cnt in src_ip_count.most_common(20)
     ]
     top_dst_ips = [
-        IPEntry(ip=ip, count=cnt, bytes=dst_ip_bytes[ip])
+        _build_ip_entry(
+            ip, cnt, dst_ip_bytes[ip],
+            ip_service_counts, ip_service_peers, ip_protocols,
+            dns_hostnames, ip_peers,
+        )
         for ip, cnt in dst_ip_count.most_common(20)
     ]
 
     # ── Top 15 porte sorgente e destinazione ──────────────────────────────
     top_src_ports = [
-        PortEntry(port=port, service=_get_service(port), count=cnt, protocol=proto)
+        PortEntry(port=port, service=_get_service(port, proto), count=cnt, protocol=proto)
         for (port, proto), cnt in src_port_count.most_common(15)
     ]
     top_dst_ports = [
-        PortEntry(port=port, service=_get_service(port), count=cnt, protocol=proto)
+        PortEntry(port=port, service=_get_service(port, proto), count=cnt, protocol=proto)
         for (port, proto), cnt in dst_port_count.most_common(15)
     ]
 
