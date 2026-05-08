@@ -7,7 +7,8 @@
  * proiettate in SVG con una semplice proiezione equirettangolare.
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { AnalysisResult, IPExternalInfo } from '../types/analysis'
+import { X } from 'lucide-react'
+import type { AnalysisResult, FlowEntry, IPExternalInfo } from '../types/analysis'
 import { formatBytes, formatCount } from '../utils/format'
 
 interface WorldTrafficMapProps {
@@ -50,6 +51,18 @@ interface CountryTraffic {
   bytes: number
   packets: number
   ips: string[]
+}
+
+interface CountryFlowEntry {
+  flow: FlowEntry
+  matchedIps: string[]
+  matchedBytes: number
+  matchedPackets: number
+}
+
+interface SelectedCountry {
+  traffic: CountryTraffic
+  flows: CountryFlowEntry[]
 }
 
 const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
@@ -236,6 +249,47 @@ function aggregateTrafficByCountry(result: AnalysisResult) {
   return countries
 }
 
+function flowBytesForCountry(flow: FlowEntry, matchedIps: string[]) {
+  // Attribuisce al paese il traffico complessivo dell'endpoint geolocalizzato.
+  let bytes = 0
+  let packets = 0
+  if (matchedIps.includes(flow.src_ip)) {
+    bytes += flow.bytes_client_to_server
+    packets += flow.packets_client_to_server
+    if (!matchedIps.includes(flow.dst_ip)) {
+      bytes += flow.bytes_server_to_client
+      packets += flow.packets_server_to_client
+    }
+  }
+  if (matchedIps.includes(flow.dst_ip)) {
+    bytes += flow.bytes_server_to_client
+    packets += flow.packets_server_to_client
+    if (!matchedIps.includes(flow.src_ip)) {
+      bytes += flow.bytes_client_to_server
+      packets += flow.packets_client_to_server
+    }
+  }
+  return { bytes, packets }
+}
+
+function flowsForCountry(result: AnalysisResult, traffic: CountryTraffic): CountryFlowEntry[] {
+  // Incrocia gli IP del paese con i flow 5-tuple ricostruiti dal backend.
+  const countryIps = new Set(traffic.ips)
+  return (result.flows ?? [])
+    .map((flow) => {
+      const matchedIps = [flow.src_ip, flow.dst_ip].filter((ip) => countryIps.has(ip))
+      const matchedTraffic = flowBytesForCountry(flow, matchedIps)
+      return {
+        flow,
+        matchedIps,
+        matchedBytes: matchedTraffic.bytes || flow.bytes_total,
+        matchedPackets: matchedTraffic.packets || flow.packets_total,
+      }
+    })
+    .filter((entry) => entry.matchedIps.length > 0)
+    .sort((left, right) => right.matchedBytes - left.matchedBytes)
+}
+
 function colorForTraffic(bytes: number, maxBytes: number) {
   // Scala sequenziale dal verde chiaro al rosso, basata sul peso relativo dei byte.
   if (bytes <= 0 || maxBytes <= 0) return '#1e293b'
@@ -251,6 +305,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hovered, setHovered] = useState<CountryTraffic | null>(null)
+  const [selected, setSelected] = useState<SelectedCountry | null>(null)
 
   useEffect(() => {
     let active = true
@@ -335,9 +390,30 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                   stroke="#334155"
                   strokeWidth={0.45}
                   vectorEffect="non-scaling-stroke"
-                  className="transition-colors hover:fill-brand-400"
+                  role={traffic ? 'button' : undefined}
+                  tabIndex={traffic ? 0 : undefined}
+                  className={`transition-colors hover:fill-brand-400 ${traffic ? 'cursor-pointer' : ''}`}
                   onMouseEnter={() => setHovered(traffic ?? null)}
                   onMouseLeave={() => setHovered(null)}
+                  onClick={() => {
+                    // Click sul paese: apre il dettaglio dei flow collegati a quel paese.
+                    if (traffic) {
+                      setSelected({
+                        traffic,
+                        flows: flowsForCountry(result, traffic),
+                      })
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    // Accessibilità tastiera: Enter/Spazio aprono lo stesso popup del click.
+                    if (traffic && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault()
+                      setSelected({
+                        traffic,
+                        flows: flowsForCountry(result, traffic),
+                      })
+                    }
+                  }}
                 >
                   <title>
                     {traffic
@@ -371,7 +447,92 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
         <span className="flex items-center gap-1"><span className="h-3 w-6 rounded bg-[#eab308]" /> medio</span>
         <span className="flex items-center gap-1"><span className="h-3 w-6 rounded bg-[#f97316]" /> alto</span>
         <span className="flex items-center gap-1"><span className="h-3 w-6 rounded bg-[#ef4444]" /> massimo</span>
+        <span className="text-slate-600">Clicca un paese colorato per vedere i flow.</span>
       </div>
+
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-700 px-5 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">
+                  Flow verso {selected.traffic.country}{selected.traffic.countryCode ? ` (${selected.traffic.countryCode})` : ''}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {formatBytes(selected.traffic.bytes)} · {formatCount(selected.traffic.packets)} pacchetti · {selected.traffic.ips.length} IP geolocalizzati
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                aria-label="Chiudi flow paese"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto p-5">
+              <div className="mb-4 rounded-lg border border-slate-700 bg-slate-800/70 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">IP del paese</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selected.traffic.ips.map((ip) => (
+                    <span key={ip} className="rounded bg-slate-700 px-2 py-1 font-mono text-[11px] text-slate-200">{ip}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="text-left text-slate-500">
+                    <tr>
+                      <th className="pb-2 pr-3">Flow</th>
+                      <th className="pb-2 pr-3">Endpoint</th>
+                      <th className="pb-2 pr-3">Protocollo</th>
+                      <th className="pb-2 pr-3">Traffico paese</th>
+                      <th className="pb-2 pr-3">Totale flow</th>
+                      <th className="pb-2 pr-3">Stato</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/70">
+                    {selected.flows.slice(0, 300).map((entry) => (
+                      <tr key={entry.flow.flow_id}>
+                        <td className="py-3 pr-3 align-top">
+                          <div className="font-mono text-slate-100">{entry.flow.flow_id}</div>
+                          <div className="mt-1 text-slate-500">{entry.flow.first_seen}</div>
+                        </td>
+                        <td className="py-3 pr-3 align-top font-mono text-slate-400">
+                          <div>{entry.flow.src_ip}:{entry.flow.src_port ?? '-'}</div>
+                          <div className="text-slate-600">→ {entry.flow.dst_ip}:{entry.flow.dst_port ?? '-'}</div>
+                          <div className="mt-1 text-[11px] text-brand-300">
+                            IP paese: {entry.matchedIps.join(', ')}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3 align-top text-slate-300">{entry.flow.protocol}</td>
+                        <td className="py-3 pr-3 align-top text-slate-300">
+                          {formatBytes(entry.matchedBytes)}
+                          <div className="text-slate-500">{formatCount(entry.matchedPackets)} pkt</div>
+                        </td>
+                        <td className="py-3 pr-3 align-top text-slate-400">
+                          {formatBytes(entry.flow.bytes_total)}
+                          <div className="text-slate-500">{formatCount(entry.flow.packets_total)} pkt</div>
+                        </td>
+                        <td className="py-3 pr-3 align-top text-slate-400">{entry.flow.state}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {selected.flows.length === 0 && (
+                <p className="py-8 text-center text-sm text-slate-500">
+                  Nessun flow 5-tuple collegato agli IP geolocalizzati di questo paese.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
