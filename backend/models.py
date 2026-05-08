@@ -6,8 +6,8 @@ dal backend al frontend. Pydantic garantisce la validazione automatica
 dei tipi e la serializzazione JSON.
 """
 
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
 
 
 class SummaryStats(BaseModel):
@@ -40,6 +40,98 @@ class ProtocolEntry(BaseModel):
     percentage: float
 
 
+class IPExternalInfo(BaseModel):
+    """Informazioni ottenute da servizi esterni per un indirizzo IP pubblico."""
+    # Indirizzo IP arricchito
+    ip: str
+    # Stato dell'arricchimento: enriched, skipped o error
+    status: str
+    # Motivo sintetico in caso di skip o errore
+    reason: Optional[str] = None
+    # Servizi esterni che hanno restituito almeno un dato utile
+    sources: List[str] = Field(default_factory=list)
+    # Nome reverse DNS ottenuto tramite risoluzione PTR
+    reverse_dns: Optional[str] = None
+    # Autonomous System Number, se disponibile
+    asn: Optional[str] = None
+    # Nome/descrizione dell'Autonomous System
+    as_name: Optional[str] = None
+    # Prefisso BGP associato all'indirizzo
+    bgp_prefix: Optional[str] = None
+    # Registry RIR o fonte di assegnazione (ARIN, RIPE, APNIC...)
+    registry: Optional[str] = None
+    # Data di allocazione del prefisso, se esposta dalla fonte
+    allocated: Optional[str] = None
+    # Nazione stimata o dichiarata dai servizi esterni
+    country: Optional[str] = None
+    # Codice nazione ISO/RIR
+    country_code: Optional[str] = None
+    # Regione geografica, se disponibile
+    region: Optional[str] = None
+    # Città stimata, se disponibile
+    city: Optional[str] = None
+    # Latitudine stimata
+    lat: Optional[float] = None
+    # Longitudine stimata
+    lon: Optional[float] = None
+    # Timezone stimata
+    timezone: Optional[str] = None
+    # ISP rilevato da servizi GeoIP
+    isp: Optional[str] = None
+    # Organizzazione rilevata da servizi GeoIP/RDAP
+    org: Optional[str] = None
+    # Indicatore mobile restituito dal servizio GeoIP
+    mobile: Optional[bool] = None
+    # Indicatore proxy/VPN restituito dal servizio GeoIP
+    proxy: Optional[bool] = None
+    # Indicatore hosting/datacenter restituito dal servizio GeoIP
+    hosting: Optional[bool] = None
+    # Handle RDAP della risorsa IP
+    rdap_handle: Optional[str] = None
+    # Nome RDAP della risorsa IP
+    rdap_name: Optional[str] = None
+    # Tipo RDAP della risorsa IP
+    rdap_type: Optional[str] = None
+    # Inizio del range RDAP
+    rdap_start_address: Optional[str] = None
+    # Fine del range RDAP
+    rdap_end_address: Optional[str] = None
+    # Entità/contatti principali esposti da RDAP
+    rdap_entities: List[str] = Field(default_factory=list)
+    # Note RDAP sintetiche
+    rdap_remarks: List[str] = Field(default_factory=list)
+    # Errori non bloccanti incontrati sui singoli servizi
+    errors: List[str] = Field(default_factory=list)
+
+
+class IPEnrichmentRequest(BaseModel):
+    """Richiesta di arricchimento esterno per una lista di IP."""
+    # Lista di indirizzi IP estratti dal report PCAP
+    ips: List[str]
+
+
+class IPEnrichmentResponse(BaseModel):
+    """Risposta dell'arricchimento esterno indicizzata per indirizzo IP."""
+    # Mappa IP -> informazioni esterne recuperate
+    results: Dict[str, IPExternalInfo]
+
+
+class IPServiceEntry(BaseModel):
+    """Servizio osservato in associazione a un indirizzo IP."""
+    # Nome del servizio dedotto da porta/protocollo (es. "HTTPS", "DNS")
+    service: str
+    # Porta TCP/UDP osservata, se disponibile
+    port: Optional[int] = None
+    # Protocollo di trasporto o rete (TCP, UDP, ICMP, ARP...)
+    protocol: str
+    # Ruolo dell'IP rispetto al servizio: client, server o endpoint
+    direction: str
+    # Numero di pacchetti osservati per questa associazione
+    count: int
+    # Peer remoti più frequenti osservati con questo servizio
+    peers: List[str]
+
+
 class IPEntry(BaseModel):
     """Statistiche per un singolo indirizzo IP (sorgente o destinazione)."""
     # Indirizzo IP in notazione dotted-decimal o IPv6
@@ -48,6 +140,16 @@ class IPEntry(BaseModel):
     count: int
     # Volume totale in byte inviati/ricevuti
     bytes: int
+    # Protocolli osservati per questo IP
+    protocols: List[str] = Field(default_factory=list)
+    # Nomi DNS osservati nel PCAP per questo indirizzo
+    hostnames: List[str] = Field(default_factory=list)
+    # Peer remoti più frequenti
+    peers: List[str] = Field(default_factory=list)
+    # Servizi dedotti dalle porte e dai protocolli osservati
+    services: List[IPServiceEntry] = Field(default_factory=list)
+    # Informazioni opzionali ottenute interrogando servizi esterni
+    external: Optional[IPExternalInfo] = None
 
 
 class PortEntry(BaseModel):
@@ -112,7 +214,7 @@ class PacketEntry(BaseModel):
     info: str
     # Dati per l'inspector Wireshark-style
     raw_hex: Optional[str] = None          # byte grezzi come stringa hex
-    layers: List[LayerInfo] = []           # albero dei layer protocollari
+    layers: List[LayerInfo] = Field(default_factory=list)  # albero dei layer protocollari
 
 
 class AnalysisResult(BaseModel):
@@ -140,4 +242,7 @@ class AnalysisResult(BaseModel):
     conversations: List[Conversation]
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
+    # Lista dettagliata dei pacchetti
     packets: List[PacketEntry]
+    # Informazioni opzionali ottenute con l'arricchimento esterno manuale
+    external_ip_info: Dict[str, IPExternalInfo] = Field(default_factory=dict)

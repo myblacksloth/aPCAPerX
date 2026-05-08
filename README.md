@@ -10,18 +10,63 @@
 
 ![](./stuff/i/SCR-20260425-rwmv.png)
 
+![](./stuff/i/SCR-20260508-pdch.png)
+
+![](./stuff/i/SCR-20260508-pglq.png)
+
+![](./stuff/i/SCR-20260508-pips.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
 
-
-
 # PCAPCaper 🔍
 
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
-Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni e timeline del traffico.
+Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica e segnalazioni security euristiche.
 
 > Ispirato a [apackets.com](https://apackets.com/), ma completamente open source e auto-ospitabile.
+
+---
+
+- [PCAPCaper 🔍](#pcapcaper-)
+  - [✨ Funzionalità](#-funzionalità)
+  - [Screenshot](#screenshot)
+    - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
+    - [Mappa degli indirizzi IP](#mappa-degli-indirizzi-ip)
+  - [🏗️ Architettura](#️-architettura)
+  - [🧩 Stack tecnologico](#-stack-tecnologico)
+    - [Backend](#backend)
+    - [Frontend](#frontend)
+    - [Infrastruttura](#infrastruttura)
+  - [📊 Flusso di analisi](#-flusso-di-analisi)
+  - [🚀 Avvio locale (senza Docker)](#-avvio-locale-senza-docker)
+    - [Prerequisiti](#prerequisiti)
+    - [1. Clona il repository](#1-clona-il-repository)
+    - [2. Avvia il Backend](#2-avvia-il-backend)
+    - [3. Avvia il Frontend](#3-avvia-il-frontend)
+  - [🐳 Avvio con Docker](#-avvio-con-docker)
+    - [Prerequisiti](#prerequisiti-1)
+    - [Avvio completo](#avvio-completo)
+    - [Comandi utili](#comandi-utili)
+    - [Porte esposte](#porte-esposte)
+  - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
+    - [Operatori logici](#operatori-logici)
+    - [Operatori di confronto](#operatori-di-confronto)
+    - [Campi supportati](#campi-supportati)
+    - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
+    - [Esempi utili](#esempi-utili)
+  - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
+  - [🛡️ Security](#️-security)
+  - [📡 API Reference](#-api-reference)
+    - [`GET /api/health`](#get-apihealth)
+    - [`POST /api/analyze`](#post-apianalyze)
+    - [`POST /api/enrich-ips`](#post-apienrich-ips)
+  - [📁 Struttura del progetto](#-struttura-del-progetto)
+  - [🔄 Diagramma dei componenti frontend](#-diagramma-dei-componenti-frontend)
+  - [🤝 Contribuire](#-contribuire)
+  - [📄 Licenza](#-licenza)
+
 
 ---
 
@@ -31,14 +76,42 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 |---|---|
 | **Riepilogo** | Pacchetti totali, byte, durata, pacchetti/sec, dimensione media |
 | **Protocolli** | Distribuzione con grafico donut + tabella percentuali (top 20) |
-| **Top IP** | Indirizzi sorgente e destinazione più attivi con grafici a barre (top 20) |
+| **Top IP** | Indirizzi sorgente/destinazione più attivi, popup dettagli servizi, DNS, peer e dati esterni |
 | **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
+| **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
+| **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
+| **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
+| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Primi 1000 pacchetti con ricerca full-text e paginazione |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
 
 Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
+
+---
+
+## Screenshot
+
+**dettaglio su indirizzi IP**
+
+![](./stuff/i/SCR-20260508-otsa.png)
+
+### Servizio di analisi degli indirizzi IP
+
+![](./stuff/i/SCR-20260508-oxxe.png)
+
+![](./stuff/i/SCR-20260508-oyca.png)
+
+![](./stuff/i/SCR-20260508-oypg.png)
+
+### Mappa degli indirizzi IP
+
+![](./stuff/i/SCR-20260508-pbqj.png)
+
+<!--
+![](./stuff/i/.png)
+-->
 
 ---
 
@@ -50,10 +123,14 @@ graph TB
     FE["🖥️ Frontend\nReact 18 + Vite\nNginx (Docker)\nporta 3000 / 5173"]
     BE["⚙️ Backend\nFastAPI + Python 3.11\nUvicorn ASGI\nporta 8000"]
     SC["📦 Scapy\nPCAP Parser\nDecoder protocolli"]
+    EXT["🌐 Tool esterni opzionali\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
 
     U -->|"Drag & drop file PCAP"| FE
     FE -->|"POST /api/analyze\nmultipart/form-data"| BE
+    FE -->|"POST /api/enrich-ips\nsolo su click utente"| BE
     BE -->|"PcapReader streaming"| SC
+    BE -->|"IP pubblici"| EXT
+    EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
     SC -->|"Pacchetti decodificati"| BE
     BE -->|"JSON: statistiche complete"| FE
     FE -->|"Dashboard interattivo"| U
@@ -61,6 +138,7 @@ graph TB
     style FE fill:#1e293b,stroke:#6366f1,color:#f1f5f9
     style BE fill:#1e293b,stroke:#22c55e,color:#f1f5f9
     style SC fill:#1e293b,stroke:#eab308,color:#f1f5f9
+    style EXT fill:#1e293b,stroke:#f97316,color:#f1f5f9
 ```
 
 ---
@@ -114,11 +192,18 @@ flowchart LR
         H --> K["Contatori\nporte"]
         E --> L["Bucket\ntimeline"]
         E --> M["Lista pacchetti\nmax 1000"]
+        E --> Q["Servizi per IP\nDNS, peer, porte"]
     end
 
     subgraph Aggregazione
-        I & J & K & L & M --> N["AnalysisResult\nPydantic"]
+        I & J & K & L & M & Q --> N["AnalysisResult\nPydantic"]
         N -->|"JSON"| O["Frontend\nDashboard"]
+    end
+
+    subgraph "Arricchimento opzionale"
+        O -->|"click utente"| P["/api/enrich-ips"]
+        P --> R["RDAP, ASN,\nReverse DNS, GeoIP"]
+        R --> O
     end
 ```
 
@@ -228,6 +313,120 @@ docker-compose up --build backend
 
 ---
 
+## 🔎 Filtri pacchetti stile Wireshark
+
+La dashboard include una scheda **Filtri pacchetti** applicata alla lista pacchetti e alla vista **Tracce**. I riepiloghi statistici principali restano calcolati sull'intero PCAP, mentre le viste pacchetto mostrano solo gli elementi che corrispondono al filtro.
+
+Puoi usare sia il campo testuale sia i controlli GUI per comporre il filtro.
+
+### Operatori logici
+
+| Operatore | Descrizione | Esempio |
+|-----------|-------------|---------|
+| `and` / `&&` | Entrambe le condizioni devono essere vere | `dns and ip.dst == 8.8.8.8` |
+| `or` / `||` | Almeno una condizione deve essere vera | `http or https` |
+| `not` / `!` | Nega una condizione | `not arp` |
+| `( ... )` | Raggruppa condizioni | `(dns or http) and frame.len > 100` |
+
+### Operatori di confronto
+
+| Operatore | Descrizione | Esempio |
+|-----------|-------------|---------|
+| `==` | Valore uguale | `tcp.port == 443` |
+| `!=` | Valore diverso | `ip.src != 192.168.1.10` |
+| `contains` | Campo testuale che contiene una stringa | `info contains "Query"` |
+| `>` | Maggiore di | `frame.len > 1000` |
+| `>=` | Maggiore o uguale | `frame.number >= 500` |
+| `<` | Minore di | `frame.len < 128` |
+| `<=` | Minore o uguale | `frame.number <= 100` |
+
+### Campi supportati
+
+| Campo | Alias | Descrizione |
+|-------|-------|-------------|
+| `ip.addr` | `ip` | IP sorgente o destinazione |
+| `ip.src` | `src`, `src.ip` | IP sorgente |
+| `ip.dst` | `dst`, `dst.ip` | IP destinazione |
+| `tcp.port` | `port` | Porta sorgente o destinazione nei pacchetti TCP |
+| `udp.port` | `port` | Porta sorgente o destinazione nei pacchetti UDP |
+| `tcp.srcport` | `udp.srcport`, `src.port` | Porta sorgente |
+| `tcp.dstport` | `udp.dstport`, `dst.port` | Porta destinazione |
+| `frame.len` | `len`, `length` | Lunghezza del pacchetto in byte |
+| `frame.number` | `number`, `no` | Numero progressivo del pacchetto |
+| `frame.time` | `time` | Timestamp mostrato nella tabella |
+| `protocol` | `proto` | Protocollo rilevato |
+| `info` | - | Campo informativo del pacchetto |
+
+### Filtri protocollo rapidi
+
+Puoi scrivere direttamente il nome del protocollo senza campo e operatore:
+
+| Filtro | Significato |
+|--------|-------------|
+| `ip` | Pacchetti IP/IPv4/IPv6 |
+| `tcp` | Pacchetti TCP |
+| `udp` | Pacchetti UDP |
+| `dns` | DNS/mDNS |
+| `http` | HTTP/HTTP-Alt |
+| `https` | HTTPS/HTTPS-Alt |
+| `tls` | Traffico classificato come HTTPS/TLS |
+| `arp` | ARP |
+| `icmp` | ICMP |
+| `ssh` | SSH |
+
+### Esempi utili
+
+```text
+ip.addr == 8.8.8.8
+ip.src == 192.168.1.10 and dns
+tcp.port == 443
+udp.dstport == 53
+frame.len > 1000
+info contains "Query"
+(http or https) and not ip.dst == 192.168.1.1
+```
+
+---
+
+## 🛰️ Arricchimento IP esterno
+
+Il pulsante **Analizza con tool esterni** invia al backend gli IP osservati nel PCAP e recupera informazioni aggiuntive usando più fonti:
+
+| Fonte | Dati recuperati |
+|-------|-----------------|
+| RDAP/IANA | Registry, range IP, handle, nome risorsa, entità e note RDAP |
+| Team Cymru | ASN, prefisso BGP, registry, country code e AS name |
+| Reverse DNS | Nome PTR associato all'indirizzo IP |
+| ip-api | Paese, regione, città, ISP, organizzazione, timezone, proxy/VPN, mobile e hosting |
+
+Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengono scartati e **non vengono inviati a servizi esterni**. L'arricchimento è opt-in: avviene solo quando l'utente preme il pulsante dedicato.
+
+I risultati vengono usati per:
+- arricchire il popup **Top IP**;
+- colorare la **Mappa traffico IP**;
+- alimentare il pannello **Security**;
+- includere le informazioni esterne nell'export JSON.
+
+---
+
+## 🛡️ Security
+
+Il container **Security** segnala connessioni potenzialmente rischiose usando le informazioni raccolte localmente e tramite arricchimento esterno. Le segnalazioni sono euristiche e non sostituiscono feed di threat intelligence o blacklist dedicate.
+
+Le regole attuali considerano:
+- IP segnalati come proxy/VPN;
+- IP associati a hosting/datacenter;
+- traffico verso servizi non cifrati come HTTP, FTP, Telnet, SMTP, POP3 e IMAP;
+- servizi di amministrazione remota come SSH, RDP, VNC, SMB e Telnet;
+- servizi database come MySQL, PostgreSQL, Redis, MongoDB, MSSQL e Oracle;
+- porte sensibili;
+- volume di traffico elevato rispetto alle altre destinazioni;
+- destinazioni geolocalizzate fuori dal contesto locale.
+
+Ogni finding mostra IP, severità, score, ASN/paese se disponibili, volume, pacchetti e motivazioni concrete.
+
+---
+
 ## 📡 API Reference
 
 ### `GET /api/health`
@@ -267,7 +466,26 @@ Analizza un file PCAP e restituisce le statistiche.
   "protocols": [
     { "protocol": "HTTPS", "count": 4521, "bytes": 6234512, "percentage": 36.04 }
   ],
-  "top_src_ips": [ { "ip": "192.168.1.10", "count": 3201, "bytes": 4512000 } ],
+  "top_src_ips": [
+    {
+      "ip": "192.168.1.10",
+      "count": 3201,
+      "bytes": 4512000,
+      "protocols": ["TCP", "HTTPS"],
+      "hostnames": [],
+      "peers": ["93.184.216.34"],
+      "services": [
+        {
+          "service": "HTTPS",
+          "port": 443,
+          "protocol": "TCP",
+          "direction": "client",
+          "count": 1200,
+          "peers": ["93.184.216.34"]
+        }
+      ]
+    }
+  ],
   "top_dst_ips": [ ... ],
   "top_src_ports": [ { "port": 443, "service": "HTTPS", "count": 4521, "protocol": "TCP" } ],
   "top_dst_ports": [ ... ],
@@ -283,7 +501,8 @@ Analizza un file PCAP e restituisce le statistiche.
       "dst_ip": "8.8.8.8", "protocol": "DNS", "length": 74,
       "src_port": 52341, "dst_port": 53, "info": "DNS Query: google.com"
     }
-  ]
+  ],
+  "external_ip_info": {}
 }
 ```
 
@@ -298,13 +517,61 @@ Analizza un file PCAP e restituisce le statistiche.
 
 ---
 
+### `POST /api/enrich-ips`
+
+Arricchisce una lista di IP usando tool esterni. L'endpoint è usato dal pulsante **Analizza con tool esterni**.
+
+**Request:** `Content-Type: application/json`
+
+```json
+{
+  "ips": ["8.8.8.8", "1.1.1.1", "192.168.1.10"]
+}
+```
+
+**Risposta (200 OK):**
+
+```json
+{
+  "results": {
+    "8.8.8.8": {
+      "ip": "8.8.8.8",
+      "status": "enriched",
+      "sources": ["Reverse DNS", "Team Cymru", "RDAP/IANA", "ip-api"],
+      "reverse_dns": "dns.google",
+      "asn": "15169",
+      "as_name": "GOOGLE",
+      "bgp_prefix": "8.8.8.0/24",
+      "registry": "arin",
+      "country": "United States",
+      "country_code": "US",
+      "isp": "Google LLC",
+      "org": "Google Public DNS",
+      "proxy": false,
+      "hosting": true,
+      "errors": []
+    },
+    "192.168.1.10": {
+      "ip": "192.168.1.10",
+      "status": "skipped",
+      "reason": "Indirizzo privato, locale, riservato o non valido: non inviato a servizi esterni."
+    }
+  }
+}
+```
+
+**Note privacy:** il backend scarta gli IP non globali prima di qualunque chiamata esterna.
+
+---
+
 ## 📁 Struttura del progetto
 
 ```
 pcapcaper/
 ├── backend/
-│   ├── main.py          # Entry point FastAPI: endpoint /api/health e /api/analyze
+│   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
 │   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
+│   ├── external_enrichment.py # Arricchimento IP esterno opt-in
 │   ├── models.py        # Modelli Pydantic per request/response
 │   ├── requirements.txt # Dipendenze Python
 │   └── Dockerfile       # Immagine Docker del backend
@@ -317,17 +584,23 @@ pcapcaper/
 │   │   ├── types/
 │   │   │   └── analysis.ts             # Tipi TypeScript (mirror dei modelli Python)
 │   │   ├── utils/
-│   │   │   └── format.ts               # Formattazione (byte, durata, colori)
+│   │   │   ├── format.ts               # Formattazione (byte, durata, colori)
+│   │   │   └── packetFilters.ts        # Parser filtri stile Wireshark
 │   │   └── components/
 │   │       ├── FileUpload.tsx          # Area drag & drop per il caricamento
 │   │       ├── Dashboard.tsx           # Layout del dashboard (contenitore)
 │   │       ├── SummaryCards.tsx        # 6 card metriche principali
+│   │       ├── PacketFilters.tsx       # Filtri testuali e GUI stile Wireshark
 │   │       ├── ProtocolChart.tsx       # Donut chart + tabella protocolli
-│   │       ├── TopIPsChart.tsx         # Bar chart IP sorgente/destinazione
+│   │       ├── TopIPsChart.tsx         # Bar chart IP + popup servizi e dati esterni
+│   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
+│   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
 │   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
 │   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
 │   │       ├── ConversationsTable.tsx  # Tabella conversazioni ordinabile
-│   │       └── PacketTable.tsx         # Lista pacchetti con ricerca e paginazione
+│   │       ├── PacketTable.tsx         # Lista pacchetti con ricerca e paginazione
+│   │       ├── PacketDetailModal.tsx   # Inspector pacchetto Wireshark-style
+│   │       └── TracesView.tsx          # Vista tracce/flow
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.ts   # Proxy /api → backend (dev locale)
@@ -349,22 +622,30 @@ graph TD
     FU["FileUpload\nDrag & drop"]
     DB["Dashboard\nLayout container"]
     SC["SummaryCards\n6 metriche"]
+    PF["PacketFilters\nFiltro testo + GUI"]
     PC["ProtocolChart\nDonut + tabella"]
-    TI["TopIPsChart\nBar chart tab"]
+    TI["TopIPsChart\nBar chart + popup"]
+    SEC["SecurityPanel\nFinding euristici"]
+    MAP["WorldTrafficMap\nMappa paesi"]
     TL["TimelineChart\nArea chart"]
     TP["TopPortsChart\nBar chart tab"]
     CT["ConversationsTable\nOrdinabile"]
     PT["PacketTable\nRicerca + pagine"]
+    TV["TracesView\nFlow filtrati"]
 
     App -->|"nessun risultato"| FU
     App -->|"risultato disponibile"| DB
     DB --> SC
+    DB --> PF
     DB --> PC
     DB --> TI
+    DB --> SEC
+    DB --> MAP
     DB --> TL
     DB --> TP
     DB --> CT
     DB --> PT
+    DB --> TV
 
     style App fill:#1e293b,stroke:#6366f1,color:#f1f5f9
     style DB fill:#1e293b,stroke:#334155,color:#f1f5f9
@@ -388,4 +669,8 @@ GNU Affero General Public License v3.0 — vedi [LICENSE](LICENSE) per i dettagl
 
 ---
 
-*PCAPCaper — Open Source PCAP Analyzer*
+*PCAPCaper - Open Source PCAP Analyzer*
+
+*(C) Antonio Maulucci - 2026*
+
+GitHub: [myblacksloth](https://github.com/myblacksloth)
