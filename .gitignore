@@ -5,6 +5,7 @@
 __pycache__/
 
 
+*.sh.txt
 
 package-lock.json
 volumes/

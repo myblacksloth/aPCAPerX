@@ -10,6 +10,7 @@
 
 ![](./stuff/i/SCR-20260425-rwmv.png)
 
+![](./stuff/i/SCR-20260508-pdch.png)
 
 # PCAPCaper 🔍
 
@@ -24,6 +25,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [✨ Funzionalità](#-funzionalità)
   - [Screenshot](#screenshot)
     - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
+    - [Mappa degli indirizzi IP](#mappa-degli-indirizzi-ip)
   - [🏗️ Architettura](#️-architettura)
   - [🧩 Stack tecnologico](#-stack-tecnologico)
     - [Backend](#backend)
@@ -81,6 +83,10 @@ Formati supportati: `.pcap`, `.pcapng`, `.cap` · Limite dimensione: **100 MB**
 ![](./stuff/i/SCR-20260508-oyca.png)
 
 ![](./stuff/i/SCR-20260508-oypg.png)
+
+### Mappa degli indirizzi IP
+
+![](./stuff/i/SCR-20260508-pbqj.png)
 
 <!--
 ![](./stuff/i/.png)
