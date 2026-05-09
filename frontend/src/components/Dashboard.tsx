@@ -39,6 +39,7 @@ import HTTPAnalysisView from './HTTPAnalysisView'
 import TLSAnalysisView from './TLSAnalysisView'
 import HostsView from './HostsView'
 import NetworkGraphView from './NetworkGraphView'
+import AIChatWidget from './AIChatWidget'
 import { parsePacketFilter } from '../utils/packetFilters'
 
 type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
@@ -444,6 +445,8 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           </div>
         </div>
       )}
+
+      <AIChatWidget result={result} />
     </div>
   )
 }

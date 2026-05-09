@@ -6,12 +6,60 @@
 # Servizi:
 #   backend   → FastAPI + Scapy, porta 8000
 #   frontend  → React (build Nginx), porta 3000
+#   ai        → Ollama model server, rete interna soltanto
 #
 # Rete interna: i due container comunicano tramite la rete "pcapcaper_net".
 # Nginx risolve l'hostname "backend" automaticamente grazie a Docker DNS.
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
+
+  # ── Servizio AI leggero (Ollama) ───────────────────────────────────────
+  ai:
+    image: ollama/ollama:latest
+    container_name: pcapcaper-ai
+    restart: unless-stopped
+
+    # The model is selected through .env and must be pulled once, for example:
+    # docker compose exec ai ollama pull qwen2.5:0.5b
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+
+    # Conservative defaults for Raspberry Pi 5 / 4 GB RAM. Increase these
+    # values on stronger hardware if you want faster local inference.
+    cpus: "1.0"
+    mem_limit: 3g
+
+    volumes:
+      - ollama_models:/root/.ollama
+
+    networks:
+      - pcapcaper_net
+
+    healthcheck:
+      test: ["CMD-SHELL", "OLLAMA_HOST=http://127.0.0.1:11434 ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # ── Download automatico del modello configurato ───────────────────────
+  ai-model-pull:
+    image: python:3.11-slim
+    container_name: pcapcaper-ai-model-pull
+    restart: "no"
+    env_file:
+      - .env
+    command: ["python", "/opt/pcapcaper/pull_ollama_model.py"]
+    volumes:
+      - ./stuff/scripts/pull_ollama_model.py:/opt/pcapcaper/pull_ollama_model.py:ro
+    depends_on:
+      ai:
+        condition: service_healthy
+    networks:
+      - pcapcaper_net
 
   # ── Servizio Backend (FastAPI) ──────────────────────────────────────────
   backend:
@@ -39,6 +87,10 @@ services:
     # Connette il container alla rete interna
     networks:
       - pcapcaper_net
+
+    depends_on:
+      ai:
+        condition: service_healthy
 
     # Health-check: verifica che il backend risponda prima che il frontend parta
     healthcheck:
@@ -75,3 +127,6 @@ services:
 networks:
   pcapcaper_net:
     driver: bridge
+
+volumes:
+  ollama_models:
