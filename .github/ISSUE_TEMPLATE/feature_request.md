@@ -1,41 +1,41 @@
 ---
 name: Feature request
-about: Proponi una nuova funzionalita o un miglioramento
+about: Suggest a new feature or improvement
 title: "[Feature]: "
 labels: ["enhancement"]
 assignees: []
 ---
 
-## Obiettivo
+## Goal
 
-Quale problema vuoi risolvere o quale workflow vuoi migliorare?
+What problem do you want to solve, or which workflow do you want to improve?
 
-## Proposta
+## Proposal
 
-Descrivi la soluzione desiderata.
+Describe the desired solution.
 
-## Alternative considerate
+## Alternatives considered
 
-Hai valutato approcci diversi?
+Did you evaluate other approaches?
 
-## Area interessata
+## Impacted area
 
 - [ ] Backend / API
-- [ ] Analisi PCAP
+- [ ] PCAP analysis
 - [ ] Frontend / UI
-- [ ] Filtri pacchetto
-- [ ] Arricchimento IP esterno
+- [ ] Packet filters
+- [ ] External IP enrichment
 - [ ] Security
-- [ ] Documentazione
+- [ ] Documentation
 - [ ] Docker / deployment
 
-## Impatto su privacy o servizi esterni
+## Privacy or external service impact
 
-La funzionalita invia IP, metadati o altri dati a servizi esterni?
+Does this feature send IPs, metadata, or other data to external services?
 
 - [ ] No
-- [ ] Si, descrivere cosa viene inviato e quando
+- [ ] Yes, describe what is sent and when
 
-## Contesto aggiuntivo
+## Additional context
 
-Link, screenshot, esempi o note operative.
+Links, screenshots, examples, or operational notes.

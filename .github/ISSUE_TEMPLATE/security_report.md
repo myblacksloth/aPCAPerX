@@ -1,40 +1,40 @@
 ---
 name: Security report
-about: Segnala un possibile problema di sicurezza
+about: Report a potential security issue
 title: "[Security]: "
 labels: ["security"]
 assignees: []
 ---
 
-## Nota
+## Note
 
-Se il problema permette accesso non autorizzato, esfiltrazione dati, esecuzione codice o esposizione di PCAP sensibili, evita dettagli pubblici sfruttabili. Apri una issue minimale e chiedi un canale privato di contatto.
+If the issue may allow unauthorized access, data exfiltration, code execution, or exposure of sensitive PCAP data, avoid publicly exploitable details. Open a minimal issue and request a private contact channel.
 
-## Sintesi
+## Summary
 
-Descrivi il problema a livello alto.
+Describe the issue at a high level.
 
-## Impatto potenziale
+## Potential impact
 
-- [ ] Esposizione dati
-- [ ] Esecuzione codice
-- [ ] SSRF / chiamate esterne non previste
-- [ ] Bypass controlli upload
-- [ ] XSS / problema frontend
-- [ ] Altro
+- [ ] Data exposure
+- [ ] Code execution
+- [ ] SSRF / unexpected external calls
+- [ ] Upload control bypass
+- [ ] XSS / frontend issue
+- [ ] Other
 
-## Componenti coinvolti
+## Involved components
 
-- [ ] Backend FastAPI
-- [ ] Analisi PCAP / Scapy
-- [ ] Frontend React
-- [ ] Arricchimento IP esterno
+- [ ] FastAPI backend
+- [ ] PCAP / Scapy analysis
+- [ ] React frontend
+- [ ] External IP enrichment
 - [ ] Docker / Nginx
 
-## Riproduzione controllata
+## Controlled reproduction
 
-Fornisci passi minimi senza includere dati sensibili.
+Provide minimal steps without including sensitive data.
 
-## Mitigazione suggerita
+## Suggested mitigation
 
-Se hai gia una proposta di fix, descrivila.
+If you already have a proposed fix, describe it.
