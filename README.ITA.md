@@ -191,6 +191,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
+    - [`POST /api/ai-chat`](#post-apiai-chat)
     - [`POST /api/enrich-ips`](#post-apienrich-ips)
     - [`POST /api/security-analysis`](#post-apisecurity-analysis)
     - [`POST /api/dns-reputation`](#post-apidns-reputation)
@@ -222,6 +223,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
 | **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
+| **Assistente IA tecnico** | Chat flottante con modello Ollama locale. Il backend analizza il report sanitizzato completo e invia al modello solo evidenze tecniche limitate |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Dettaglio pacchetti paginato; il limite JSON è configurabile con `PCAPCAPER_MAX_PACKET_LIST` |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
@@ -546,6 +548,24 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
 | `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+| `PCAPCAPER_AI_ENABLED` | `1` | Abilita l'assistente IA tecnico locale |
+| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | URL API interno di Ollama |
+| `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Modello leggero predefinito |
+| `PCAPCAPER_AI_TIMEOUT_SECONDS` | `360` | Tempo massimo per una risposta del modello |
+| `PCAPCAPER_AI_MAX_PACKETS` | `40` | Pacchetti selezionati massimi inclusi nelle evidenze IA |
+| `PCAPCAPER_AI_NUM_CTX` | `2048` | Dimensione contesto Ollama usata dall'assistente |
+| `PCAPCAPER_AI_NUM_PREDICT` | `384` | Token massimi generati per risposta |
+
+### Assistente IA tecnico
+
+La chat IA ora è divisa in due livelli:
+
+- il widget mantiene la conversazione e invia la domanda dell'utente;
+- il backend costruisce un contesto tecnico analizzando il report sanitizzato completo: summary, protocolli, top IP, porte, conversazioni, flow 5-tuple, DNS, HTTP, TLS, host, arricchimento e metadati dei pacchetti selezionati.
+
+Il modello non riceve raw bytes né l'albero completo dei layer Scapy. Riceve un JSON tecnico limitato e costruito sull'intera analisi, più una piccola lista di pacchetti pertinenti alla domanda. In questo modo l'assistente è più tecnico senza tentare di caricare tutto il PCAP dentro un modello locale piccolo.
+
+L'endpoint `/api/ai-chat` restituisce risposta, pacchetti selezionati e metadati del contesto tecnico usato. Se il modello supera `PCAPCAPER_AI_TIMEOUT_SECONDS`, il backend restituisce `504` e la chat conserva la cronologia.
 
 ### Storage temporaneo
 
@@ -1179,6 +1199,27 @@ Analizza un file PCAP e restituisce le statistiche.
 | 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
+
+---
+
+### `POST /api/ai-chat`
+
+Invia una domanda all'assistente IA locale. Il frontend include metadati compatti dei pacchetti e il report di analisi sanitizzato; il backend estrae un contesto tecnico limitato prima di chiamare Ollama.
+
+**Request:** `Content-Type: application/json`
+
+```json
+{
+  "question": "Riassumi le attivita DNS sospette",
+  "packets": [{ "number": 1, "src_ip": "192.168.1.10", "dst_ip": "8.8.8.8", "protocol": "DNS" }],
+  "analysis": { "summary": {}, "flows": [], "dns": {}, "http": {}, "tls": {}, "hosts": {} },
+  "history": [{ "role": "user", "content": "Cosa e successo?" }]
+}
+```
+
+**Nota privacy:** i byte grezzi dei pacchetti e gli alberi completi dei layer decodificati non vengono inviati al modello. Il backend inoltra solo evidenze tecniche limitate come flow, metadati DNS/HTTP/TLS, riepiloghi host e riferimenti ai pacchetti selezionati.
+
+**Timeout:** se il modello supera `PCAPCAPER_AI_TIMEOUT_SECONDS`, il backend restituisce `504` e interrompe la richiesta.
 
 ---
 

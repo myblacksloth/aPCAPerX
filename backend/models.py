@@ -6,7 +6,7 @@ dal backend al frontend. Pydantic garantisce la validazione automatica
 dei tipi e la serializzazione JSON.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -783,6 +783,44 @@ class PacketEntry(BaseModel):
     # Dati per l'inspector Wireshark-style
     raw_hex: Optional[str] = None          # byte grezzi come stringa hex
     layers: List[LayerInfo] = Field(default_factory=list)  # albero dei layer protocollari
+
+
+class AIChatMessage(BaseModel):
+    """Single chat message exchanged with the lightweight AI assistant."""
+    role: str
+    content: str
+
+
+class AIChatRequest(BaseModel):
+    """Request used by the chat widget to ask about the analyzed capture."""
+    question: str
+    packets: List[PacketEntry] = Field(default_factory=list)
+    history: List[AIChatMessage] = Field(default_factory=list)
+    # Sanitized full-report context. The frontend removes raw bytes and layer
+    # trees before sending it; the backend extracts technical evidence from it.
+    analysis: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AISelectedPacket(BaseModel):
+    """Compact packet representation actually sent to the model."""
+    number: int
+    timestamp: str
+    src: Optional[str] = None
+    dst: Optional[str] = None
+    protocol: str
+    length: int
+    info: str
+    score: int
+
+
+class AIChatResponse(BaseModel):
+    """Response returned by the backend after querying the model service."""
+    answer: str
+    model: str
+    selected_packets: List[AISelectedPacket] = Field(default_factory=list)
+    selected_packet_count: int
+    technical_context: Dict[str, Any] = Field(default_factory=dict)
+    timed_out: bool = False
 
 
 class AnalysisResult(BaseModel):

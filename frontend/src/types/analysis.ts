@@ -204,6 +204,7 @@ export interface AIChatResponse {
   model: string
   selected_packets: AISelectedPacket[]
   selected_packet_count: number
+  technical_context: Record<string, unknown>
   timed_out: boolean
 }
 
