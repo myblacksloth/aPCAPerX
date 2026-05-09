@@ -6,7 +6,7 @@ dal backend al frontend. Pydantic garantisce la validazione automatica
 dei tipi e la serializzazione JSON.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -792,10 +792,13 @@ class AIChatMessage(BaseModel):
 
 
 class AIChatRequest(BaseModel):
-    """Request used by the frontend chat widget to ask about selected traffic."""
+    """Request used by the chat widget to ask about the analyzed capture."""
     question: str
     packets: List[PacketEntry] = Field(default_factory=list)
     history: List[AIChatMessage] = Field(default_factory=list)
+    # Sanitized full-report context. The frontend removes raw bytes and layer
+    # trees before sending it; the backend extracts technical evidence from it.
+    analysis: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AISelectedPacket(BaseModel):
@@ -816,6 +819,7 @@ class AIChatResponse(BaseModel):
     model: str
     selected_packets: List[AISelectedPacket] = Field(default_factory=list)
     selected_packet_count: int
+    technical_context: Dict[str, Any] = Field(default_factory=dict)
     timed_out: bool = False
 
 
