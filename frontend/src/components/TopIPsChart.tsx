@@ -1,9 +1,9 @@
 /**
- * Componente per la visualizzazione degli indirizzi IP più attivi.
+ * Component for rendering degli IP addresses most active.
  *
  * Mostra due tab separati:
- *   - "Sorgenti" → IP che hanno inviato il maggior numero di pacchetti
- *   - "Destinazioni" → IP che hanno ricevuto il maggior numero di pacchetti
+ *   - "Sorgenti" → IP che hanno inviato il maggior numero di packets
+ *   - "Destinazioni" → IP che hanno ricevuto il maggior numero di packets
  *
  * Per ogni tab viene renderizzato un grafico a barre orizzontali (Recharts)
  * che permette di confrontare visivamente i volumi di traffico.
@@ -29,7 +29,7 @@ function IPTooltip({ active, payload, label }: { active?: boolean; payload?: Arr
   return (
     <div className="bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm shadow-xl">
       <p className="font-mono text-white mb-1 text-xs">{label}</p>
-      <p className="text-slate-300">{payload[0].value.toLocaleString('it-IT')} pacchetti</p>
+      <p className="text-slate-300">{payload[0].value.toLocaleString('it-IT')} packets</p>
       <p className="text-slate-400">{formatBytes(payload[0].payload.bytes)}</p>
       {services.length > 0 && (
         <p className="text-slate-300 mt-2 text-xs">
@@ -40,7 +40,7 @@ function IPTooltip({ active, payload, label }: { active?: boolean; payload?: Arr
   )
 }
 
-// Tick dell'asse Y personalizzato: mostra l'IP in font monospace
+// Tick dell'asse Y personalizzato: shows l'IP in font monospace
 function IPTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
   if (!x || !y || !payload) return null
   return (
@@ -59,7 +59,7 @@ function IPTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: 
 }
 
 function directionLabel(direction: string) {
-  if (direction === 'server') return 'servizio esposto'
+  if (direction === 'server') return 'exposed service'
   if (direction === 'client') return 'client'
   return 'endpoint'
 }
@@ -81,7 +81,7 @@ function getPeers(ip: IPEntry) {
 }
 
 function externalBadge(value: boolean | null | undefined, label: string) {
-  // Mostra solo indicatori realmente disponibili dai servizi esterni.
+  // Shows only indicators actually available from external services.
   if (value === null || value === undefined) return null
   return (
     <span className={`rounded px-2 py-1 text-[11px] font-medium ${
@@ -115,14 +115,14 @@ function IPDetailsModal({
       >
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div>
-            <h3 className="text-base font-semibold text-slate-100">Dettagli servizi IP</h3>
-            <p className="text-xs text-slate-400">{title} - {ips.length} indirizzi analizzati</p>
+            <h3 className="text-base font-semibold text-slate-100">IP service details</h3>
+            <p className="text-xs text-slate-400">{title} - {ips.length} analyzed addresses</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-            aria-label="Chiudi dettagli servizi IP"
+            aria-label="Close IP service details"
           >
             <X size={18} />
           </button>
@@ -136,7 +136,7 @@ function IPDetailsModal({
                   <div>
                     <p className="font-mono text-sm font-semibold text-white">{ip.ip}</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      {formatCount(ip.count)} pacchetti - {formatBytes(ip.bytes)}
+                      {formatCount(ip.count)} packets - {formatBytes(ip.bytes)}
                     </p>
                   </div>
                   <div className="flex flex-wrap justify-end gap-1.5">
@@ -150,7 +150,7 @@ function IPDetailsModal({
 
                 {getHostnames(ip).length > 0 && (
                   <div className="mt-3">
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Nomi DNS osservati</p>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Observed DNS names</p>
                     <div className="flex flex-wrap gap-1.5">
                       {getHostnames(ip).map((hostname) => (
                         <span key={hostname} className="rounded bg-emerald-500/10 px-2 py-1 font-mono text-[11px] text-emerald-200">
@@ -166,12 +166,12 @@ function IPDetailsModal({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-brand-100">
-                          Informazioni da tool esterni
+                          External-tool information
                         </p>
                         <p className="mt-1 text-xs text-slate-400">
                           {ip.external.status === 'enriched'
-                            ? `Fonti: ${ip.external.sources.join(', ')}`
-                            : ip.external.reason ?? 'Nessun dato esterno disponibile'}
+                            ? `Sources: ${ip.external.sources.join(', ')}`
+                            : ip.external.reason ?? 'No external data available'}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -186,10 +186,10 @@ function IPDetailsModal({
                         {ip.external.reverse_dns && <p><span className="text-slate-500">Reverse DNS:</span> {ip.external.reverse_dns}</p>}
                         {ip.external.asn && <p><span className="text-slate-500">ASN:</span> AS{ip.external.asn}</p>}
                         {ip.external.as_name && <p><span className="text-slate-500">AS name:</span> {ip.external.as_name}</p>}
-                        {ip.external.bgp_prefix && <p><span className="text-slate-500">Prefisso BGP:</span> {ip.external.bgp_prefix}</p>}
+                        {ip.external.bgp_prefix && <p><span className="text-slate-500">BGP prefix:</span> {ip.external.bgp_prefix}</p>}
                         {ip.external.registry && <p><span className="text-slate-500">Registry:</span> {ip.external.registry}</p>}
-                        {ip.external.allocated && <p><span className="text-slate-500">Allocato:</span> {ip.external.allocated}</p>}
-                        {ip.external.country && <p><span className="text-slate-500">Paese:</span> {ip.external.country} {ip.external.country_code ? `(${ip.external.country_code})` : ''}</p>}
+                        {ip.external.allocated && <p><span className="text-slate-500">Allocated:</span> {ip.external.allocated}</p>}
+                        {ip.external.country && <p><span className="text-slate-500">Country:</span> {ip.external.country} {ip.external.country_code ? `(${ip.external.country_code})` : ''}</p>}
                         {(ip.external.region || ip.external.city) && <p><span className="text-slate-500">Area:</span> {[ip.external.city, ip.external.region].filter(Boolean).join(', ')}</p>}
                         {ip.external.timezone && <p><span className="text-slate-500">Timezone:</span> {ip.external.timezone}</p>}
                         {ip.external.isp && <p><span className="text-slate-500">ISP:</span> {ip.external.isp}</p>}
@@ -204,7 +204,7 @@ function IPDetailsModal({
 
                     {ip.external.rdap_entities.length > 0 && (
                       <p className="mt-3 text-xs text-slate-400">
-                        Entita RDAP: <span className="text-slate-300">{ip.external.rdap_entities.join(', ')}</span>
+                        RDAP entities: <span className="text-slate-300">{ip.external.rdap_entities.join(', ')}</span>
                       </p>
                     )}
 
@@ -225,9 +225,9 @@ function IPDetailsModal({
                         <tr className="border-b border-slate-700">
                           <th className="pb-2 font-medium">Servizio</th>
                           <th className="pb-2 font-medium">Porta</th>
-                          <th className="pb-2 font-medium">Protocollo</th>
+                          <th className="pb-2 font-medium">Protocol</th>
                           <th className="pb-2 font-medium">Ruolo</th>
-                          <th className="pb-2 text-right font-medium">Pacchetti</th>
+                          <th className="pb-2 text-right font-medium">Packets</th>
                           <th className="pb-2 font-medium">Peer principali</th>
                         </tr>
                       </thead>
@@ -251,14 +251,14 @@ function IPDetailsModal({
                     </table>
                   ) : (
                     <p className="rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
-                      Nessun servizio TCP/UDP identificato per questo indirizzo. Sono disponibili solo protocolli di rete o traffico senza porte.
+                      No TCP/UDP service was identified for this address. Only network protocols or traffic without ports are available.
                     </p>
                   )}
                 </div>
 
                 {getPeers(ip).length > 0 && (
                   <p className="mt-3 text-xs text-slate-500">
-                    Peer osservati: <span className="font-mono text-slate-400">{getPeers(ip).join(', ')}</span>
+                    Observed peers: <span className="font-mono text-slate-400">{getPeers(ip).join(', ')}</span>
                   </p>
                 )}
               </section>
@@ -272,7 +272,7 @@ function IPDetailsModal({
 }
 
 export default function TopIPsChart({ result }: TopIPsChartProps) {
-  // Stato della tab attiva: 0 = sorgenti, 1 = destinazioni
+  // Active tab state: 0 = sources, 1 = destinations
   const [tab, setTab] = useState<0 | 1>(0)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -281,7 +281,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
     { label: 'IP Destinazione', data: result.top_dst_ips.slice(0, 10) },
   ]
 
-  // I dati correnti della tab selezionata
+  // I data correnti della tab selezionata
   const currentData = tabs[tab].data
   const openDetails = () => {
     if (currentData.length > 0) setDetailsOpen(true)
@@ -299,13 +299,13 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
       }}
       role="button"
       tabIndex={0}
-      aria-label="Apri dettagli servizi degli IP principali"
+      aria-label="Open service details for top IPs"
     >
       {/* ── Header con tab selector ──────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-slate-200">Top IP</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Clicca per vedere servizi, DNS e peer</p>
+          <p className="mt-0.5 text-xs text-slate-500">Click to view services, DNS, and peers</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-slate-700 rounded-lg p-0.5 gap-0.5">
@@ -341,7 +341,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
             margin={{ left: 10, right: 40, top: 0, bottom: 0 }}
             onClick={openDetails}
           >
-            {/* Asse Y: indirizzi IP (il valore categorico) */}
+            {/* Asse Y: IP addresses (il valore categorico) */}
             <YAxis
               type="category"
               dataKey="ip"
@@ -350,7 +350,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
               axisLine={false}
               tickLine={false}
             />
-            {/* Asse X: numero di pacchetti (il valore numerico) */}
+            {/* Asse X: numero di packets (il valore numerico) */}
             <XAxis
               type="number"
               tick={{ fill: '#64748b', fontSize: 10 }}
@@ -369,7 +369,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
         </ResponsiveContainer>
       ) : (
         <p className="text-slate-500 text-sm text-center py-8">
-          Nessun indirizzo IP trovato in questa categoria
+          No IP address found in this category
         </p>
       )}
       <button
@@ -381,7 +381,7 @@ export default function TopIPsChart({ result }: TopIPsChartProps) {
         disabled={currentData.length === 0}
         className="mt-4 w-full rounded-lg border border-brand-500/40 bg-brand-500/15 px-4 py-2.5 text-sm font-semibold text-brand-100 transition-colors hover:bg-brand-500/25 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
       >
-        Visualizza dettagli servizi IP
+        View IP service details
       </button>
       {detailsOpen && (
         <IPDetailsModal

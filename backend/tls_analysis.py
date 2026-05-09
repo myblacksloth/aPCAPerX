@@ -1,11 +1,11 @@
 """
-Analisi SSL/TLS basata sui soli metadati osservabili.
+Analysis SSL/TLS basata sui soli metadata osservabili.
 
-Il modulo non decifra traffico applicativo e non richiede chiavi private. Legge
+This module does not decrypt application traffic and does not require private keys. It reads
 solo record TLS presenti nei payload TCP e prova a estrarre ClientHello,
 ServerHello e certificato leaf quando l'handshake e presente nel PCAP. Se i
-record sono frammentati su piu segmenti TCP, l'entry viene marcata come parziale
-e il parser conserva solo i campi effettivamente osservati.
+records are fragmented across multiple TCP segments, the entry is marked as partial
+and the parser keeps only fields actually observed.
 """
 
 import hashlib
@@ -27,7 +27,7 @@ TLS_VERSION_NAMES = {
     0x0304: "TLS 1.3",
 }
 
-# Mappa ridotta ma utile delle cipher suite piu comuni. Se una suite non e in
+# Small but useful map of the most common cipher suites. If a suite is not in
 # mappa, il codice esadecimale resta comunque disponibile nel report.
 CIPHER_NAMES = {
     0x1301: "TLS_AES_128_GCM_SHA256",
@@ -58,7 +58,7 @@ class _TLSRecord:
 
 @dataclass
 class _ExtensionInfo:
-    """Metadati estratti dalle estensioni TLS."""
+    """Metadata estratti dalle estensioni TLS."""
 
     extension_ids: List[int] = field(default_factory=list)
     sni: Optional[str] = None
@@ -118,7 +118,7 @@ def _fingerprint_ja3(parts: List[str]) -> Tuple[str, str]:
 
 
 def _extract_records(payload: bytes) -> List[_TLSRecord]:
-    """Estrae record TLS completi dal payload TCP osservato."""
+    """Extracts complete TLS records from the observed TCP payload."""
     records: List[_TLSRecord] = []
     offset = 0
 
@@ -132,7 +132,7 @@ def _extract_records(payload: bytes) -> List[_TLSRecord]:
         record_start = offset + 5
         record_end = record_start + length
         if record_end > len(payload):
-            # Il record prosegue in un segmento non disponibile in questo payload.
+            # The record continues in a segment not available in this payload.
             records.append(_TLSRecord(content_type, version, payload[record_start:], partial=True))
             break
 
@@ -203,7 +203,7 @@ def _parse_extensions(data: bytes, *, server_hello: bool = False) -> _ExtensionI
                 cursor += 1 + proto_len
 
         elif ext_type == 43 and ext_data:
-            # supported_versions: nel ClientHello e lista, nel ServerHello e valore singolo.
+            # supported_versions: a list in ClientHello, a single value in ServerHello.
             if server_hello and len(ext_data) >= 2:
                 info.selected_version = _u16(ext_data, 0)
             elif len(ext_data) >= 3:
@@ -214,7 +214,7 @@ def _parse_extensions(data: bytes, *, server_hello: bool = False) -> _ExtensionI
                     cursor += 2
 
         elif ext_type == 10 and len(ext_data) >= 2:
-            # supported_groups / elliptic_curves usato nella stringa JA3.
+            # supported_groups / elliptic_curves used in the JA3 string.
             total = _u16(ext_data, 0)
             cursor = 2
             while cursor + 2 <= min(len(ext_data), 2 + total):
@@ -232,7 +232,7 @@ def _parse_extensions(data: bytes, *, server_hello: bool = False) -> _ExtensionI
 
 
 def _parse_client_hello(body: bytes) -> Optional[Dict]:
-    """Estrae metadati dal ClientHello."""
+    """Estrae metadata dal ClientHello."""
     try:
         if len(body) < 42:
             return None
@@ -275,7 +275,7 @@ def _parse_client_hello(body: bytes) -> Optional[Dict]:
 
 
 def _parse_server_hello(body: bytes) -> Optional[Dict]:
-    """Estrae metadati dal ServerHello."""
+    """Estrae metadata dal ServerHello."""
     try:
         if len(body) < 38:
             return None
@@ -336,7 +336,7 @@ def _parse_cert_time(value: Optional[str]) -> Optional[datetime]:
 
 
 def _decode_certificate(der: bytes) -> Dict:
-    """Estrae metadati X.509 dal certificato DER leaf."""
+    """Estrae metadata X.509 dal certificato DER leaf."""
     result = {
         "sha256": hashlib.sha256(der).hexdigest(),
         "subject": None,
@@ -349,8 +349,8 @@ def _decode_certificate(der: bytes) -> Dict:
 
     try:
         pem = ssl.DER_cert_to_PEM_cert(der)
-        # La stdlib espone il decoder X.509 solo tramite path file. Il file
-        # temporaneo contiene il certificato gia presente nel PCAP e viene
+        # The stdlib exposes the X.509 decoder only through a file path. The file
+        # temporary file contains the certificate already present in the PCAP and is
         # rimosso subito dopo la lettura.
         with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=True) as handle:
             handle.write(pem)
@@ -396,12 +396,12 @@ def _extract_certificate_chain(body: bytes) -> List[bytes]:
                     cursor += 2 + ext_len
         return certs
 
-    # Formato TLS 1.2: certificate_list immediatamente all'inizio del body.
+    # TLS format 1.2: certificate_list immediately at the beginning of the body.
     candidates = parse_list(body)
     if candidates:
         return candidates
 
-    # Formato TLS 1.3: context length + context + certificate_list.
+    # TLS format 1.3: context length + context + certificate_list.
     if body:
         context_len = body[0]
         start = 1 + context_len
@@ -412,7 +412,7 @@ def _extract_certificate_chain(body: bytes) -> List[bytes]:
 
 
 class TLSAnalyzer:
-    """Accumulatore streaming per metadati TLS osservabili."""
+    """Accumulatore streaming per metadata TLS osservabili."""
 
     def __init__(self) -> None:
         # Entry indicizzate dal flow direzionale client -> server.
@@ -435,7 +435,7 @@ class TLSAnalyzer:
         dst_port: Optional[int],
         payload: Optional[bytes],
     ) -> None:
-        """Analizza record TLS contenuti in un payload TCP."""
+        """Analyzes TLS records contained in a TCP payload."""
         if not src_ip or not dst_ip or src_port is None or dst_port is None or not payload:
             return
 
@@ -557,14 +557,14 @@ class TLSAnalyzer:
             entry.anomalies.append("certificato self-signed")
 
     def _finalize_anomalies(self, dns_hostnames: Optional[Dict[str, set]]) -> None:
-        """Aggiunge anomalie deducibili dopo aver osservato tutta la cattura."""
+        """Adds anomalies inferable after observing the whole capture."""
         for entry in self._connections.values():
             if not entry.sni:
                 entry.anomalies.append("SNI mancante")
             if entry.tls_version in ("SSL 3.0", "TLS 1.0", "TLS 1.1"):
                 entry.anomalies.append("TLS vecchio")
 
-            # Confronto approssimato tra SNI e nomi DNS osservati per lo stesso IP.
+            # Approximate comparison between SNI and DNS names observed for the same IP.
             hostnames = sorted((dns_hostnames or {}).get(entry.server_ip or "", set()))
             if entry.sni and hostnames:
                 normalized = entry.sni.lower().rstrip(".")
@@ -572,7 +572,7 @@ class TLSAnalyzer:
                 if not matched:
                     entry.anomalies.append("mismatch approssimato DNS/SNI")
 
-            # Rimuove duplicati mantenendo l'ordine per una UI piu leggibile.
+            # Removes duplicates while preserving order for a more readable UI.
             entry.anomalies = list(dict.fromkeys(entry.anomalies))
 
     def to_result(self, dns_hostnames: Optional[Dict[str, set]] = None) -> TLSAnalysisResult:
@@ -602,10 +602,10 @@ class TLSAnalyzer:
             top_issuers=[TLSTopEntry(value=value, count=count) for value, count in self._issuer_counter.most_common(30)],
             top_versions=[TLSTopEntry(value=value, count=count) for value, count in self._version_counter.most_common(20)],
             limitations=[
-                "Non decifra il traffico TLS e non recupera contenuti applicativi.",
-                "Estrae solo metadati presenti nel handshake osservato nel PCAP.",
-                "Record TLS frammentati su piu segmenti TCP possono risultare parziali.",
+                "Does not decrypt TLS traffic and does not recover application content.",
+                "Extracts only metadata present in the handshake observed in the PCAP.",
+                "TLS records fragmented across multiple TCP segments may be partial.",
                 "Subject e issuer sono disponibili solo se il certificato e presente e decodificabile.",
-                "Il mismatch DNS/SNI e euristico e usa solo risposte DNS osservate nella cattura.",
+                "DNS/SNI mismatch is heuristic and uses only DNS responses observed in the capture.",
             ],
         )

@@ -3,7 +3,7 @@ import { X, ChevronDown, ChevronRight, ChevronLeft, ChevronRight as ChevronRight
 import type { PacketEntry, LayerInfo } from '../types/analysis'
 import { protocolColor } from '../utils/format'
 
-// ─── Nomi colore per i layer (diversi dal protocollo applicativo) ─────────────
+// ─── Nomi colore per i layer (diversi dal protocol applicativo) ─────────────
 
 const LAYER_COLORS: Record<string, string> = {
   'Ethernet II':                    '#94a3b8',
@@ -79,7 +79,7 @@ function LayerSection({ layer, defaultOpen }: { layer: LayerInfo; defaultOpen: b
       )}
 
       {open && layer.fields.length === 0 && (
-        <p className="px-4 py-2 text-xs text-slate-600 italic">Nessun campo disponibile</p>
+        <p className="px-4 py-2 text-xs text-slate-600 italic">No field available</p>
       )}
     </div>
   )
@@ -307,7 +307,7 @@ export default function PacketDetailModal({
                 ))
               : (
                 <div className="flex items-center justify-center h-32 text-slate-600 text-sm">
-                  Dettagli layer non disponibili per questo pacchetto
+                  Layer details are not available for this packet
                 </div>
               )
             }
@@ -324,7 +324,7 @@ export default function PacketDetailModal({
               ? <HexDump hex={packet.raw_hex} />
               : (
                 <div className="flex items-center justify-center flex-1 text-slate-600 text-sm">
-                  Dati grezzi non disponibili
+                  Dati grezzi not available
                 </div>
               )
             }

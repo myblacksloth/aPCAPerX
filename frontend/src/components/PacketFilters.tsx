@@ -1,8 +1,8 @@
 /**
- * Scheda filtri in stile Wireshark.
+ * Wireshark-style filter panel.
  *
- * Offre sia un input testuale per chi conosce la sintassi, sia controlli GUI
- * per comporre rapidamente filtri sui campi piu comuni dei pacchetti.
+ * Provides both a text input for users who know the syntax and GUI controls
+ * to quickly compose filters on the most common packet fields.
  */
 import { useState } from 'react'
 import { Filter, Plus, RotateCcw, X } from 'lucide-react'
@@ -40,7 +40,7 @@ export default function PacketFilters({
   const [joiner, setJoiner] = useState<'and' | 'or'>('and')
 
   const addGuiFilter = () => {
-    // Aggiunge il filtro costruito via GUI alla query esistente.
+    // Adds the GUI-built filter to the existing query.
     const cleanValue = value.trim()
     if (!cleanValue) return
 
@@ -56,12 +56,12 @@ export default function PacketFilters({
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-brand-400" />
           <div>
-            <h2 className="text-base font-semibold text-slate-200">Filtri pacchetti</h2>
-            <p className="text-xs text-slate-500">Sintassi stile Wireshark applicata alle viste pacchetto</p>
+            <h2 className="text-base font-semibold text-slate-200">Packet filters</h2>
+            <p className="text-xs text-slate-500">Wireshark-style syntax applied to packet views</p>
           </div>
         </div>
         <div className="text-xs text-slate-500">
-          {filteredCount.toLocaleString('it-IT')} / {totalCount.toLocaleString('it-IT')} pacchetti
+          {filteredCount.toLocaleString('it-IT')} / {totalCount.toLocaleString('it-IT')} packets
         </div>
       </div>
 
@@ -71,7 +71,7 @@ export default function PacketFilters({
             type="text"
             value={filter}
             onChange={(event) => onFilterChange(event.target.value)}
-            placeholder='Esempio: ip.addr == 8.8.8.8 and dns'
+            placeholder='Example: ip.addr == 8.8.8.8 and dns'
             className={`w-full rounded-lg border bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 ${
               error
                 ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/30'
@@ -82,7 +82,7 @@ export default function PacketFilters({
             <p className="mt-2 text-xs text-red-300">{error}</p>
           ) : (
             <p className="mt-2 text-xs text-slate-500">
-              Usa `and`, `or`, `not`, parentesi e operatori `==`, `!=`, `contains`, `&gt;`, `&gt;=`, `&lt;`, `&lt;=`.
+              Use `and`, `or`, `not`, parentheses, and operators `==`, `!=`, `contains`, `&gt;`, `&gt;=`, `&lt;`, `&lt;=`.
             </p>
           )}
         </div>
@@ -113,13 +113,13 @@ export default function PacketFilters({
           onChange={(event) => setField(event.target.value as GuiField)}
           className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
         >
-          <option value="ip.addr">IP sorgente o destinazione</option>
-          <option value="ip.src">IP sorgente</option>
-          <option value="ip.dst">IP destinazione</option>
-          <option value="protocol">Protocollo</option>
-          <option value="tcp.port">Porta TCP</option>
-          <option value="udp.port">Porta UDP</option>
-          <option value="frame.len">Lunghezza frame</option>
+          <option value="ip.addr">Source or destination IP</option>
+          <option value="ip.src">Source IP</option>
+          <option value="ip.dst">Destination IP</option>
+          <option value="protocol">Protocol</option>
+          <option value="tcp.port">TCP port</option>
+          <option value="udp.port">UDP port</option>
+          <option value="frame.len">Frame length</option>
           <option value="info">Info</option>
         </select>
 
@@ -128,9 +128,9 @@ export default function PacketFilters({
           onChange={(event) => setOperator(event.target.value as GuiOperator)}
           className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
         >
-          <option value="==">uguale</option>
-          <option value="!=">diverso</option>
-          <option value="contains">contiene</option>
+          <option value="==">equals</option>
+          <option value="!=">not equals</option>
+          <option value="contains">contains</option>
           <option value=">">&gt;</option>
           <option value=">=">&gt;=</option>
           <option value="<">&lt;</option>
@@ -144,7 +144,7 @@ export default function PacketFilters({
           onKeyDown={(event) => {
             if (event.key === 'Enter') addGuiFilter()
           }}
-          placeholder="Valore"
+          placeholder="Value"
           className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600"
         />
 
@@ -154,7 +154,7 @@ export default function PacketFilters({
           className="flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600"
         >
           <Plus className="h-4 w-4" />
-          Aggiungi
+          Add
         </button>
       </div>
 
@@ -176,7 +176,7 @@ export default function PacketFilters({
             className="flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs text-red-200"
           >
             <X className="h-3 w-3" />
-            rimuovi filtro
+            remove filter
           </button>
         )}
       </div>

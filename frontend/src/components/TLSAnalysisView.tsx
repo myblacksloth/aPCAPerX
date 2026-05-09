@@ -1,8 +1,8 @@
 /**
  * Vista TLS analysis.
  *
- * Mostra solo metadati osservabili nel handshake TLS. Il frontend non effettua
- * chiamate esterne e non promette decifratura: contenuti HTTP, payload e dati
+ * Shows only metadata observable in the TLS handshake. The frontend performs no
+ * external calls and does not promise decryption: HTTP content, payloads, and data
  * applicativi cifrati restano non ispezionabili senza chiavi.
  */
 import { useMemo, useState } from 'react'
@@ -34,8 +34,8 @@ function emptyTls(): TLSAnalysisResult {
 }
 
 function endpoint(ip: string | null, port: number | null) {
-  // Formatta endpoint IP:porta mantenendo leggibile il valore mancante.
-  return ip ? `${ip}${port ? `:${port}` : ''}` : 'n/d'
+  // Formatta endpoint IP:port mantenendo leggibile il valore mancante.
+  return ip ? `${ip}${port ? `:${port}` : ''}` : 'n/a'
 }
 
 function anomalyBadge(entry: TLSEntry) {
@@ -89,7 +89,7 @@ export default function TLSAnalysisView({ result }: TLSAnalysisViewProps) {
           <div>
             <h2 className="text-base font-semibold text-slate-200">TLS analysis</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Metadati SSL/TLS osservabili dal PCAP: SNI, versione, cipher, ALPN, certificati, JA3 e anomalie. Nessuna decifratura del payload.
+              Observable SSL/TLS metadata from the PCAP: SNI, version, cipher, ALPN, certificates, JA3, and anomalies. No payload decryption.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
@@ -130,14 +130,14 @@ export default function TLSAnalysisView({ result }: TLSAnalysisViewProps) {
               <input
                 value={sniFilter}
                 onChange={(event) => setSniFilter(event.target.value)}
-                placeholder="Filtra SNI..."
+                placeholder="Filter SNI..."
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
               />
             </div>
             <input
               value={serverFilter}
               onChange={(event) => setServerFilter(event.target.value)}
-              placeholder="Filtra server IP..."
+              placeholder="Filter server IP..."
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600"
             />
             <select value={versionFilter} onChange={(event) => setVersionFilter(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
@@ -165,25 +165,25 @@ export default function TLSAnalysisView({ result }: TLSAnalysisViewProps) {
                 {filtered.slice(0, 300).map((entry) => (
                   <tr key={`${entry.packet_number}-${entry.client_ip}-${entry.server_ip}-${entry.server_port}`}>
                     <td className="py-3 pr-3 align-top">
-                      <div className="font-mono text-slate-100">{entry.sni ?? 'SNI n/d'}</div>
+                      <div className="font-mono text-slate-100">{entry.sni ?? 'SNI n/a'}</div>
                       <div className="mt-1 font-mono text-slate-500">{endpoint(entry.server_ip, entry.server_port)}</div>
                       <div className="mt-0.5 font-mono text-slate-600">client {endpoint(entry.client_ip, entry.client_port)}</div>
                       {entry.partial && <div className="mt-1 text-amber-200">record parziale</div>}
                     </td>
                     <td className="py-3 pr-3 align-top text-slate-400">
-                      <div>{entry.tls_version ?? 'versione n/d'}</div>
-                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">{entry.cipher_suite ?? 'cipher n/d'}</div>
-                      <div className="mt-1 text-slate-500">ALPN: {entry.alpn.length ? entry.alpn.join(', ') : 'n/d'}</div>
+                      <div>{entry.tls_version ?? 'versione n/a'}</div>
+                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">{entry.cipher_suite ?? 'cipher n/a'}</div>
+                      <div className="mt-1 text-slate-500">ALPN: {entry.alpn.length ? entry.alpn.join(', ') : 'n/a'}</div>
                     </td>
                     <td className="py-3 pr-3 align-top text-slate-400">
-                      <div className="max-w-sm truncate">Subject: {entry.cert_subject ?? 'n/d'}</div>
-                      <div className="mt-1 max-w-sm truncate text-slate-500">Issuer: {entry.cert_issuer ?? 'n/d'}</div>
-                      <div className="mt-1 text-slate-500">Validità: {entry.cert_not_before ?? 'n/d'} → {entry.cert_not_after ?? 'n/d'}</div>
+                      <div className="max-w-sm truncate">Subject: {entry.cert_subject ?? 'n/a'}</div>
+                      <div className="mt-1 max-w-sm truncate text-slate-500">Issuer: {entry.cert_issuer ?? 'n/a'}</div>
+                      <div className="mt-1 text-slate-500">Validity: {entry.cert_not_before ?? 'n/a'} → {entry.cert_not_after ?? 'n/a'}</div>
                     </td>
                     <td className="py-3 pr-3 align-top text-slate-400">
-                      <div className="max-w-xs truncate font-mono">SHA256 {entry.cert_sha256 ?? 'n/d'}</div>
-                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">JA3 {entry.ja3 ?? 'n/d'}</div>
-                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">JA3S {entry.ja3s ?? 'n/d'}</div>
+                      <div className="max-w-xs truncate font-mono">SHA256 {entry.cert_sha256 ?? 'n/a'}</div>
+                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">JA3 {entry.ja3 ?? 'n/a'}</div>
+                      <div className="mt-1 max-w-xs truncate font-mono text-slate-500">JA3S {entry.ja3s ?? 'n/a'}</div>
                     </td>
                     <td className="py-3 pr-3 align-top">
                       {anomalyBadge(entry)}
@@ -201,7 +201,7 @@ export default function TLSAnalysisView({ result }: TLSAnalysisViewProps) {
             </table>
 
             {filtered.length === 0 && (
-              <p className="py-8 text-center text-sm text-slate-500">Nessuna connessione TLS corrisponde ai filtri.</p>
+              <p className="py-8 text-center text-sm text-slate-500">No TLS connection matches the filters.</p>
             )}
           </div>
         </section>
@@ -210,7 +210,7 @@ export default function TLSAnalysisView({ result }: TLSAnalysisViewProps) {
           <div className="card">
             <div className="mb-3 flex items-center gap-2">
               <Lock className="h-4 w-4 text-brand-300" />
-              <h3 className="text-sm font-semibold text-slate-200">SNI più frequenti</h3>
+              <h3 className="text-sm font-semibold text-slate-200">Most frequent SNI</h3>
             </div>
             <div className="space-y-2">
               {tls.top_sni.slice(0, 10).map((item) => (

@@ -1,8 +1,8 @@
 """
-Analisi di sicurezza avanzata del traffico PCAP.
+Advanced security analysis of PCAP traffic.
 
-Il modulo combina osservazioni locali sui pacchetti con arricchimento esterno
-gia raccolto dall'utente e, solo quando l'endpoint viene invocato, interroga
+This module combines local packet observations with external enrichment
+already collected by the user and, only when the endpoint is invoked, queries
 fonti di threat intelligence aperte. L'obiettivo e fornire una vista simile a
 un triage SOC: priorita, evidenze, confidenza e raccomandazioni operative.
 """
@@ -28,7 +28,7 @@ from models import (
 from config import HTTP_TIMEOUT_SECONDS
 
 
-# Porte note che meritano attenzione quando compaiono verso/da Internet.
+# Ports note che meritano attenzione quando compaiono verso/da Internet.
 REMOTE_ADMIN_PORTS = {22, 23, 3389, 5900, 5901, 5985, 5986}
 DATABASE_PORTS = {1433, 1521, 3306, 5432, 6379, 9200, 27017}
 CLEAR_TEXT_PORTS = {21, 23, 25, 80, 110, 143, 8080}
@@ -37,7 +37,7 @@ BOTNET_COMMON_PORTS = {4444, 5555, 6666, 6667, 1337, 31337}
 
 @dataclass
 class IPObservation:
-    """Aggregato locale di traffico per un singolo IP."""
+    """Local traffic aggregate for a single IP."""
 
     ip: str
     packets: int = 0
@@ -71,7 +71,7 @@ def _public_ip(ip: str) -> bool:
 
 
 def _unique_sorted_ports(ports: Iterable[int]) -> List[int]:
-    """Normalizza le porte mantenendo output stabile e compatto."""
+    """Normalizza le ports mantenendo output stabile e compatto."""
     return sorted({port for port in ports if isinstance(port, int) and 0 < port <= 65535})
 
 
@@ -89,7 +89,7 @@ def _fetch_json(url: str) -> Dict:
 
 
 def _post_form_json(url: str, data: Dict[str, str], headers: Optional[Dict[str, str]] = None) -> Dict:
-    """Invia una POST form-urlencoded e decodifica la risposta JSON."""
+    """Sends a form-urlencoded POST and decodes the JSON response."""
     body = urllib.parse.urlencode(data).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -106,7 +106,7 @@ def _post_form_json(url: str, data: Dict[str, str], headers: Optional[Dict[str, 
 
 
 def _build_observations(payload: SecurityAnalysisRequest) -> Dict[str, IPObservation]:
-    """Aggrega pacchetti per IP calcolando direzione, peer, porte e campioni."""
+    """Aggrega packets per IP calcolando direzione, peer, ports e campioni."""
     observations: Dict[str, IPObservation] = {}
 
     def get(ip: str) -> IPObservation:
@@ -168,7 +168,7 @@ def _load_feodo_blocklist(errors: List[str]) -> Dict[str, Dict]:
         return {}
 
     if not isinstance(data, list):
-        errors.append("Feodo Tracker: formato JSON inatteso")
+        errors.append("Feodo Tracker: format JSON inatteso")
         return {}
 
     indexed: Dict[str, Dict] = {}
@@ -179,7 +179,7 @@ def _load_feodo_blocklist(errors: List[str]) -> Dict[str, Dict]:
 
 
 def _query_urlhaus_host(ip: str, external: Optional[IPExternalInfo], errors: List[str]) -> Optional[Dict]:
-    """Interroga URLhaus solo se l'utente ha configurato un Auth-Key server-side."""
+    """Queries URLhaus only if the user configured a server-side Auth-Key."""
     auth_key = os.getenv("URLHAUS_AUTH_KEY")
     if not auth_key:
         return None
@@ -236,7 +236,7 @@ def _finding(
 
 
 def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisResponse:
-    """Esegue l'analisi avanzata e restituisce finding ordinati per priorita."""
+    """Esegue l'analysis advanced e restituisce finding ordinati per priorita."""
     errors: List[str] = []
     sources: List[SecuritySourceStatus] = []
     observations = _build_observations(payload)
@@ -246,19 +246,19 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
     findings: List[SecurityFindingModel] = []
     assessments: Dict[str, SecurityIPAssessmentModel] = {}
 
-    # Il feed Feodo viene scaricato una sola volta per richiesta e poi usato come set IOC.
+    # The Feodo feed is downloaded once per request and then used as an IOC set.
     feodo_index = _load_feodo_blocklist(errors)
     sources.append(SecuritySourceStatus(
         source="Feodo Tracker",
         status="ok" if feodo_index else "partial",
-        detail=f"{len(feodo_index)} indicatori C2 caricati dal feed pubblico",
+        detail=f"{len(feodo_index)} indicatori C2 caricati dal feed public",
     ))
 
     urlhaus_enabled = bool(os.getenv("URLHAUS_AUTH_KEY"))
     sources.append(SecuritySourceStatus(
         source="URLhaus",
         status="ok" if urlhaus_enabled else "skipped",
-        detail="Host API attiva tramite URLHAUS_AUTH_KEY" if urlhaus_enabled else "Auth-Key non configurata: fonte saltata",
+        detail="Host API enabled through URLHAUS_AUTH_KEY" if urlhaus_enabled else "Auth-Key not configured: source skipped",
     ))
 
     shodan_ok = 0
@@ -286,15 +286,15 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 severity_score=98,
                 category="Threat intelligence",
                 title="IP presente in Feodo Tracker come infrastruttura C2",
-                description="L'indirizzo e presente nel feed pubblico Feodo Tracker dedicato a command-and-control di botnet.",
+                description="L'indirizzo e presente nel feed public Feodo Tracker dedicato a command-and-control di botnet.",
                 ip=ip,
                 evidence=[
                     f"Malware/famiglia: {row.get('malware') or row.get('malware_family') or 'non specificato'}",
-                    f"Prima osservazione: {row.get('first_seen_utc') or row.get('first_seen') or 'non disponibile'}",
+                    f"Prima osservazione: {row.get('first_seen_utc') or row.get('first_seen') or 'not available'}",
                     *observation.samples[:2],
                 ],
-                recommendation="Isolare gli host interni che hanno comunicato con questo IP, cercare beaconing e bloccare l'indicatore su firewall/DNS.",
-                sources=["Feodo Tracker", "Traffico PCAP"],
+                recommendation="Isolate internal hosts that communicated with this IP, look for beaconing, and block the indicator on firewalls/DNS.",
+                sources=["Feodo Tracker", "PCAP traffic"],
                 confidence=95,
                 mitre=["T1071", "T1105"],
             )
@@ -308,16 +308,16 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"urlhaus-{ip}",
                 severity_score=92,
                 category="Malware distribution",
-                title="Host osservato in URLhaus",
-                description="URLhaus associa questo host a URL usati per distribuzione malware.",
+                title="Host observed in URLhaus",
+                description="URLhaus associates this host with URLs used for malware distribution.",
                 ip=ip,
                 evidence=[
-                    f"URL osservati da URLhaus: {url_count}",
-                    f"Primo avvistamento: {urlhaus.get('firstseen', 'non disponibile')}",
-                    *[f"{item.get('url_status', 'unknown')} - {item.get('url', item.get('urlhaus_reference', 'URL non disponibile'))}" for item in urlhaus.get("urls", [])[:3] if isinstance(item, dict)],
+                    f"URLs observed by URLhaus: {url_count}",
+                    f"First seen: {urlhaus.get('firstseen', 'not available')}",
+                    *[f"{item.get('url_status', 'unknown')} - {item.get('url', item.get('urlhaus_reference', 'URL not available'))}" for item in urlhaus.get("urls", [])[:3] if isinstance(item, dict)],
                 ],
-                recommendation="Verificare se il traffico HTTP/TLS contiene download o redirect, bloccare l'host e cercare payload sugli endpoint coinvolti.",
-                sources=["URLhaus", "Traffico PCAP"],
+                recommendation="Verify whether HTTP/TLS traffic contains downloads or redirects, block the host, and look for payloads on involved endpoints.",
+                sources=["URLhaus", "PCAP traffic"],
                 confidence=90,
                 mitre=["T1105", "T1204"],
             )
@@ -330,16 +330,16 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"vulns-{ip}",
                 severity_score=86,
                 category="Exposure",
-                title="Servizi esposti con CVE note secondo Shodan InternetDB",
-                description="InternetDB associa l'IP a servizi con vulnerabilita note; la fonte puo includere risultati non verificati.",
+                title="Exposed services with CVEs according to Shodan InternetDB",
+                description="InternetDB associates the IP with services that have known vulnerabilities; the source may include unverified results.",
                 ip=ip,
                 evidence=[
                     f"CVE: {', '.join(shodan_vulns[:8])}",
-                    f"Porte esposte: {', '.join(map(str, shodan_ports[:12])) or 'non disponibili'}",
+                    f"Exposed ports: {', '.join(map(str, shodan_ports[:12])) or 'not available'}",
                     *observation.samples[:2],
                 ],
-                recommendation="Confermare le CVE con scansione autorizzata, verificare patching e limitare l'accesso ai servizi esposti.",
-                sources=["Shodan InternetDB", "Traffico PCAP"],
+                recommendation="Confirm CVEs with authorized scanning, verify patching, and limit access to exposed services.",
+                sources=["Shodan InternetDB", "PCAP traffic"],
                 confidence=78,
                 mitre=["T1190"],
             )
@@ -353,16 +353,16 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"remote-admin-{ip}",
                 severity_score=68 if external and external.hosting else 58,
                 category="Remote access",
-                title="Servizi di amministrazione remota osservati",
-                description="Il traffico o InternetDB evidenzia porte amministrative raggiunte o esposte su un IP pubblico.",
+                title="Remote administration services observed",
+                description="Traffic or InternetDB highlights administrative ports reached or exposed on a public IP.",
                 ip=ip,
                 evidence=[
-                    f"Porte amministrative: {', '.join(map(str, exposed_admin))}",
-                    f"Peer distinti nel PCAP: {len(observation.peers)}",
+                    f"Administrative ports: {', '.join(map(str, exposed_admin))}",
+                    f"Distinct peers in the PCAP: {len(observation.peers)}",
                     *observation.samples[:2],
                 ],
-                recommendation="Verificare che l'accesso sia atteso, protetto da MFA/VPN e limitato a sorgenti autorizzate.",
-                sources=["Traffico PCAP", *(["Shodan InternetDB"] if shodan_ports else [])],
+                recommendation="Verify that access is expected, protected by MFA/VPN, and limited to authorized sources.",
+                sources=["PCAP traffic", *(["Shodan InternetDB"] if shodan_ports else [])],
                 confidence=72,
                 mitre=["T1021"],
             )
@@ -376,15 +376,15 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"risky-ports-{ip}",
                 severity_score=48,
                 category="Policy",
-                title="Traffico verso porte sensibili o non cifrate",
-                description="Sono state osservate porte che spesso indicano servizi non cifrati, database esposti o canali anomali.",
+                title="Traffic to sensitive or unencrypted ports",
+                description="Observed ports often indicate unencrypted services, exposed databases, or anomalous channels.",
                 ip=ip,
                 evidence=[
-                    f"Porte rilevate: {', '.join(map(str, risky_data_ports))}",
-                    f"Protocolli: {', '.join(sorted(observation.protocols))}",
+                    f"Detected ports: {', '.join(map(str, risky_data_ports))}",
+                    f"Protocols: {', '.join(sorted(observation.protocols))}",
                 ],
-                recommendation="Validare la necessita del servizio, preferire canali cifrati e segmentare il traffico verso database e console.",
-                sources=["Traffico PCAP"],
+                recommendation="Validate whether the service is needed, prefer encrypted channels, and segment traffic to databases and consoles.",
+                sources=["PCAP traffic"],
                 confidence=64,
                 mitre=["T1041", "T1571"],
             )
@@ -402,16 +402,16 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"infra-{ip}",
                 severity_score=35,
                 category="Infrastructure",
-                title="Infrastruttura anonima o datacenter",
-                description="L'arricchimento IP segnala caratteristiche spesso presenti in relay, proxy, C2 o infrastrutture temporanee.",
+                title="Anonymous or datacenter infrastructure",
+                description="IP enrichment reports characteristics often seen in relays, proxies, C2, or temporary infrastructure.",
                 ip=ip,
                 evidence=[
-                    f"Indicatori: {', '.join(labels)}",
+                    f"Indicators: {', '.join(labels)}",
                     f"ASN/Org: {external.asn or '-'} {external.as_name or external.org or ''}".strip(),
-                    f"Paese: {external.country or external.country_code or 'non disponibile'}",
+                    f"Country: {external.country or external.country_code or 'not available'}",
                 ],
-                recommendation="Contestualizzare con il processo/applicazione sorgente e verificare periodicita o volumi anomali.",
-                sources=["Arricchimento IP", "Traffico PCAP"],
+                recommendation="Contextualize with the source process/application and verify unusual periodicity or volumes.",
+                sources=["IP enrichment", "PCAP traffic"],
                 confidence=55,
                 mitre=["T1090"],
             )
@@ -424,15 +424,15 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
                 finding_id=f"fanout-{ip}",
                 severity_score=42,
                 category="Anomaly",
-                title="Fan-out elevato verso molti peer",
-                description="L'IP comunica con molti peer distinti: puo indicare scansione, discovery o servizio molto centrale.",
+                title="High fan-out to many peers",
+                description="The IP communicates with many distinct peers: this may indicate scanning, discovery, or a highly central service.",
                 ip=ip,
                 evidence=[
-                    f"Peer distinti: {len(observation.peers)}",
-                    f"Pacchetti osservati: {observation.packets}",
+                    f"Distinct peers: {len(observation.peers)}",
+                    f"Observed packets: {observation.packets}",
                 ],
-                recommendation="Controllare direzione, frequenza e distribuzione temporale; correlare con asset inventory e log endpoint.",
-                sources=["Traffico PCAP"],
+                recommendation="Check direction, frequency, and time distribution; correlate with asset inventory and endpoint logs.",
+                sources=["PCAP traffic"],
                 confidence=50,
                 mitre=["T1046"],
             )
@@ -461,12 +461,12 @@ def analyze_security(payload: SecurityAnalysisRequest) -> SecurityAnalysisRespon
     sources.append(SecuritySourceStatus(
         source="Shodan InternetDB",
         status="ok" if shodan_ok else "partial",
-        detail=f"{shodan_ok}/{len(selected_ips)} IP con risposta utile o 404 gestito",
+        detail=f"{shodan_ok}/{len(selected_ips)} IPs with a useful response or handled 404",
     ))
     sources.append(SecuritySourceStatus(
         source="Motore euristico PCAPCaper",
         status="ok",
-        detail=f"{len(payload.packets)} pacchetti correlati localmente",
+        detail=f"{len(payload.packets)} packets correlati localmente",
     ))
 
     findings.sort(key=lambda item: (item.score, item.confidence), reverse=True)

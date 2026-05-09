@@ -1,14 +1,14 @@
 /**
  * Componente per la tabella delle conversazioni di rete.
  *
- * Una "conversazione" rappresenta tutti i pacchetti scambiati tra
- * due indirizzi IP (in entrambe le direzioni). La tabella mostra
- * le 20 conversazioni più attive ordinate per volume in byte.
+ * Una "conversazione" rappresenta tutti i packets scambiati tra
+ * due IP addresses (in entrambe le direzioni). La tabella shows
+ * le 20 conversazioni most attive ordinate per volume in byte.
  *
- * Funzionalità:
+ * Features:
  *   - Ordinamento per colonna (click sull'intestazione)
  *   - Badge colorati per i protocolli
- *   - Barra visiva per il volume di dati
+ *   - Barra visiva per il volume di data
  */
 import { useState } from 'react'
 import { ArrowUpDown } from 'lucide-react'
@@ -19,7 +19,7 @@ interface ConversationsTableProps {
   conversations: Conversation[]
 }
 
-// Colonne su cui è possibile ordinare la tabella
+// Colonne su cui is possibile ordinare la tabella
 type SortKey = 'packets' | 'bytes'
 
 export default function ConversationsTable({ conversations }: ConversationsTableProps) {
@@ -27,7 +27,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
   const [sortKey, setSortKey] = useState<SortKey>('bytes')
   const [sortAsc, setSortAsc] = useState(false)
 
-  /** Cambia il criterio di ordinamento o inverte la direzione se già selezionato */
+  /** Cambia il criterio di ordinamento o inverte la direzione se already selezionato */
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc(prev => !prev)
@@ -58,7 +58,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
             <tr className="text-left text-xs text-slate-500 border-b border-slate-700">
               <th className="pb-2 font-medium">IP Sorgente</th>
               <th className="pb-2 font-medium">IP Destinazione</th>
-              <th className="pb-2 font-medium hidden md:table-cell">Protocolli</th>
+              <th className="pb-2 font-medium hidden md:table-cell">Protocols</th>
 
               {/* Intestazioni ordinabili */}
               {(['packets', 'bytes'] as SortKey[]).map(key => (
@@ -67,7 +67,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
                     onClick={() => toggleSort(key)}
                     className="inline-flex items-center gap-1 hover:text-slate-300 transition-colors"
                   >
-                    {key === 'packets' ? 'Pacchetti' : 'Volume'}
+                    {key === 'packets' ? 'Packets' : 'Volume'}
                     <ArrowUpDown className="w-3 h-3" />
                   </button>
                 </th>
@@ -80,7 +80,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
           <tbody>
             {sorted.map((conv, i) => (
               <tr key={i} className="border-b border-slate-700/50 hover:bg-slate-700/20">
-                {/* IP sorgente (primo IP della coppia) */}
+                {/* Source IP (primo IP della coppia) */}
                 <td className="py-2 font-mono text-xs text-slate-300">
                   {conv.src_ip}
                 </td>
@@ -90,7 +90,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
                   {conv.dst_ip}
                 </td>
 
-                {/* Badge dei protocolli osservati nella conversazione */}
+                {/* Badge for protocols observed in the conversation */}
                 <td className="py-2 hidden md:table-cell">
                   <div className="flex flex-wrap gap-1">
                     {conv.protocols.map(p => (
@@ -108,7 +108,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
                   </div>
                 </td>
 
-                {/* Numero di pacchetti */}
+                {/* Numero di packets */}
                 <td className="py-2 text-right text-slate-300">
                   {formatCount(conv.packets)}
                 </td>
@@ -118,7 +118,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
                   {formatBytes(conv.bytes)}
                 </td>
 
-                {/* Barra di proporzione visiva rispetto alla conversazione più grande */}
+                {/* Barra di proporzione visiva rispetto alla conversazione most grande */}
                 <td className="py-2 hidden lg:table-cell pl-4">
                   <div className="w-full bg-slate-700 rounded-full h-1.5">
                     <div
@@ -134,7 +134,7 @@ export default function ConversationsTable({ conversations }: ConversationsTable
 
         {conversations.length === 0 && (
           <p className="text-slate-500 text-sm text-center py-8">
-            Nessuna conversazione trovata
+            No conversation found
           </p>
         )}
       </div>

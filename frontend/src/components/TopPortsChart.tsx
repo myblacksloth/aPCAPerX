@@ -1,11 +1,11 @@
 /**
- * Componente per la visualizzazione delle porte di rete più utilizzate.
+ * Component for rendering delle ports di rete most used.
  *
  * Mostra due tab:
- *   - "Porte Destinazione" → porte più contattate (servizi remoti usati)
- *   - "Porte Sorgente"     → porte sorgente più usate (porte effimere)
+ *   - "Ports Destinazione" → ports most contattate (services remoti usati)
+ *   - "Ports Sorgente"     → ports source most usate (ports effimere)
  *
- * Ogni barra riporta il numero di porta e il nome del servizio associato
+ * Each bar shows the port number and associated service name
  * (es. "80 HTTP", "443 HTTPS", "53 DNS").
  */
 import { useState } from 'react'
@@ -20,7 +20,7 @@ interface TopPortsChartProps {
   result: AnalysisResult
 }
 
-// Tooltip personalizzato per le porte
+// Tooltip personalizzato per le ports
 function PortTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: PortEntry; value: number }> }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
@@ -29,13 +29,13 @@ function PortTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
       <p className="font-bold text-white">
         {d.port} <span className="text-brand-300 font-mono text-xs">{d.service}</span>
       </p>
-      <p className="text-slate-300">{payload[0].value.toLocaleString('it-IT')} pacchetti</p>
-      <p className="text-slate-400 text-xs">Protocollo: {d.protocol}</p>
+      <p className="text-slate-300">{payload[0].value.toLocaleString('it-IT')} packets</p>
+      <p className="text-slate-400 text-xs">Protocol: {d.protocol}</p>
     </div>
   )
 }
 
-// Tick Y personalizzato: mostra "PORT · servizio" su due righe virtuali
+// Custom Y tick: shows "PORT · service" on two virtual lines
 function PortTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string | number } }) {
   if (!x || !y || !payload) return null
   return (
@@ -57,14 +57,14 @@ export default function TopPortsChart({ result }: TopPortsChartProps) {
 
   const tabs = [
     {
-      label: 'Porte Dest.',
+      label: 'Dst ports',
       data: result.top_dst_ports.slice(0, 12).map(p => ({
         ...p,
         label: `${p.port} · ${p.service}`,
       })),
     },
     {
-      label: 'Porte Src.',
+      label: 'Src ports',
       data: result.top_src_ports.slice(0, 12).map(p => ({
         ...p,
         label: `${p.port} · ${p.service}`,
@@ -78,7 +78,7 @@ export default function TopPortsChart({ result }: TopPortsChartProps) {
     <div className="card">
       {/* ── Header con tab selector ──────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-slate-200">Top Porte</h2>
+        <h2 className="text-base font-semibold text-slate-200">Top ports</h2>
         <div className="flex bg-slate-700 rounded-lg p-0.5 gap-0.5">
           {tabs.map((t, i) => (
             <button
@@ -107,7 +107,7 @@ export default function TopPortsChart({ result }: TopPortsChartProps) {
           >
             <YAxis
               type="category"
-              dataKey="label"          /* mostra "PORT · SERVIZIO" */
+              dataKey="label"          /* shows "PORT · SERVIZIO" */
               width={110}
               tick={<PortTick />}
               axisLine={false}
@@ -130,7 +130,7 @@ export default function TopPortsChart({ result }: TopPortsChartProps) {
         </ResponsiveContainer>
       ) : (
         <p className="text-slate-500 text-sm text-center py-8">
-          Nessuna porta trovata in questa categoria
+          No port found in this category
         </p>
       )}
     </div>

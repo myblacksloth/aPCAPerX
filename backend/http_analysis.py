@@ -1,7 +1,7 @@
 """
-Analisi HTTP in chiaro.
+Analysis HTTP in chiaro.
 
-Il parser lavora solo su payload TCP leggibili che iniziano come richiesta o
+The parser only works on readable TCP payloads that begin as a request or
 risposta HTTP. Non tenta di decifrare TLS e non ricostruisce stream TCP completi:
 se gli header sono frammentati o incompleti, registra il metadato disponibile e
 marca l'entry come parziale.
@@ -138,10 +138,10 @@ def _filename_from_uri(uri: str) -> Optional[str]:
 
 
 class HTTPAnalyzer:
-    """Accumulatore streaming per metadati HTTP in chiaro."""
+    """Accumulatore streaming per metadata HTTP in chiaro."""
 
     def __init__(self) -> None:
-        # Richieste pendenti indicizzate per flow direzionale client -> server.
+        # Requests pendenti indicizzate per flow direzionale client -> server.
         self._pending: Dict[Tuple[str, int, str, int], List[HTTPRequestEntry]] = defaultdict(list)
         self._requests: List[HTTPRequestEntry] = []
         self._host_counter: Counter = Counter()
@@ -160,7 +160,7 @@ class HTTPAnalyzer:
         dst_port: Optional[int],
         payload: Optional[bytes],
     ) -> None:
-        """Analizza un payload TCP e aggiorna richieste/risposte HTTP."""
+        """Analyzes a TCP payload and updates HTTP requests/responses."""
         if not src_ip or not dst_ip or src_port is None or dst_port is None or not payload:
             return
 
@@ -183,7 +183,7 @@ class HTTPAnalyzer:
         server_port: int,
         parsed: _ParsedHTTP,
     ) -> None:
-        """Registra una richiesta HTTP e la mette in attesa della risposta."""
+        """Registra una HTTP request e la mette in attesa of the response."""
         parts = parsed.first.split()
         method = parts[0].upper()
         uri = parts[1] if len(parts) > 1 else ""
@@ -270,7 +270,7 @@ class HTTPAnalyzer:
             top_hosts=[HTTPTopEntry(value=value, count=count) for value, count in self._host_counter.most_common(30)],
             top_user_agents=[HTTPTopEntry(value=value, count=count) for value, count in self._ua_counter.most_common(30)],
             limitations=[
-                "Analizza solo traffico HTTP in chiaro su TCP.",
+                "Analyzes only cleartext HTTP traffic over TCP.",
                 "Non decifra HTTPS/TLS.",
                 "Non ricostruisce stream TCP completi: header o body frammentati possono risultare parziali.",
                 "La dimensione payload e stimata da Content-Length o dai byte presenti nel segmento osservato.",

@@ -1,9 +1,9 @@
 """
-Analisi DNS locale privacy-by-default.
+Analysis DNS locale privacy-by-default.
 
-Il modulo estrae query, risposte e anomalie DNS direttamente dai pacchetti del
+This module extracts DNS queries, responses, and anomalies directly from packets in the
 PCAP. Non effettua chiamate di rete: tutte le informazioni derivano dalla
-cattura caricata dall'utente. Le fonti esterne restano gestite separatamente
+capture uploaded by the user. External sources are handled separately
 dall'endpoint opt-in `/api/dns-reputation`.
 """
 
@@ -53,7 +53,7 @@ RCODE_NAMES = {
 
 @dataclass
 class _PendingQuery:
-    """Stato temporaneo usato per correlare risposta DNS e query."""
+    """Temporary state used to correlate DNS response and query."""
 
     entry: DNSQueryEntry
     ts: float
@@ -70,7 +70,7 @@ class _DomainSignals:
 
 
 def _safe_dns_name(value) -> Optional[str]:
-    """Converte bytes/string DNS in dominio leggibile e normalizzato."""
+    """Converte bytes/string DNS in domainso leggibile e normalizzato."""
     try:
         if isinstance(value, bytes):
             text = value.decode("utf-8", errors="replace")
@@ -92,7 +92,7 @@ def _record_type(value) -> str:
 
 
 def _rcode_name(value: int) -> str:
-    """Rende leggibile il codice risposta DNS."""
+    """Makes the DNS response code readable."""
     return RCODE_NAMES.get(int(value), f"RCODE_{value}")
 
 
@@ -110,7 +110,7 @@ def _base_domain(domain: str) -> str:
 
 
 def _subdomain_part(domain: str, base: str) -> str:
-    """Restituisce la parte di sottodominio precedente al base domain."""
+    """Restituisce la parte di sottodomainso precedente al base domain."""
     suffix = "." + base
     if domain.endswith(suffix):
         return domain[: -len(suffix)]
@@ -139,7 +139,7 @@ def _txt_values(value) -> List[str]:
 
 
 def _answer_value(answer) -> str:
-    """Serializza il valore di risposta DNS in modo compatto."""
+    """Serializes the DNS response value compactly."""
     rdata = getattr(answer, "rdata", "")
     if isinstance(rdata, bytes):
         return rdata.decode("utf-8", errors="replace").rstrip(".")
@@ -160,18 +160,18 @@ def _query_indicators(domain: str, record_type: str) -> Tuple[bool, List[str]]:
     if record_type == "TXT" and entropy >= 4.0:
         indicators.append("Query TXT con entropia elevata")
     if record_type == "TXT" and len(domain) >= 70:
-        indicators.append("Query TXT verso dominio molto lungo")
+        indicators.append("Query TXT verso domainso molto lungo")
 
     return bool(indicators), indicators
 
 
 class DNSAnalyzer:
-    """Accumulatore streaming per query, risposte e indicatori DNS."""
+    """Accumulatore streaming per query, responses e indicatori DNS."""
 
     def __init__(self) -> None:
         # Query indicizzate per transaction id e coppia client/resolver.
         self._pending: Dict[Tuple[int, Optional[str], Optional[str]], List[_PendingQuery]] = defaultdict(list)
-        # Lista finale delle query osservate, aggiornata quando arriva una risposta correlata.
+        # Final list of observed queries, updated when a correlated response arrives.
         self._queries: List[DNSQueryEntry] = []
         # Conteggi principali per dashboard.
         self._domain_counter: Counter = Counter()
@@ -190,7 +190,7 @@ class DNSAnalyzer:
         src_ip: Optional[str],
         dst_ip: Optional[str],
     ) -> None:
-        """Estrae dati DNS da un pacchetto Scapy, se contiene layer DNS."""
+        """Estrae data DNS da un packet Scapy, se contiene layer DNS."""
         if not pkt.haslayer(DNS):
             return
 
@@ -201,11 +201,11 @@ class DNSAnalyzer:
             else:
                 self._record_response(packet_number, dns, src_ip, dst_ip)
         except Exception:
-            # Un pacchetto DNS malformato non deve bloccare l'intera analisi PCAP.
+            # Un packet DNS malformat non deve bloccare l'intera analysis PCAP.
             return
 
     def _record_query(self, packet_number: int, ts: float, dns, client: Optional[str], resolver: Optional[str]) -> None:
-        """Registra una o piu domande DNS contenute nel pacchetto query."""
+        """Registers one or more DNS questions contained in the query packet."""
         qdcount = int(getattr(dns, "qdcount", 0) or 0)
         for index in range(max(qdcount, 1)):
             try:
@@ -217,7 +217,7 @@ class DNSAnalyzer:
             if not domain:
                 continue
 
-            record_type = _record_type(getattr(question, "qtype", "n/d"))
+            record_type = _record_type(getattr(question, "qtype", "n/a"))
             suspicious_txt, indicators = _query_indicators(domain, record_type)
             entry = DNSQueryEntry(
                 packet_number=packet_number,
@@ -241,7 +241,7 @@ class DNSAnalyzer:
             self._update_domain_signals(domain)
 
     def _record_response(self, packet_number: int, dns, resolver: Optional[str], client: Optional[str]) -> None:
-        """Registra codice risposta e answer associandoli alla query pendente."""
+        """Records response code and answers by associating them with the pending query."""
         self._total_responses += 1
         rcode = int(getattr(dns, "rcode", 0) or 0)
         self._rcode_counter[rcode] += 1
@@ -265,14 +265,14 @@ class DNSAnalyzer:
             ]
 
     def _answers(self, dns) -> List[DNSAnswerEntry]:
-        """Estrae i record answer da una risposta DNS."""
+        """Extracts answer records from a DNS response."""
         result: List[DNSAnswerEntry] = []
         ancount = int(getattr(dns, "ancount", 0) or 0)
         for index in range(ancount):
             try:
                 answer = dns.an[index]
                 name = _safe_dns_name(getattr(answer, "rrname", None)) or ""
-                record_type = _record_type(getattr(answer, "type", "n/d"))
+                record_type = _record_type(getattr(answer, "type", "n/a"))
                 value = _answer_value(answer)
                 ttl = getattr(answer, "ttl", None)
                 result.append(DNSAnswerEntry(
@@ -310,13 +310,13 @@ class DNSAnalyzer:
                 reasons.append(f"Label molto lunga: {signals.max_label_length} caratteri")
             if len(signals.subdomains) >= 20:
                 score += 30
-                reasons.append(f"Molti sottodomini unici: {len(signals.subdomains)}")
+                reasons.append(f"Molti sottodomains unici: {len(signals.subdomains)}")
             if signals.max_entropy >= 4.0:
                 score += 25
                 reasons.append(f"Entropia approssimata elevata: {signals.max_entropy:.2f}")
             if signals.query_count >= 50:
                 score += 20
-                reasons.append(f"Volume anomalo verso stesso dominio: {signals.query_count} query")
+                reasons.append(f"Volume anomalo verso stesso domainso: {signals.query_count} query")
 
             if reasons:
                 indicators.append(DNSTunnelingIndicator(
@@ -332,7 +332,7 @@ class DNSAnalyzer:
         return sorted(indicators, key=lambda item: item.score, reverse=True)[:50]
 
     def _flow_correlations(self, flows: List[FlowEntry]) -> List[DNSFlowCorrelation]:
-        """Correla IP di risposta DNS con flow successivi che li coinvolgono."""
+        """Correlates DNS answer IPs with subsequent flows involving them."""
         correlations: Dict[Tuple[str, str], DNSFlowCorrelation] = {}
         for query in self._queries:
             if not query.answer_ips:

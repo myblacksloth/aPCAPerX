@@ -1,12 +1,12 @@
 /**
- * Componente per la visualizzazione della distribuzione dei protocolli.
+ * Component for rendering della distribuzione dei protocolli.
  *
  * Layout:
  *   - Sinistra: grafico a ciambella (donut) con Recharts
- *   - Destra: tabella con nome, count, byte e percentuale per ogni protocollo
+ *   - Destra: tabella con nome, count, byte e percentuale per ogni protocol
  *
  * I protocolli vengono colorati in modo coerente con protocolColor(),
- * così il colore di "TCP" è sempre lo stesso in tutti i grafici dell'app.
+ * so il colore di "TCP" is sempre lo stesso in tutti i grafici dell'app.
  */
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -25,7 +25,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   return (
     <div className="bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm shadow-xl">
       <p className="font-semibold text-white mb-1">{d.protocol}</p>
-      <p className="text-slate-300">{d.count.toLocaleString('it-IT')} pacchetti</p>
+      <p className="text-slate-300">{d.count.toLocaleString('it-IT')} packets</p>
       <p className="text-slate-300">{formatBytes(d.bytes)}</p>
       <p className="text-brand-300 font-medium">{d.percentage}%</p>
     </div>
@@ -33,7 +33,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
 }
 
 export default function ProtocolChart({ result }: ProtocolChartProps) {
-  // Prepara i dati per Recharts: prende i primi 10 protocolli e raggruppa il resto
+  // Prepara i data per Recharts: prende i primi 10 protocolli e raggruppa il resto
   const top10 = result.protocols.slice(0, 10)
   const others = result.protocols.slice(10)
 
@@ -52,7 +52,7 @@ export default function ProtocolChart({ result }: ProtocolChartProps) {
   return (
     <div className="card">
       <h2 className="text-base font-semibold text-slate-200 mb-4">
-        Distribuzione protocolli
+        Protocol distribution
       </h2>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -89,8 +89,8 @@ export default function ProtocolChart({ result }: ProtocolChartProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-700">
-                <th className="pb-2 font-medium">Protocollo</th>
-                <th className="pb-2 font-medium text-right">Pacchetti</th>
+                <th className="pb-2 font-medium">Protocol</th>
+                <th className="pb-2 font-medium text-right">Packets</th>
                 <th className="pb-2 font-medium text-right hidden sm:table-cell">Byte</th>
                 <th className="pb-2 font-medium text-right">%</th>
               </tr>
@@ -100,7 +100,7 @@ export default function ProtocolChart({ result }: ProtocolChartProps) {
                 <tr key={p.protocol} className="border-b border-slate-700/50 hover:bg-slate-700/20">
                   <td className="py-1.5">
                     <div className="flex items-center gap-2">
-                      {/* Pallino colorato identificativo del protocollo */}
+                      {/* Pallino colorato identificativo del protocol */}
                       <span
                         className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: protocolColor(p.protocol) }}

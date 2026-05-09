@@ -338,7 +338,7 @@ function PacketDetailPanel({
     ['Tempo relativo', `+${relS} s`],
     ['Sorgente',     `${packet.src_ip ?? '—'}${packet.src_port ? `:${packet.src_port}` : ''}`],
     ['Destinazione', `${packet.dst_ip ?? '—'}${packet.dst_port ? `:${packet.dst_port}` : ''}`],
-    ['Protocollo',   packet.protocol],
+    ['Protocol',   packet.protocol],
     ['Lunghezza',    `${packet.length} byte`],
     ['Info',         packet.info],
   ]
@@ -494,7 +494,7 @@ export default function TracesView({ packets }: TracesViewProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="Cerca per IP, porta, protocollo…"
+              placeholder="Search by IP, port, protocol..."
               value={search}
               onChange={e => handleSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 bg-slate-700/60 border border-slate-600 rounded-lg
@@ -510,7 +510,7 @@ export default function TracesView({ packets }: TracesViewProps) {
                        text-sm text-slate-200 focus:outline-none focus:border-brand-500"
           >
             {allProtocols.map(p => (
-              <option key={p} value={p}>{p === 'all' ? 'Tutti i protocolli' : p}</option>
+              <option key={p} value={p}>{p === 'all' ? 'All protocols' : p}</option>
             ))}
           </select>
 
@@ -520,13 +520,13 @@ export default function TracesView({ packets }: TracesViewProps) {
             className="px-3 py-1.5 bg-slate-700/60 border border-slate-600 rounded-lg
                        text-sm text-slate-200 focus:outline-none focus:border-brand-500"
           >
-            <option value="time">Cronologico</option>
-            <option value="packets">Per pacchetti ↓</option>
+            <option value="time">Chronological</option>
+            <option value="packets">Per packets ↓</option>
             <option value="bytes">Per volume ↓</option>
           </select>
 
           <span className="text-xs text-slate-500 ml-auto whitespace-nowrap">
-            {visibleFlows.length} flussi · {packets.length} pacchetti
+            {visibleFlows.length} flows · {packets.length} packets
           </span>
         </div>
 
@@ -542,9 +542,9 @@ export default function TracesView({ packets }: TracesViewProps) {
 
           {/* matches stats column widths */}
           <div className="flex items-center gap-3 shrink-0 text-[10px] text-slate-500 uppercase tracking-wide">
-            <span className="w-14 text-right">Pacchetti</span>
+            <span className="w-14 text-right">Packets</span>
             <span className="w-16 text-right">Volume</span>
-            <span className="w-14 text-right">Durata</span>
+            <span className="w-14 text-right">Duration</span>
           </div>
 
           {/* ruler timeline */}
@@ -571,7 +571,7 @@ export default function TracesView({ packets }: TracesViewProps) {
 
           {visibleFlows.length === 0 && (
             <div className="card text-center py-14 text-slate-500 text-sm">
-              Nessun flusso trovato per i filtri applicati
+              No flow found for the applied filters
             </div>
           )}
         </div>

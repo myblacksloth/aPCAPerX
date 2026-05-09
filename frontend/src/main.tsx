@@ -1,7 +1,7 @@
 /**
  * Punto di ingresso dell'applicazione React.
  * Monta il componente radice <App> nel div #root dell'index.html.
- * StrictMode attiva i controlli aggiuntivi di React in fase di sviluppo.
+ * StrictMode enables additional React checks during development.
  */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

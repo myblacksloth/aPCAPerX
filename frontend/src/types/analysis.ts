@@ -1,38 +1,38 @@
 /**
- * Definizioni dei tipi TypeScript per le risposte API.
+ * Definizioni dei tipi TypeScript per le responses API.
  *
  * Questi tipi rispecchiano esattamente i modelli Pydantic definiti nel backend
  * (backend/models.py). Qualsiasi modifica ai modelli Python deve essere
- * riportata qui per mantenere la coerenza tra frontend e backend.
+ * riportta qui per mantenere la coerenza tra frontend e backend.
  */
 
-/** Statistiche generali sull'intera cattura */
+/** General statistics for the whole capture */
 export interface SummaryStats {
-  /** Numero totale di pacchetti nel file PCAP */
+  /** Numero totale di packets nel file PCAP */
   total_packets: number
-  /** Volume totale in byte di tutti i pacchetti */
+  /** Volume totale in byte di tutti i packets */
   total_bytes: number
-  /** Timestamp ISO 8601 del primo pacchetto (null se non disponibile) */
+  /** Timestamp ISO 8601 del primo packet (null se not available) */
   capture_start: string | null
-  /** Timestamp ISO 8601 dell'ultimo pacchetto */
+  /** Timestamp ISO 8601 dell'ultimo packet */
   capture_end: string | null
-  /** Durata totale della cattura in secondi */
+  /** Total duration della cattura in secondi */
   duration_seconds: number
-  /** Dimensione media dei pacchetti in byte */
+  /** Dimensione media dei packets in byte */
   avg_packet_size: number
-  /** Numero medio di pacchetti al secondo */
+  /** Numero medio di packets al secondo */
   packets_per_second: number
 }
 
-/** Statistiche per un singolo protocollo di rete */
+/** Statistiche per un singolo protocol di rete */
 export interface ProtocolEntry {
-  /** Nome del protocollo (es. "TCP", "DNS", "HTTPS") */
+  /** Nome del protocol (es. "TCP", "DNS", "HTTPS") */
   protocol: string
-  /** Numero di pacchetti che utilizzano questo protocollo */
+  /** Numero di packets che utilizzano questo protocol */
   count: number
-  /** Volume totale in byte per questo protocollo */
+  /** Volume totale in byte per questo protocol */
   bytes: number
-  /** Percentuale sul totale dei pacchetti (0–100) */
+  /** Percentuale sul totale dei packets (0–100) */
   percentage: number
 }
 
@@ -42,9 +42,9 @@ export interface IPExternalInfo {
   ip: string
   /** Stato dell'arricchimento: enriched, skipped o error */
   status: string
-  /** Motivo sintetico in caso di skip o errore */
+  /** Motivo sintetico in caso di skip o error */
   reason: string | null
-  /** Servizi esterni che hanno restituito dati utili */
+  /** External services that returned useful data */
   sources: string[]
   /** Nome reverse DNS ottenuto tramite PTR */
   reverse_dns: string | null
@@ -64,7 +64,7 @@ export interface IPExternalInfo {
   country_code: string | null
   /** Regione geografica */
   region: string | null
-  /** Città stimata */
+  /** Estimated city */
   city: string | null
   /** Latitudine stimata */
   lat: number | null
@@ -92,21 +92,21 @@ export interface IPExternalInfo {
   rdap_start_address: string | null
   /** Fine range RDAP */
   rdap_end_address: string | null
-  /** Entità/contatti principali esposti da RDAP */
+  /** Main entities/contacts exposed by RDAP */
   rdap_entities: string[]
   /** Note RDAP sintetiche */
   rdap_remarks: string[]
-  /** Errori non bloccanti incontrati sui servizi esterni */
+  /** Non-blocking errors encountered on external services */
   errors: string[]
 }
 
-/** Risposta dell'arricchimento esterno IP */
+/** Risposta dell'arricchimento external IP */
 export interface IPEnrichmentResponse {
-  /** Mappa IP -> dati esterni recuperati */
+  /** IP map -> retrieved external data */
   results: Record<string, IPExternalInfo>
 }
 
-/** Pacchetto compatto inviato alla tab Security avanzata */
+/** Pacchetto compatto inviato alla tab Advanced Security */
 export interface SecurityPacketObservation {
   number: number
   timestamp: string
@@ -119,7 +119,7 @@ export interface SecurityPacketObservation {
   info: string
 }
 
-/** Stato di una fonte usata nell'analisi Security */
+/** State of a source used in Security analysis */
 export interface SecuritySourceStatus {
   source: string
   status: 'ok' | 'partial' | 'skipped' | 'error' | string
@@ -162,7 +162,7 @@ export interface SecurityIPAssessment {
   findings: string[]
 }
 
-/** Riepilogo numerico dell'analisi Security avanzata */
+/** Riepilogo numerico dell'analysis Advanced Security */
 export interface SecurityAnalysisSummary {
   total_ips: number
   analyzed_public_ips: number
@@ -183,7 +183,7 @@ export interface SecurityAnalysisResponse {
   errors: string[]
 }
 
-/** Reputazione esterna per un dominio DNS */
+/** Reputazione esterna per un domainso DNS */
 export interface DNSDomainIntel {
   domain: string
   status: 'clean' | 'listed' | 'unknown' | string
@@ -208,7 +208,7 @@ export interface DNSAnswerEntry {
   ttl: number | null
 }
 
-/** Query DNS locale con risposta correlata quando disponibile */
+/** Query DNS locale con correlated response quando disponibile */
 export interface DNSQueryEntry {
   packet_number: number
   timestamp: string
@@ -245,7 +245,7 @@ export interface DNSTunnelingIndicator {
   reasons: string[]
 }
 
-/** Correlazione dominio -> IP risposta -> flow successivi */
+/** Correlazione domainso -> IP risposta -> flow successivi */
 export interface DNSFlowCorrelation {
   domain: string
   answer_ip: string
@@ -264,7 +264,7 @@ export interface DNSStats {
   suspicious_txt_count: number
 }
 
-/** Analisi DNS locale privacy-by-default */
+/** Analysis DNS locale privacy-by-default */
 export interface DNSAnalysisResult {
   stats: DNSStats
   queries: DNSQueryEntry[]
@@ -275,7 +275,7 @@ export interface DNSAnalysisResult {
   flow_correlations: DNSFlowCorrelation[]
 }
 
-/** Richiesta HTTP in chiaro con risposta correlata quando disponibile */
+/** Richiesta HTTP in chiaro con correlated response quando disponibile */
 export interface HTTPRequestEntry {
   packet_number: number
   timestamp: string
@@ -317,7 +317,7 @@ export interface HTTPStats {
   unique_hosts: number
 }
 
-/** Analisi HTTP in chiaro privacy-by-default */
+/** Analysis HTTP in chiaro privacy-by-default */
 export interface HTTPAnalysisResult {
   stats: HTTPStats
   requests: HTTPRequestEntry[]
@@ -326,7 +326,7 @@ export interface HTTPAnalysisResult {
   limitations: string[]
 }
 
-/** Connessione TLS ricostruita dai soli metadati osservabili */
+/** Connessione TLS ricostruita dai soli metadata osservabili */
 export interface TLSEntry {
   packet_number: number
   timestamp: string
@@ -367,7 +367,7 @@ export interface TLSTopEntry {
   count: number
 }
 
-/** Analisi TLS privacy-by-default basata su handshake osservabili */
+/** Analysis TLS privacy-by-default basata su handshake osservabili */
 export interface TLSAnalysisResult {
   stats: TLSStats
   connections: TLSEntry[]
@@ -377,7 +377,7 @@ export interface TLSAnalysisResult {
   limitations: string[]
 }
 
-/** Punto temporale di attività di un host */
+/** Host activity time point */
 export interface HostTimelinePoint {
   timestamp: string
   packets_sent: number
@@ -415,63 +415,63 @@ export interface HostAnalysisResult {
 
 /** Statistiche per un singolo indirizzo IP */
 export interface IPServiceEntry {
-  /** Nome del servizio dedotto da porta/protocollo */
+  /** Nome del service dedotto da port/protocol */
   service: string
   /** Porta TCP/UDP osservata, se disponibile */
   port: number | null
-  /** Protocollo di trasporto o rete */
+  /** Protocol di trasporto o rete */
   protocol: string
-  /** Ruolo osservato per l'IP rispetto al servizio */
+  /** Ruolo osservato per l'IP rispetto al service */
   direction: string
-  /** Numero di pacchetti osservati */
+  /** Number of observed packets */
   count: number
-  /** Peer remoti più frequenti per questo servizio */
+  /** Peer remoti most frequenti per questo service */
   peers: string[]
 }
 
 /** Statistiche per un singolo indirizzo IP */
 export interface IPEntry {
-  /** Indirizzo IP in formato stringa (IPv4 o IPv6) */
+  /** Indirizzo IP in format stringa (IPv4 o IPv6) */
   ip: string
-  /** Numero di pacchetti associati a questo indirizzo */
+  /** Numero di packets associati a questo indirizzo */
   count: number
   /** Volume totale in byte associato a questo indirizzo */
   bytes: number
-  /** Protocolli osservati per questo IP */
+  /** Protocols osservati per questo IP */
   protocols: string[]
-  /** Nomi DNS osservati nel PCAP per questo indirizzo */
+  /** Observed DNS names nel PCAP per questo indirizzo */
   hostnames: string[]
-  /** Peer remoti più frequenti */
+  /** Peer remoti most frequenti */
   peers: string[]
-  /** Servizi dedotti dalle porte e dai protocolli osservati */
+  /** Services inferred from observed ports and protocols */
   services: IPServiceEntry[]
-  /** Informazioni opzionali ottenute interrogando servizi esterni */
+  /** Informazioni opzionali ottenute interrogando external services */
   external?: IPExternalInfo | null
 }
 
-/** Statistiche per una singola porta di rete */
+/** Statistiche per una singola port di rete */
 export interface PortEntry {
-  /** Numero di porta (1–65535) */
+  /** Numero di port (1–65535) */
   port: number
-  /** Nome del servizio (es. "HTTP", "SSH") o numero porta come stringa */
+  /** Nome del service (es. "HTTP", "SSH") o numero port come stringa */
   service: string
-  /** Numero di pacchetti che usano questa porta */
+  /** Numero di packets che usano questa port */
   count: number
-  /** Protocollo di trasporto: "TCP" o "UDP" */
+  /** Protocol di trasporto: "TCP" o "UDP" */
   protocol: string
 }
 
-/** Flusso di comunicazione bidirezionale tra due indirizzi IP */
+/** Flusso di comunicazione bidirezionale tra due IP addresses */
 export interface Conversation {
   /** Primo IP della coppia (ordinati lessicograficamente) */
   src_ip: string
   /** Secondo IP della coppia */
   dst_ip: string
-  /** Numero totale di pacchetti scambiati */
+  /** Numero totale di packets scambiati */
   packets: number
   /** Volume totale in byte scambiati */
   bytes: number
-  /** Protocolli osservati in questa conversazione */
+  /** Protocols osservati in questa conversazione */
   protocols: string[]
 }
 
@@ -479,29 +479,29 @@ export interface Conversation {
 export interface FlowEntry {
   /** Identificativo stabile del flow */
   flow_id: string
-  /** IP sorgente del primo verso osservato */
+  /** Source IP del primo verso osservato */
   src_ip: string
-  /** Porta sorgente */
+  /** Porta source */
   src_port: number | null
-  /** IP destinazione del primo verso osservato */
+  /** Destination IP del primo verso osservato */
   dst_ip: string
-  /** Porta destinazione */
+  /** Porta destination */
   dst_port: number | null
-  /** Protocollo L4 */
+  /** Protocol L4 */
   protocol: string
-  /** Timestamp ISO del primo pacchetto */
+  /** Timestamp ISO del primo packet */
   first_seen: string
-  /** Timestamp ISO dell'ultimo pacchetto */
+  /** Timestamp ISO dell'ultimo packet */
   last_seen: string
-  /** Durata in secondi */
+  /** Duration in secondi */
   duration_seconds: number
-  /** Pacchetti totali */
+  /** Total packets */
   packets_total: number
   /** Byte totali */
   bytes_total: number
-  /** Pacchetti client -> server */
+  /** Packets client -> server */
   packets_client_to_server: number
-  /** Pacchetti server -> client */
+  /** Packets server -> client */
   packets_server_to_client: number
   /** Byte client -> server */
   bytes_client_to_server: number
@@ -511,15 +511,15 @@ export interface FlowEntry {
   tcp_flags: string[]
   /** Stato approssimativo dedotto dal backend */
   state: string
-  /** Numeri dei pacchetti associati */
+  /** Numeri dei packets associati */
   packet_numbers: number[]
 }
 
 /** Un punto della timeline di traffico */
 export interface TimelinePoint {
-  /** Orario nel formato HH:MM:SS (UTC) */
+  /** Orario nel format HH:MM:SS (UTC) */
   timestamp: string
-  /** Numero di pacchetti nel bucket temporale */
+  /** Numero di packets nel bucket temporale */
   packets: number
   /** Volume in byte nel bucket temporale */
   bytes: number
@@ -540,7 +540,7 @@ export interface LayerInfo {
   fields: LayerField[]
 }
 
-/** Dettagli di un singolo pacchetto */
+/** Dettagli di un singolo packet */
 export interface PacketEntry {
   number: number
   timestamp: string
@@ -551,44 +551,44 @@ export interface PacketEntry {
   src_port: number | null
   dst_port: number | null
   info: string
-  /** Byte grezzi del pacchetto come stringa esadecimale */
+  /** Byte grezzi del packet come stringa esadecimale */
   raw_hex: string | null
   /** Stack protocollare completo per l'inspector Wireshark-style */
   layers: LayerInfo[]
 }
 
-/** Risultato completo dell'analisi di un file PCAP — oggetto radice */
+/** Risultato completo dell'analysis di un file PCAP — oggetto radice */
 export interface AnalysisResult {
   /** Nome originale del file caricato */
   filename: string
-  /** Statistiche generali della cattura */
+  /** General capture statistics */
   summary: SummaryStats
-  /** Distribuzione dei protocolli (top 20) */
+  /** Protocol distribution (top 20) */
   protocols: ProtocolEntry[]
-  /** Indirizzi IP più attivi come sorgente (top 20) */
+  /** Most active source IP addresses (top 20) */
   top_src_ips: IPEntry[]
-  /** Indirizzi IP più attivi come destinazione (top 20) */
+  /** Most active destination IP addresses (top 20) */
   top_dst_ips: IPEntry[]
-  /** Porte sorgente più utilizzate (top 15) */
+  /** Ports source most used (top 15) */
   top_src_ports: PortEntry[]
-  /** Porte di destinazione più utilizzate (top 15) */
+  /** Ports di destination most used (top 15) */
   top_dst_ports: PortEntry[]
-  /** Conversazioni bidirezionali più attive (top 20) */
+  /** Conversazioni bidirezionali most attive (top 20) */
   conversations: Conversation[]
   /** Flow 5-tuple ricostruiti dal backend */
   flows: FlowEntry[]
-  /** Analisi DNS locale privacy-by-default */
+  /** Analysis DNS locale privacy-by-default */
   dns?: DNSAnalysisResult | null
-  /** Analisi HTTP in chiaro privacy-by-default */
+  /** Analysis HTTP in chiaro privacy-by-default */
   http?: HTTPAnalysisResult | null
-  /** Analisi TLS basata sui metadati osservabili del handshake */
+  /** Analysis TLS basata sui metadata osservabili del handshake */
   tls?: TLSAnalysisResult | null
   /** Vista aggregata host/IP */
   hosts?: HostAnalysisResult | null
-  /** Andamento del traffico nel tempo */
+  /** Traffic trend over time */
   timeline: TimelinePoint[]
-  /** Lista dettagliata dei primi 1000 pacchetti */
+  /** Lista detailsata dei primi 1000 packets */
   packets: PacketEntry[]
-  /** Informazioni opzionali ottenute con l'arricchimento esterno manuale */
+  /** Informazioni opzionali ottenute con l'arricchimento external manuale */
   external_ip_info?: Record<string, IPExternalInfo>
 }

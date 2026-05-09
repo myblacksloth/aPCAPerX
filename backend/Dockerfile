@@ -22,13 +22,13 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Copia del codice sorgente ──────────────────────────────────────────────
+# ── Copia del codice source ──────────────────────────────────────────────
 COPY . .
 
 # Porta su cui Uvicorn accetta le connessioni
 EXPOSE 8000
 
-# ── Avvio del server ───────────────────────────────────────────────────────
-# --host 0.0.0.0 rende il servizio raggiungibile dall'esterno del container
-# --workers 1 è sufficiente per questa applicazione (analisi sincrona)
+# ── Server startup ───────────────────────────────────────────────────────
+# --host 0.0.0.0 rende il serviceso raggiungibile dall'external del container
+# --workers 1 is enough for this application (synchronous analysis)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -2,14 +2,14 @@
 Entry point dell'API REST — PCAPCaper Backend.
 
 Espone cinque endpoint:
-  GET  /api/health   → verifica che il servizio sia attivo
-  POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
-  POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
-  POST /api/security-analysis → esegue threat intelligence opt-in sul traffico
-  POST /api/dns-reputation → confronta domini DNS con liste esterne opt-in
+  GET  /api/health   -> checks whether the service is active
+  POST /api/analyze  → riceve un file PCAP e restituisce l'analysis completa
+  POST /api/enrich-ips → arricchisce IP pubblici tramite external services
+  POST /api/security-analysis → runs opt-in threat intelligence on traffico
+  POST /api/dns-reputation → confronta domains DNS con liste esterne opt-in
 
-Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
-analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
+The received file is written to an operating-system temporary directory,
+analyzed, and then deleted. No data persists on the server between requests.
 """
 
 import os
@@ -48,18 +48,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="PCAPCaper API",
     description=(
-        "Analizza file PCAP/PCAPNG ed estrae statistiche dettagliate: "
-        "indirizzi IP, porte, protocolli, conversazioni e timeline del traffico."
+        "Analyzes PCAP/PCAPNG files and extracts detailed statistics: "
+        "IP addresses, ports, protocolli, conversazioni e timeline del traffico."
     ),
     version="1.0.0",
-    # Indirizzo della documentazione interattiva Swagger UI
+    # Indirizzo della documentazione interactive Swagger UI
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
 # ── Middleware CORS ────────────────────────────────────────────────────────────
-# Permette al frontend (Vite in locale o Nginx in Docker) di chiamare l'API.
-# In produzione, sostituire allow_origins=["*"] con il dominio effettivo.
+# Allows the frontend (local Vite or Docker Nginx) to call the API.
+# In production, replace allow_origins=["*"] with the actual domain.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -76,83 +76,83 @@ ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
 @app.get(
     "/api/health",
     tags=["Utility"],
-    summary="Verifica che il servizio sia attivo",
+    summary="Checks whether the service is active",
 )
 def health_check():
     """
-    Restituisce sempre {"status": "ok"} se il server è in esecuzione.
+    Restituisce sempre {"status": "ok"} se il server is in esecuzione.
     Utilizzato dai health-check di Docker Compose e dai proxy inversi.
     """
     return {"status": "ok", "service": "pcap-analyzer"}
 
 
-# ─── Endpoint: arricchimento IP tramite tool esterni ──────────────────────────
+# ─── Endpoint: IP enrichment through external tools ──────────────────────────
 
 @app.post(
     "/api/enrich-ips",
     response_model=IPEnrichmentResponse,
-    tags=["Analisi"],
-    summary="Arricchisce indirizzi IP usando servizi esterni",
-    response_description="Mappa IP -> dati esterni recuperati",
+    tags=["Analysis"],
+    summary="Enriches IP addresses using external services",
+    response_description="IP map -> retrieved external data",
 )
 def enrich_ips_endpoint(payload: IPEnrichmentRequest):
     """
-    Riceve una lista di indirizzi IP già estratti dal PCAP e interroga servizi
-    esterni per recuperare ASN, prefissi BGP, RDAP, reverse DNS e dati GeoIP.
+    Receives a list of IP addresses already extracted from the PCAP and queries services
+    external services to retrieve ASN, BGP prefixes, RDAP, reverse DNS, and GeoIP data.
 
-    Nota privacy: gli indirizzi privati, locali e riservati vengono scartati
+    Privacy note: private, local, and reserved addresses are discarded
     prima di qualunque chiamata esterna. L'endpoint viene chiamato solo su
-    azione esplicita dell'utente dal pulsante "Analizza con tool esterni".
+    explicit user action from the "Analyze with external tools" button.
     """
     try:
-        logger.info("Avvio arricchimento esterno per %d IP", len(payload.ips))
+        logger.info("Starting external enrichment per %d IP", len(payload.ips))
         results = enrich_ips(payload.ips)
-        logger.info("Arricchimento esterno completato per %d IP", len(results))
+        logger.info("External enrichment completed per %d IP", len(results))
         return IPEnrichmentResponse(results=results)
     except Exception as exc:
-        # Un errore inatteso viene loggato per poter diagnosticare problemi di rete/API.
-        logger.exception("Errore imprevisto durante l'arricchimento IP")
+        # Un error inatteso viene loggato per poter diagnosticare problemi di rete/API.
+        logger.exception("Error imprevisto durante l'arricchimento IP")
         raise HTTPException(
             status_code=500,
-            detail="Errore durante l'arricchimento esterno degli IP.",
+            detail="Error durante l'arricchimento external degli IP.",
         ) from exc
 
 
-# ─── Endpoint: analisi di sicurezza avanzata ───────────────────────────────
+# ─── Endpoint: analysis di sicurezza advanced ───────────────────────────────
 
 @app.post(
     "/api/security-analysis",
     response_model=SecurityAnalysisResponse,
-    tags=["Analisi"],
-    summary="Analizza il traffico con motore Security e threat intelligence",
+    tags=["Analysis"],
+    summary="Analyzes traffic with the Security engine and threat intelligence",
     response_description="Finding, score e raccomandazioni di sicurezza",
 )
 def security_analysis_endpoint(payload: SecurityAnalysisRequest):
     """
-    Riceve i pacchetti gia estratti dal PCAP e le informazioni IP arricchite.
+    Receives packets already extracted from the PCAP and enriched IP information.
 
     Nota privacy: questo endpoint puo interrogare fonti esterne di threat
-    intelligence per gli IP pubblici osservati. Il frontend lo chiama solo dopo
-    conferma esplicita dell'utente nel popup della tab Security avanzata.
+    intelligence for observed public IPs. The frontend calls it only after
+    explicit user confirmation in the Advanced Security tab popup.
     """
     try:
         logger.info(
-            "Avvio analisi di sicurezza avanzata su %d pacchetti",
+            "Starting advanced security analysis on %d packets",
             len(payload.packets),
         )
         result = analyze_security(payload)
         logger.info(
-            "Analisi Security completata: %d finding, %d IP pubblici",
+            "Security analysis completed: %d finding, %d IP pubblici",
             result.summary.total_findings,
             result.summary.analyzed_public_ips,
         )
         return result
     except Exception as exc:
-        # L'errore viene loggato per distinguere problemi di rete da bug del motore.
-        logger.exception("Errore imprevisto durante l'analisi Security")
+        # L'error viene loggato per distinguere problemi di rete da bug del motore.
+        logger.exception("Unexpected error during Security analysis")
         raise HTTPException(
             status_code=500,
-            detail="Errore durante l'analisi di sicurezza avanzata.",
+            detail="Error durante l'analysis di sicurezza advanced.",
         ) from exc
 
 
@@ -161,54 +161,54 @@ def security_analysis_endpoint(payload: SecurityAnalysisRequest):
 @app.post(
     "/api/dns-reputation",
     response_model=DNSReputationResponse,
-    tags=["Analisi"],
-    summary="Controlla domini DNS osservati su liste esterne",
-    response_description="Reputazione dominio -> fonti e categorie",
+    tags=["Analysis"],
+    summary="Checks observed DNS domains against external lists",
+    response_description="Domain reputation -> sources and categories",
 )
 def dns_reputation_endpoint(payload: DNSReputationRequest):
     """
-    Confronta i domini richiesti via DNS con liste esterne aperte.
+    Compares DNS-requested domains with open external lists.
 
-    Nota privacy: l'endpoint viene chiamato solo dopo conferma esplicita
-    dell'utente nella tab DNS. Il backend riceve domini gia estratti dal PCAP
-    e non effettua alcun controllo esterno durante la normale analisi.
+    Privacy note: this endpoint is called only after explicit confirmation
+    from the user in the DNS tab. The backend receives domains already extracted from the PCAP
+    e non effettua alcun controllo external durante la normale analysis.
     """
     try:
-        logger.info("Avvio reputazione DNS per %d domini", len(payload.domains))
+        logger.info("Starting DNS reputation for %d domains", len(payload.domains))
         result = analyze_dns_reputation(payload.domains, payload.max_domains)
-        logger.info("Reputazione DNS completata per %d domini", len(result.results))
+        logger.info("DNS reputation completed for %d domains", len(result.results))
         return result
     except Exception as exc:
         # Log completo per distinguere problemi di download liste da errori applicativi.
-        logger.exception("Errore imprevisto durante la reputazione DNS")
+        logger.exception("Error imprevisto durante la reputazione DNS")
         raise HTTPException(
             status_code=500,
-            detail="Errore durante l'analisi reputazionale DNS.",
+            detail="Error durante l'analysis reputazionale DNS.",
         ) from exc
 
 
-# ─── Endpoint: analisi PCAP ───────────────────────────────────────────────────
+# ─── Endpoint: analysis PCAP ───────────────────────────────────────────────────
 
 @app.post(
     "/api/analyze",
     response_model=AnalysisResult,
-    tags=["Analisi"],
-    summary="Analizza un file PCAP/PCAPNG",
+    tags=["Analysis"],
+    summary="Analyzes a PCAP/PCAPNG file",
     response_description="Report completo con statistiche di rete",
 )
 async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o CAP da analizzare")):
     """
-    Riceve un file di cattura di rete e restituisce:
+    Receives a network capture file and returns:
 
-    - **summary**: statistiche generali (pacchetti totali, byte, durata, ecc.)
+    - **summary**: general statistics (total packets, bytes, duration, etc.)
     - **protocols**: distribuzione dei protocolli di rete
-    - **top_src_ips / top_dst_ips**: indirizzi IP più attivi
-    - **top_src_ports / top_dst_ports**: porte più utilizzate
+    - **top_src_ips / top_dst_ips**: IP addresses most active
+    - **top_src_ports / top_dst_ports**: ports most used
     - **conversations**: conversazioni bidirezionali tra coppie di IP
-    - **timeline**: andamento del traffico nel tempo
-    - **packets**: lista dettagliata di tutti i pacchetti
+    - **timeline**: traffic trend over time
+    - **packets**: lista detailsata di tutti i packets
 
-    Il file viene copiato su disco temporaneo in streaming per non tenerlo in RAM.
+    The file is streamed to temporary disk storage to avoid keeping it in RAM.
     Se `PCAPCAPER_UPLOAD_MAX_MB=0` non viene applicato alcun limite applicativo.
     """
 
@@ -220,7 +220,7 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Formato file non supportato: '{ext}'. "
+                f"Unsupported file format: '{ext}'. "
                 f"Estensioni accettate: {', '.join(ALLOWED_EXTENSIONS)}"
             ),
         )
@@ -231,8 +231,8 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
     max_bytes = UPLOAD_MAX_MB * 1_048_576 if UPLOAD_MAX_MB > 0 else 0
     total_bytes = 0
 
-    # Il file temporaneo viene eliminato nel blocco `finally`, anche in caso di
-    # errore. Usiamo dir configurabile per Docker/produzione.
+    # The temporary file is removed in the `finally` block, even in case of
+    # error. Usiamo dir configurabile per Docker/produzione.
     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=TEMP_DIR)
 
     try:
@@ -253,19 +253,19 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
         tmp_file.close()
 
         if total_bytes == 0:
-            raise HTTPException(status_code=400, detail="Il file è vuoto.")
+            raise HTTPException(status_code=400, detail="The file is empty.")
 
         logger.info(
-            "Avvio analisi: %s (%d byte, %.2f MB)",
+            "Starting analysis: %s (%d byte, %.2f MB)",
             filename, total_bytes, total_bytes / 1_048_576
         )
 
-        # Delega l'analisi CPU-bound a un thread per non bloccare l'event loop
-        # FastAPI mentre altri endpoint servono richieste leggere o progress UI.
+        # Delega l'analysis CPU-bound a un thread per non bloccare l'event loop
+        # FastAPI mentre altri endpoint servono requests leggere o progress UI.
         result = await run_in_threadpool(analyze_pcap, tmp_file.name, filename)
 
         logger.info(
-            "Analisi completata: %d pacchetti, %.3f s di cattura",
+            "Analysis completed: %d packets, %.3f s capture",
             result.summary.total_packets,
             result.summary.duration_seconds,
         )
@@ -275,19 +275,19 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
         raise
 
     except ValueError as exc:
-        # Errori noti: file corrotto, nessun pacchetto, formato non valido
+        # Errori noti: file corrotto, nessun packet, format non valido
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     except Exception as exc:
         # Errori imprevisti: logga il traceback completo per il debugging
-        logger.exception("Errore imprevisto durante l'analisi di '%s'", filename)
+        logger.exception("Error imprevisto durante l'analysis di '%s'", filename)
         raise HTTPException(
             status_code=500,
-            detail="Errore interno del server. Controlla i log per i dettagli.",
+            detail="Internal server error. Check logs for details.",
         ) from exc
 
     finally:
-        # Elimina sempre il file temporaneo per non lasciare dati sul server
+        # Elimina sempre il file temporaneo per non lasciare data sul server
         try:
             tmp_file.close()
         except OSError:

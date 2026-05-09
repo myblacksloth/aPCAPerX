@@ -14,7 +14,7 @@ const PAGE_SIZE = 50
 export default function PacketTable({ packets, onHostClick }: PacketTableProps) {
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(0)
-  // indice nell'array `filtered` del pacchetto selezionato (null = modale chiuso)
+  // indice nell'array `filtered` del packet selezionato (null = modale chiuso)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
   const filtered = useMemo(() => {
@@ -63,7 +63,7 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
         {/* ── Header ───────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-base font-semibold text-slate-200">
-            Lista pacchetti{' '}
+            Lista packets{' '}
             <span className="text-slate-500 text-sm font-normal">
               ({packets.length.toLocaleString('it-IT')})
             </span>
@@ -73,7 +73,7 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
-              placeholder="Filtra per IP, protocollo, info…"
+              placeholder="Filter by IP, protocol, info..."
               value={search}
               onChange={e => handleSearch(e.target.value)}
               className="pl-9 pr-4 py-1.5 bg-slate-700 border border-slate-600 rounded-lg
@@ -92,7 +92,7 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
                 <th className="pb-2 font-medium pr-3">Orario</th>
                 <th className="pb-2 font-medium pr-3">Sorgente</th>
                 <th className="pb-2 font-medium pr-3">Destinazione</th>
-                <th className="pb-2 font-medium pr-3">Protocollo</th>
+                <th className="pb-2 font-medium pr-3">Protocol</th>
                 <th className="pb-2 font-medium pr-3 text-right">Len</th>
                 <th className="pb-2 font-medium">Info</th>
                 <th className="pb-2 font-medium w-7" />
@@ -125,7 +125,7 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
                           <button
                             type="button"
                             onClick={(event) => {
-                              // Rende l'IP cliccabile senza aprire l'inspector del pacchetto.
+                              // Rende l'IP clickbile senza aprire l'inspector del packet.
                               event.stopPropagation()
                               onHostClick?.(pkt.src_ip as string)
                             }}
@@ -143,7 +143,7 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
                           <button
                             type="button"
                             onClick={(event) => {
-                              // Rende l'IP cliccabile senza aprire l'inspector del pacchetto.
+                              // Rende l'IP clickbile senza aprire l'inspector del packet.
                               event.stopPropagation()
                               onHostClick?.(pkt.dst_ip as string)
                             }}
@@ -185,21 +185,21 @@ export default function PacketTable({ packets, onHostClick }: PacketTableProps) 
 
           {filtered.length === 0 && (
             <p className="text-slate-500 text-sm text-center py-8">
-              Nessun pacchetto corrisponde alla ricerca "{search}"
+              No packet matches the search "{search}"
             </p>
           )}
         </div>
 
         {/* Hint */}
         <p className="mt-2 text-[10px] text-slate-600 text-right">
-          Clicca su una riga per ispezionare il pacchetto
+          Click a row to inspect the packet
         </p>
 
         {/* ── Paginazione ───────────────────────────────────────────────── */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700">
             <span className="text-xs text-slate-500">
-              {filtered.length.toLocaleString('it-IT')} pacchetti ·{' '}
+              {filtered.length.toLocaleString('it-IT')} packets ·{' '}
               pagina {page + 1} di {totalPages}
             </span>
 

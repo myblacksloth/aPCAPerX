@@ -1,9 +1,9 @@
 /**
- * Dashboard DNS avanzata.
+ * Dashboard DNS advanced.
  *
- * La vista usa prima la nuova sezione `dns` prodotta dal backend: query,
- * risposte, rcode, TTL, indicatori di tunneling e correlazioni dominio -> IP
- * -> flow. Le liste esterne restano opt-in e partono solo dopo conferma.
+ * This view uses prima la nuova sezione `dns` prodotta dal backend: query,
+ * responses, rcode, TTL, indicatori di tunneling e correlazioni domainso -> IP
+ * -> flow. External lists remain opt-in and start only after confirmation.
  */
 import { useMemo, useState } from 'react'
 import { AlertTriangle, Database, ExternalLink, Filter, Globe2, Loader2, Search, ShieldAlert, ShieldCheck } from 'lucide-react'
@@ -36,8 +36,8 @@ function emptyDns() {
 }
 
 function answerSummary(query: DNSQueryEntry): string {
-  // Produce una risposta compatta per la tabella senza perdere IP e CNAME.
-  if (query.answers.length === 0) return 'n/d'
+  // Produces a compact answer for the table without losing IPs and CNAMEs.
+  if (query.answers.length === 0) return 'n/a'
   return query.answers
     .slice(0, 3)
     .map((answer) => `${answer.record_type} ${answer.value}`)
@@ -94,7 +94,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
   )
 
   const filteredQueries = useMemo(() => {
-    // Applica i filtri richiesti: dominio, client, tipo record e rcode.
+    // Applica i filtri richiesti: domainso, client, tipo record e rcode.
     const domain = domainFilter.trim().toLowerCase()
     const client = clientFilter.trim().toLowerCase()
     return dns.queries.filter((query) => {
@@ -109,7 +109,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
 
   const listedCount = dns.queries.filter((query) => externalIntel[query.query]?.status === 'listed').length
   const runExternalReputation = async () => {
-    // La reputazione esterna invia solo domini e solo dopo conferma esplicita.
+    // External reputation sends only domains and only after explicit confirmation.
     setConfirmOpen(false)
     setLoading(true)
     setError(null)
@@ -124,13 +124,13 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
+        throw new Error(data.detail ?? `Error ${response.status}: ${response.statusText}`)
       }
 
       const payload: DNSReputationResponse = await response.json()
       setReputation(payload)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Errore sconosciuto durante l'analisi DNS esterna")
+      setError(err instanceof Error ? err.message : "Unknown error durante l'analysis DNS esterna")
     } finally {
       setLoading(false)
     }
@@ -143,12 +143,12 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
           <div>
             <h2 className="text-base font-semibold text-slate-200">DNS</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Query, risposte, rcode, TTL, NXDOMAIN ratio, TXT sospette, tunneling DNS e correlazioni con flow successivi.
+              Queries, responses, rcode, TTL, NXDOMAIN ratio, suspicious TXT records, DNS tunneling, and correlations with later flows.
             </p>
           </div>
           <button
             onClick={() => {
-              // Dopo un controllo riuscito la reputazione resta attiva e non viene rilanciata.
+              // After a successful check, reputation stays active and is not run again.
               if (!reputationActive) setConfirmOpen(true)
             }}
             disabled={loading || dns.top_domains.length === 0 || reputationActive}
@@ -179,8 +179,8 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           ['Query', dns.stats.total_queries, 'text-white'],
-          ['Risposte', dns.stats.total_responses, 'text-slate-200'],
-          ['Domini', dns.stats.unique_domains, 'text-slate-200'],
+          ['Responses', dns.stats.total_responses, 'text-slate-200'],
+          ['Domains', dns.stats.unique_domains, 'text-slate-200'],
           ['NXDOMAIN', `${(dns.stats.nxdomain_ratio * 100).toFixed(1)}%`, 'text-sky-300'],
           ['TXT sospette', dns.stats.suspicious_txt_count, 'text-amber-300'],
           ['In liste', listedCount, 'text-red-300'],
@@ -203,7 +203,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
             </div>
             {reputationActive && (
               <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-100">
-                Reputazione esterna attiva
+                External reputation active
               </span>
             )}
           </div>
@@ -214,7 +214,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
               <input
                 value={domainFilter}
                 onChange={(event) => setDomainFilter(event.target.value)}
-                placeholder="Filtra dominio..."
+                placeholder="Filter domain..."
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
               />
             </div>
@@ -236,7 +236,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
             <table className="min-w-full text-xs">
               <thead className="text-left text-slate-500">
                 <tr>
-                  <th className="pb-2 pr-3">Dominio</th>
+                  <th className="pb-2 pr-3">Domainso</th>
                   <th className="pb-2 pr-3">Tipo</th>
                   <th className="pb-2 pr-3">Rcode</th>
                   <th className="pb-2 pr-3">Risposta</th>
@@ -269,9 +269,9 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
                       <td className="py-3 pr-3 align-top text-slate-300">{query.record_type}</td>
                       <td className="py-3 pr-3 align-top text-slate-300">{query.response_code_name ?? 'NO_RESPONSE'}</td>
                       <td className="max-w-md py-3 pr-3 align-top text-slate-400">{answerSummary(query)}</td>
-                      <td className="py-3 pr-3 align-top text-slate-400">{query.ttls.length ? query.ttls.join(', ') : 'n/d'}</td>
-                      <td className="py-3 pr-3 align-top font-mono text-slate-400">{query.client ?? 'n/d'}</td>
-                      <td className="py-3 pr-3 align-top font-mono text-slate-400">{query.resolver ?? 'n/d'}</td>
+                      <td className="py-3 pr-3 align-top text-slate-400">{query.ttls.length ? query.ttls.join(', ') : 'n/a'}</td>
+                      <td className="py-3 pr-3 align-top font-mono text-slate-400">{query.client ?? 'n/a'}</td>
+                      <td className="py-3 pr-3 align-top font-mono text-slate-400">{query.resolver ?? 'n/a'}</td>
                     </tr>
                   )
                 })}
@@ -282,7 +282,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
 
         <aside className="space-y-4">
           <div className="card">
-            <h3 className="text-sm font-semibold text-slate-200">Domini più richiesti</h3>
+            <h3 className="text-sm font-semibold text-slate-200">Most requested domains</h3>
             <div className="mt-3 space-y-2">
               {dns.top_domains.slice(0, 10).map((item) => (
                 <div key={item.value} className="flex items-center justify-between gap-3 rounded-lg bg-slate-900/70 px-3 py-2">
@@ -294,7 +294,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
           </div>
 
           <div className="card">
-            <h3 className="text-sm font-semibold text-slate-200">Indicatori sospetti</h3>
+            <h3 className="text-sm font-semibold text-slate-200">Indicators sospetti</h3>
             <div className="mt-3 space-y-2">
               {dns.tunneling_indicators.slice(0, 8).map((item) => (
                 <div key={item.domain} className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
@@ -306,13 +306,13 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
                 </div>
               ))}
               {dns.tunneling_indicators.length === 0 && (
-                <p className="text-xs text-slate-500">Nessun indicatore DNS tunneling evidente.</p>
+                <p className="text-xs text-slate-500">No obvious DNS tunneling indicator.</p>
               )}
             </div>
           </div>
 
           <div className="card">
-            <h3 className="text-sm font-semibold text-slate-200">Dominio → IP → Flow</h3>
+            <h3 className="text-sm font-semibold text-slate-200">Domainso → IP → Flow</h3>
             <div className="mt-3 space-y-2">
               {dns.flow_correlations.slice(0, 8).map((item) => (
                 <div key={`${item.domain}-${item.answer_ip}`} className="rounded-lg bg-slate-900/70 p-3">
@@ -321,14 +321,14 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
                 </div>
               ))}
               {dns.flow_correlations.length === 0 && (
-                <p className="text-xs text-slate-500">Nessuna correlazione con flow successivi rilevata.</p>
+                <p className="text-xs text-slate-500">No correlation with later flows detected.</p>
               )}
             </div>
           </div>
 
           {reputationActive && reputation && (
             <div className="card">
-              <h3 className="text-sm font-semibold text-slate-200">Fonti esterne</h3>
+              <h3 className="text-sm font-semibold text-slate-200">External sources</h3>
               <div className="mt-3 space-y-2">
                 {reputation.sources.map((source) => (
                   <div key={source.source} className="rounded-lg bg-slate-900/70 p-3">
@@ -351,13 +351,13 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
             <div className="flex items-start gap-3">
               <Globe2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-300" />
               <div>
-                <h3 className="text-base font-semibold text-white">Conferma controllo DNS esterno</h3>
+                <h3 className="text-base font-semibold text-white">Confirm external DNS check</h3>
                 <p className="mt-2 text-sm text-slate-300">
-                  Verranno inviati i domini DNS osservati nel PCAP a liste e servizi esterni aperti:
+                  DNS domains observed in the PCAP will be sent to open external lists and services:
                   AdGuard DNS filter, StevenBlack hosts e URLhaus se configurato con Auth-Key sul backend.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  L'analisi DNS locale, inclusi rcode, TTL, tunneling e correlazioni con flow, non invia dati all'esterno.
+                  Local DNS analysis, including rcode, TTL, tunneling, and flow correlations, does not send data externally.
                 </p>
                 <a
                   href="https://github.com/AdguardTeam/AdGuardSDNSFilter"
@@ -372,7 +372,7 @@ export default function DNSAnalysisView({ result }: DNSAnalysisViewProps) {
 
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setConfirmOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600">
-                Annulla
+                Cancel
               </button>
               <button onClick={runExternalReputation} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">
                 Confermo e controlla

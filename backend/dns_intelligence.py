@@ -1,8 +1,8 @@
 """
 Threat intelligence DNS opt-in.
 
-Questo modulo viene eseguito solo quando l'utente conferma il popup nella tab
-DNS. Confronta i domini osservati nel PCAP con liste aperte pensate per
+This module runs only when the user confirms the popup in the
+DNS. Compares domains observed in the PCAP with open lists designed for
 blocking DNS e, se configurato, interroga URLhaus per host legati a malware.
 """
 
@@ -21,13 +21,13 @@ from models import DNSDomainIntel, DNSReputationResponse, SecuritySourceStatus
 # Timeout prudente: una lista lenta non deve bloccare l'interfaccia.
 HTTP_TIMEOUT_SECONDS = 8
 
-# Liste aperte usate come sorgenti DNS-style, scaricate solo su richiesta.
+# Open lists used as DNS-style sources, downloaded only on request.
 ADGUARD_DNS_FILTER_URL = "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
 STEVENBLACK_HOSTS_URL = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
 
 
 def _normalize_domain(domain: str) -> Optional[str]:
-    """Normalizza un dominio DNS rimuovendo wildcard, punto finale e maiuscole."""
+    """Normalizza un domainso DNS rimuovendo wildcard, punto finale e maiuscole."""
     value = domain.strip().lower().strip(".")
     value = value.removeprefix("*.").removeprefix("www.")
     if not value or " " in value or "/" in value:
@@ -38,7 +38,7 @@ def _normalize_domain(domain: str) -> Optional[str]:
 
 
 def _candidate_domains(domain: str) -> List[str]:
-    """Produce dominio e parent-domain per catturare regole su suffissi."""
+    """Produce domainso e parent-domain per catturare regole su suffissi."""
     parts = domain.split(".")
     candidates = []
     for index in range(0, max(len(parts) - 1, 0)):
@@ -93,7 +93,7 @@ def _category_from_rule(rule: str) -> str:
 
 
 def _extract_adguard_domains(text: str) -> Dict[str, Tuple[str, str]]:
-    """Estrae domini da regole AdGuard compatibili con DNS-level blocking."""
+    """Estrae domains da regole AdGuard compatibili con DNS-level blocking."""
     domains: Dict[str, Tuple[str, str]] = {}
     rule_re = re.compile(r"^\|\|([a-z0-9_.-]+\.[a-z0-9_.-]+)\^", re.IGNORECASE)
 
@@ -111,7 +111,7 @@ def _extract_adguard_domains(text: str) -> Dict[str, Tuple[str, str]]:
 
 
 def _extract_hosts_domains(text: str) -> Set[str]:
-    """Estrae domini da un file hosts nel formato 0.0.0.0 dominio."""
+    """Estrae domains da un file hosts nel format 0.0.0.0 domainso."""
     domains: Set[str] = set()
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -141,7 +141,7 @@ def _load_stevenblack_hosts() -> Set[str]:
 
 
 def _match_domain(domain: str, indexed: Iterable[str]) -> Optional[str]:
-    """Cerca un dominio o un suo suffisso nella lista indicizzata."""
+    """Searches a domain or one of its suffixes in the indexed list."""
     for candidate in _candidate_domains(domain):
         if candidate in indexed:
             return candidate
@@ -149,7 +149,7 @@ def _match_domain(domain: str, indexed: Iterable[str]) -> Optional[str]:
 
 
 def _query_urlhaus_domain(domain: str, errors: List[str]) -> Optional[Dict]:
-    """Interroga URLhaus per dominio solo se l'Auth-Key e configurata."""
+    """Interroga URLhaus per domainso solo se l'Auth-Key e configurata."""
     auth_key = os.getenv("URLHAUS_AUTH_KEY")
     if not auth_key:
         return None
@@ -169,7 +169,7 @@ def _query_urlhaus_domain(domain: str, errors: List[str]) -> Optional[Dict]:
 
 
 def analyze_dns_reputation(domains: List[str], max_domains: int = 250) -> DNSReputationResponse:
-    """Confronta domini DNS con liste aperte e ritorna reputazione aggregata."""
+    """Confronta domains DNS con liste aperte e ritorna reputazione aggregata."""
     errors: List[str] = []
     sources: List[SecuritySourceStatus] = []
     results: Dict[str, DNSDomainIntel] = {}
@@ -183,30 +183,30 @@ def analyze_dns_reputation(domains: List[str], max_domains: int = 250) -> DNSRep
         sources.append(SecuritySourceStatus(
             source="AdGuard DNS filter",
             status="ok",
-            detail=f"{len(adguard)} regole dominio caricate",
+            detail=f"{len(adguard)} regole domainso caricate",
         ))
     except Exception as exc:
         adguard = {}
         errors.append(f"AdGuard DNS filter: {exc}")
-        sources.append(SecuritySourceStatus(source="AdGuard DNS filter", status="error", detail="Lista non disponibile"))
+        sources.append(SecuritySourceStatus(source="AdGuard DNS filter", status="error", detail="Lista not available"))
 
     try:
         stevenblack = _load_stevenblack_hosts()
         sources.append(SecuritySourceStatus(
             source="StevenBlack hosts",
             status="ok",
-            detail=f"{len(stevenblack)} domini hosts caricati",
+            detail=f"{len(stevenblack)} domains hosts caricati",
         ))
     except Exception as exc:
         stevenblack = set()
         errors.append(f"StevenBlack hosts: {exc}")
-        sources.append(SecuritySourceStatus(source="StevenBlack hosts", status="error", detail="Lista non disponibile"))
+        sources.append(SecuritySourceStatus(source="StevenBlack hosts", status="error", detail="Lista not available"))
 
     urlhaus_enabled = bool(os.getenv("URLHAUS_AUTH_KEY"))
     sources.append(SecuritySourceStatus(
         source="URLhaus",
         status="ok" if urlhaus_enabled else "skipped",
-        detail="Host API attiva tramite URLHAUS_AUTH_KEY" if urlhaus_enabled else "Auth-Key non configurata: fonte saltata",
+        detail="Host API enabled through URLHAUS_AUTH_KEY" if urlhaus_enabled else "Auth-Key not configured: source skipped",
     ))
 
     for domain in selected:
@@ -234,7 +234,7 @@ def analyze_dns_reputation(domains: List[str], max_domains: int = 250) -> DNSRep
         if urlhaus:
             categories.add("malware")
             matched_sources.append("URLhaus")
-            matched_rules.append(f"URLhaus: {urlhaus.get('url_count', 'n/d')} URL osservati")
+            matched_rules.append(f"URLhaus: {urlhaus.get('url_count', 'n/a')} observed URLs")
             score = max(score, 95)
 
         results[domain] = DNSDomainIntel(

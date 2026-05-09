@@ -1,10 +1,10 @@
 """
-Analisi aggregata host/IP.
+Aggregated host/IP analysis.
 
-Il modulo costruisce una vista centrata sugli host osservati nel PCAP usando i
-dati gia estratti dagli altri analyzer: pacchetti, flow 5-tuple, DNS, HTTP e
-TLS. Non effettua chiamate esterne: ASN e geolocalizzazione vengono mostrate dal
-frontend quando l'utente abilita l'arricchimento IP e `external_ip_info` viene
+This module builds a host-centered view of observed PCAP hosts using
+data already extracted by the other analyzers: packets, 5-tuple flows, DNS, HTTP, and
+TLS. Non effettua chiamate esterne: ASN e geolocalizzazione vengono showste dal
+frontend when the user enables IP enrichment and `external_ip_info` is
 popolato.
 """
 
@@ -53,7 +53,7 @@ class _HostAccumulator:
 
 
 def _is_private_ip(ip: str) -> bool:
-    """Classifica indirizzi non pubblici usando la libreria standard."""
+    """Classifies non-public addresses using the standard library."""
     try:
         value = ipaddress.ip_address(ip)
         return value.is_private or value.is_loopback or value.is_link_local or value.is_reserved or value.is_multicast
@@ -78,7 +78,7 @@ def _format_second(second: int) -> str:
 
 
 def _host_role(host: _HostAccumulator) -> str:
-    """Stima il ruolo dell'host usando porte contattate/esposte e direzioni flow."""
+    """Stima il ruolo dell'host usando ports contattate/esposte e direzioni flow."""
     has_client = bool(host.contacted_ports)
     has_server = bool(host.exposed_ports)
 
@@ -105,7 +105,7 @@ def _get(accumulators: Dict[str, _HostAccumulator], ip: Optional[str]) -> Option
 
 
 def _add_packet_evidence(accumulators: Dict[str, _HostAccumulator], packets: List[PacketEntry]) -> None:
-    """Aggiorna byte, pacchetti, protocolli e timeline per ogni host."""
+    """Aggiorna byte, packets, protocolli e timeline per ogni host."""
     for packet in packets:
         second = _packet_second(packet.timestamp)
         src = _get(accumulators, packet.src_ip)
@@ -127,7 +127,7 @@ def _add_packet_evidence(accumulators: Dict[str, _HostAccumulator], packets: Lis
 
 
 def _add_flow_evidence(accumulators: Dict[str, _HostAccumulator], flows: List[FlowEntry]) -> None:
-    """Collega flow e porte contattate/esposte ai rispettivi host."""
+    """Collega flow e ports contattate/esposte ai rispettivi host."""
     for flow in flows:
         client = _get(accumulators, flow.src_ip)
         server = _get(accumulators, flow.dst_ip)
@@ -146,7 +146,7 @@ def _add_flow_evidence(accumulators: Dict[str, _HostAccumulator], flows: List[Fl
 
 
 def _add_dns_evidence(accumulators: Dict[str, _HostAccumulator], dns: Optional[DNSAnalysisResult]) -> None:
-    """Aggiunge query generate e hostname dedotti dalle risposte DNS."""
+    """Adds generated queries and hostnames inferred from DNS responses."""
     if not dns:
         return
 
@@ -163,7 +163,7 @@ def _add_dns_evidence(accumulators: Dict[str, _HostAccumulator], dns: Optional[D
 
 
 def _add_http_evidence(accumulators: Dict[str, _HostAccumulator], http: Optional[HTTPAnalysisResult]) -> None:
-    """Aggiunge host HTTP osservati e finding per traffico in chiaro."""
+    """Adds observed HTTP hosts and findings for cleartext traffic."""
     if not http:
         return
 
@@ -227,7 +227,7 @@ def build_hosts(
     tls: Optional[TLSAnalysisResult],
     dns_hostnames: Dict[str, set],
 ) -> HostAnalysisResult:
-    """Costruisce la sezione `hosts` del risultato di analisi."""
+    """Costruisce la sezione `hosts` del risultato di analysis."""
     accumulators: Dict[str, _HostAccumulator] = {}
 
     _add_packet_evidence(accumulators, packets)

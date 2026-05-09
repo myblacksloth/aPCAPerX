@@ -1,10 +1,10 @@
 /**
- * Vista dettaglio host/IP.
+ * Vista detailso host/IP.
  *
- * La vista usa la sezione `hosts` prodotta dal backend. Per compatibilità con
- * risultati vecchi, ricostruisce un profilo minimo dai pacchetti quando `hosts`
+ * This view uses the `hosts` section produced by the backend. For compatibility with
+ * results vecchi, ricostruisce un profilo minimo dai packets quando `hosts`
  * non esiste ancora. Le informazioni ASN/geo vengono lette da `external_ip_info`
- * quando l'utente ha eseguito l'arricchimento esterno.
+ * when the user has run external enrichment.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Globe2, Monitor, Search, Server, ShieldAlert } from 'lucide-react'
@@ -22,7 +22,7 @@ function emptyHosts(): HostAnalysisResult {
 }
 
 function fallbackHosts(result: AnalysisResult): HostAnalysisResult {
-  // Ricostruzione minima lato frontend per mantenere compatibilità con JSON vecchi.
+  // Minimal frontend-side reconstruction to keep compatibility with old JSON.
   const map = new Map<string, HostEntry>()
   const get = (ip: string): HostEntry => {
     const current = map.get(ip)
@@ -70,7 +70,7 @@ function fallbackHosts(result: AnalysisResult): HostAnalysisResult {
 }
 
 function externalForHost(result: AnalysisResult, ip: string): IPExternalInfo | null {
-  // Recupera ASN/geo da external_ip_info o dalle top list gia fuse dopo enrichment.
+  // Retrieves ASN/geo from external_ip_info or from top lists already merged after enrichment.
   return (
     result.external_ip_info?.[ip]
     ?? result.top_src_ips.find((entry) => entry.ip === ip)?.external
@@ -86,8 +86,8 @@ function roleIcon(role: string) {
   return <Monitor className="h-4 w-4 text-slate-300" />
 }
 
-function chips(values: Array<string | number>, empty = 'n/d') {
-  // Render compatto per liste di protocolli, porte e hostname.
+function chips(values: Array<string | number>, empty = 'n/a') {
+  // Render compatto per liste di protocolli, ports e hostname.
   if (values.length === 0) return <span className="text-xs text-slate-600">{empty}</span>
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -107,12 +107,12 @@ function HostDetails({ host, external }: { host: HostEntry; external: IPExternal
     <div className="border-t border-slate-700/60 bg-slate-900/35 px-4 py-4">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <section className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Identità</h4>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Identity</h4>
           <div className="space-y-3 text-xs text-slate-300">
-            <p><span className="text-slate-500">Tipo:</span> {host.is_private ? 'privato/locale' : 'pubblico'}</p>
-            <p><span className="text-slate-500">Traffico totale:</span> {formatBytes(totalBytes)}</p>
+            <p><span className="text-slate-500">Tipo:</span> {host.is_private ? 'private/local' : 'public'}</p>
+            <p><span className="text-slate-500">Total traffic:</span> {formatBytes(totalBytes)}</p>
             <div>
-              <p className="mb-1 text-slate-500">Hostname DNS/DHCP/NetBIOS/tool esterni</p>
+              <p className="mb-1 text-slate-500">DNS/DHCP/NetBIOS/external-tool hostnames</p>
               {chips([
                 ...host.hostnames,
                 ...(external?.reverse_dns ? [external.reverse_dns] : []),
@@ -121,8 +121,8 @@ function HostDetails({ host, external }: { host: HostEntry; external: IPExternal
             {external?.status === 'enriched' && (
               <div className="rounded-lg border border-brand-500/20 bg-brand-500/10 p-3">
                 <p className="font-semibold text-brand-100">ASN/Geo</p>
-                <p className="mt-1 text-slate-300">{external.asn ? `AS${external.asn}` : 'ASN n/d'} {external.as_name ? `- ${external.as_name}` : ''}</p>
-                <p className="text-slate-400">{[external.city, external.region, external.country].filter(Boolean).join(', ') || 'Località n/d'}</p>
+                <p className="mt-1 text-slate-300">{external.asn ? `AS${external.asn}` : 'ASN n/a'} {external.as_name ? `- ${external.as_name}` : ''}</p>
+                <p className="text-slate-400">{[external.city, external.region, external.country].filter(Boolean).join(', ') || 'Location n/a'}</p>
                 {(external.lat !== null && external.lon !== null) && (
                   <p className="text-slate-500">Coordinate: {external.lat}, {external.lon}</p>
                 )}
@@ -135,15 +135,15 @@ function HostDetails({ host, external }: { host: HostEntry; external: IPExternal
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Rete</h4>
           <div className="space-y-3">
             <div>
-              <p className="mb-1 text-xs text-slate-500">Protocolli</p>
+              <p className="mb-1 text-xs text-slate-500">Protocols</p>
               {chips(host.protocols)}
             </div>
             <div>
-              <p className="mb-1 text-xs text-slate-500">Porte contattate</p>
+              <p className="mb-1 text-xs text-slate-500">Contacted ports</p>
               {chips(host.contacted_ports)}
             </div>
             <div>
-              <p className="mb-1 text-xs text-slate-500">Porte esposte/osservate</p>
+              <p className="mb-1 text-xs text-slate-500">Exposed/observed ports</p>
               {chips(host.exposed_ports)}
             </div>
             <div>
@@ -157,21 +157,21 @@ function HostDetails({ host, external }: { host: HostEntry; external: IPExternal
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Applicativo e sicurezza</h4>
           <div className="space-y-3">
             <div>
-              <p className="mb-1 text-xs text-slate-500">DNS query generate</p>
-              {chips(host.dns_queries, 'nessuna query')}
+              <p className="mb-1 text-xs text-slate-500">Generated DNS queries</p>
+              {chips(host.dns_queries, 'no query')}
             </div>
             <div>
-              <p className="mb-1 text-xs text-slate-500">SNI osservati</p>
+              <p className="mb-1 text-xs text-slate-500">Observed SNI</p>
               {chips(host.sni_hosts, 'nessun SNI')}
             </div>
             <div>
-              <p className="mb-1 text-xs text-slate-500">HTTP host osservati</p>
+              <p className="mb-1 text-xs text-slate-500">Observed HTTP hosts</p>
               {chips(host.http_hosts, 'nessun host HTTP')}
             </div>
             <div>
               <p className="mb-1 text-xs text-slate-500">Finding associati</p>
               {host.findings.length === 0 ? (
-                <span className="text-xs text-slate-600">nessun finding</span>
+                <span className="text-xs text-slate-600">no findings</span>
               ) : (
                 <div className="space-y-1">
                   {host.findings.slice(0, 8).map((finding) => (
@@ -188,9 +188,9 @@ function HostDetails({ host, external }: { host: HostEntry; external: IPExternal
       </div>
 
       <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800/60 p-4">
-        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Timeline attività</h4>
+        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Activity timeline</h4>
         {host.timeline.length === 0 ? (
-          <p className="text-xs text-slate-600">Timeline non disponibile per questo risultato.</p>
+          <p className="text-xs text-slate-600">Timeline not available per questo risultato.</p>
         ) : (
           <div className="space-y-2">
             {host.timeline.slice(0, 80).map((point) => {
@@ -224,7 +224,7 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
 
   const hosts = result.hosts ?? (result.packets.length ? fallbackHosts(result) : emptyHosts())
   const filtered = useMemo(() => {
-    // Filtra per IP, hostname, SNI, HTTP host e ruolo stimato.
+    // Filters by IP, hostname, SNI, HTTP host, and estimated role.
     const text = query.trim().toLowerCase()
     return hosts.hosts.filter((host) => {
       if (roleFilter !== 'all' && host.role !== roleFilter) return false
@@ -241,7 +241,7 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
   }, [hosts.hosts, query, roleFilter])
 
   const toggle = (ip: string) => {
-    // Mantiene le sezioni collapsable come nella tab Tracce avanzate.
+    // Mantiene le sezioni collapsable come nella tab Advanced traces.
     setExpanded((current) => {
       const next = new Set(current)
       if (next.has(ip)) next.delete(ip)
@@ -251,7 +251,7 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
   }
 
   useEffect(() => {
-    // Quando l'utente clicca un IP da altre viste, apre la relativa sezione host.
+    // When the user clicks an IP from other views, open the related host section.
     if (!selectedHostIp) return
     setQuery(selectedHostIp)
     setRoleFilter('all')
@@ -265,11 +265,11 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
           <div>
             <h2 className="text-base font-semibold text-slate-200">Hosts</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Vista aggregata per IP: ruolo, traffico, flow, DNS, SNI, HTTP host, finding e dati esterni quando disponibili.
+              Aggregated IP view: role, traffic, flows, DNS, SNI, HTTP hosts, findings, and external data when available.
             </p>
           </div>
           <div className="text-right text-xs text-slate-500">
-            <strong className="text-slate-200">{formatCount(hosts.total_hosts)}</strong> host osservati
+            <strong className="text-slate-200">{formatCount(hosts.total_hosts)}</strong> observed hosts
           </div>
         </div>
       </div>
@@ -281,7 +281,7 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Cerca IP, hostname, SNI, HTTP host o query DNS..."
+              placeholder="Search IP, hostname, SNI, HTTP host, or DNS query..."
               className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
             />
           </div>
@@ -314,11 +314,11 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
                     <span className="font-mono text-sm font-semibold text-slate-100">{host.ip}</span>
                     <span className="rounded bg-slate-700 px-2 py-0.5 text-[11px] text-slate-300">{host.role}</span>
                     <span className={`rounded px-2 py-0.5 text-[11px] ${host.is_private ? 'bg-sky-500/10 text-sky-200' : 'bg-emerald-500/10 text-emerald-200'}`}>
-                      {host.is_private ? 'privato' : 'pubblico'}
+                      {host.is_private ? 'private' : 'public'}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-slate-500">
-                    {[...host.hostnames, ...host.sni_hosts, ...host.http_hosts].slice(0, 4).join(', ') || external?.reverse_dns || 'hostname n/d'}
+                    {[...host.hostnames, ...host.sni_hosts, ...host.http_hosts].slice(0, 4).join(', ') || external?.reverse_dns || 'hostname n/a'}
                   </p>
                 </div>
                 <div className="text-xs text-slate-400">
@@ -326,11 +326,11 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
                   <div>↓ {formatBytes(host.bytes_received)}</div>
                 </div>
                 <div className="text-xs text-slate-400">
-                  <div>{formatCount(host.packets_sent)} pkt inviati</div>
-                  <div>{formatCount(host.packets_received)} pkt ricevuti</div>
+                  <div>{formatCount(host.packets_sent)} pkt sent</div>
+                  <div>{formatCount(host.packets_received)} pkt received</div>
                 </div>
                 <div className="min-w-0 text-xs text-slate-500">
-                  <div className="truncate">{external?.asn ? `AS${external.asn}` : 'ASN n/d'} {external?.country_code ? `· ${external.country_code}` : ''}</div>
+                  <div className="truncate">{external?.asn ? `AS${external.asn}` : 'ASN n/a'} {external?.country_code ? `· ${external.country_code}` : ''}</div>
                   <div className="truncate">{formatBytes(totalBytes)} totali · {host.flow_ids.length} flow</div>
                 </div>
               </button>
@@ -341,7 +341,7 @@ export default function HostsView({ result, selectedHostIp }: HostsViewProps) {
 
         {filtered.length === 0 && (
           <p className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-8 text-center text-sm text-slate-500">
-            Nessun host corrisponde ai filtri.
+            No host matches the filters.
           </p>
         )}
       </div>

@@ -1,8 +1,8 @@
 /**
- * Pannello Security basato sulle informazioni gia raccolte sugli IP.
+ * Security panel based on information already collected about IPs.
  *
  * Le segnalazioni sono euristiche: evidenziano connessioni potenzialmente
- * rischiose usando GeoIP, ASN, flag proxy/hosting, porte, protocolli e volume.
+ * rischiose usando GeoIP, ASN, flag proxy/hosting, ports, protocolli e volume.
  * Non sostituiscono una threat intelligence con blacklist dedicate.
  */
 import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react'
@@ -30,7 +30,7 @@ const DATABASE_SERVICES = new Set(['MySQL', 'PostgreSQL', 'Redis', 'MongoDB', 'M
 const SUSPICIOUS_PORTS = new Set([23, 2323, 3389, 5900, 445, 135, 139, 1433, 1521, 3306, 5432, 6379, 27017])
 
 function getExternalInfo(result: AnalysisResult, ip: string): IPExternalInfo | null {
-  // Recupera i dati esterni dalla mappa globale o dalle top list arricchite.
+  // Retrieves external data from the global map or enriched top lists.
   return (
     result.external_ip_info?.[ip]
     ?? result.top_dst_ips.find((entry) => entry.ip === ip)?.external
@@ -40,7 +40,7 @@ function getExternalInfo(result: AnalysisResult, ip: string): IPExternalInfo | n
 }
 
 function servicesForIp(result: AnalysisResult, ip: string): IPServiceEntry[] {
-  // Riunisce i servizi osservati per l'IP nelle top sorgenti/destinazioni.
+  // Merges services observed for the IP in top sources/destinations.
   const services = [
     ...(result.top_dst_ips.find((entry) => entry.ip === ip)?.services ?? []),
     ...(result.top_src_ips.find((entry) => entry.ip === ip)?.services ?? []),
@@ -56,7 +56,7 @@ function servicesForIp(result: AnalysisResult, ip: string): IPServiceEntry[] {
 }
 
 function trafficToDestinations(result: AnalysisResult) {
-  // Calcola traffico verso IP destinazione usando le top destination e i pacchetti disponibili.
+  // Computes traffic toward destination IPs using top destinations and available packets.
   const traffic = new Map<string, { bytes: number; packets: number }>()
 
   for (const entry of result.top_dst_ips) {
@@ -89,17 +89,17 @@ function buildFinding(result: AnalysisResult, ip: string, bytes: number, packets
 
   if (external?.proxy) {
     score += 35
-    details.push('Il servizio GeoIP segnala proxy/VPN: possibile anonimizzazione o relay.')
+    details.push('The GeoIP service reports proxy/VPN: possible anonymization or relay.')
   }
 
   if (external?.hosting) {
     score += 20
-    details.push('IP associato a hosting/datacenter: destinazione comune per C2, scansioni o infrastrutture temporanee.')
+    details.push('IP associato a hosting/datacenter: destination comune per C2, scansioni o infrastrutture temporanee.')
   }
 
   if (external?.status === 'error') {
     score += 15
-    details.push('I servizi esterni non hanno restituito dati affidabili per questo IP.')
+    details.push('External services did not return reliable data for this IP.')
   }
 
   const observedServices = services.map((service) => service.service)
@@ -108,35 +108,35 @@ function buildFinding(result: AnalysisResult, ip: string, bytes: number, packets
   const clearText = observedServices.filter((service) => CLEAR_TEXT_SERVICES.has(service))
   if (clearText.length > 0) {
     score += 25
-    details.push(`Traffico verso servizi non cifrati: ${[...new Set(clearText)].join(', ')}.`)
+    details.push(`Traffic to unencrypted services: ${[...new Set(clearText)].join(', ')}.`)
   }
 
   const remoteAdmin = observedServices.filter((service) => REMOTE_ADMIN_SERVICES.has(service))
   if (remoteAdmin.length > 0) {
     score += 30
-    details.push(`Servizi di amministrazione remota osservati: ${[...new Set(remoteAdmin)].join(', ')}.`)
+    details.push(`Remote administration services observed: ${[...new Set(remoteAdmin)].join(', ')}.`)
   }
 
   const databases = observedServices.filter((service) => DATABASE_SERVICES.has(service))
   if (databases.length > 0) {
     score += 30
-    details.push(`Connessione verso servizi database: ${[...new Set(databases)].join(', ')}.`)
+    details.push(`Connessione verso services database: ${[...new Set(databases)].join(', ')}.`)
   }
 
   const suspiciousPorts = observedPorts.filter((port) => SUSPICIOUS_PORTS.has(port))
   if (suspiciousPorts.length > 0) {
     score += 20
-    details.push(`Porte sensibili osservate: ${[...new Set(suspiciousPorts)].join(', ')}.`)
+    details.push(`Sensitive ports observed: ${[...new Set(suspiciousPorts)].join(', ')}.`)
   }
 
   if (maxBytes > 0 && bytes / maxBytes >= 0.75 && bytes > 100_000) {
     score += 20
-    details.push('Volume di traffico elevato rispetto alle altre destinazioni.')
+    details.push('High traffic volume compared with other destinations.')
   }
 
   if (external?.country && external.country_code && !['IT', 'EU'].includes(external.country_code)) {
     score += 5
-    details.push(`Destinazione geolocalizzata fuori dal contesto locale: ${external.country} (${external.country_code}).`)
+    details.push(`Geolocated destination outside the local context: ${external.country} (${external.country_code}).`)
   }
 
   if (details.length === 0) return null
@@ -206,7 +206,7 @@ export default function SecurityPanel({ result }: SecurityPanelProps) {
         <div>
           <h2 className="text-base font-semibold text-slate-200">Security</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Evidenze euristiche basate su IP, servizi, volume e arricchimento esterno
+            Heuristic evidence based on IPs, services, volume, and external enrichment
           </p>
         </div>
         <div className="flex gap-4 text-xs text-slate-500">
@@ -218,13 +218,13 @@ export default function SecurityPanel({ result }: SecurityPanelProps) {
 
       {enrichedCount === 0 && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
-          Premi "Analizza con tool esterni" per aumentare la precisione delle segnalazioni Security.
+          Press "Analyze with external tools" to improve Security finding accuracy.
         </div>
       )}
 
       {findings.length === 0 ? (
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-sm text-emerald-100">
-          Nessuna connessione rischiosa evidente con le informazioni disponibili.
+          No obvious risky connection with the available information.
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -247,7 +247,7 @@ export default function SecurityPanel({ result }: SecurityPanelProps) {
 
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                   <span>{formatBytes(finding.bytes)}</span>
-                  <span>{formatCount(finding.packets)} pacchetti</span>
+                  <span>{formatCount(finding.packets)} packets</span>
                   {finding.external?.country && (
                     <span>{finding.external.country}{finding.external.country_code ? ` (${finding.external.country_code})` : ''}</span>
                   )}

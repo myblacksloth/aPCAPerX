@@ -1,7 +1,7 @@
 /**
  * Vista HTTP analysis.
  *
- * Mostra solo metadati HTTP in chiaro già estratti dal backend. Non effettua
+ * Mostra solo metadata HTTP in chiaro already estratti dal backend. Non effettua
  * chiamate esterne e non prova a interpretare HTTPS/TLS.
  */
 import { useMemo, useState } from 'react'
@@ -14,7 +14,7 @@ interface HTTPAnalysisViewProps {
 }
 
 function emptyHttp(): HTTPAnalysisResult {
-  // Fallback per risultati vecchi che non contengono ancora la sezione `http`.
+  // Fallback per results vecchi che non contengono ancora la sezione `http`.
   return {
     stats: {
       total_requests: 0,
@@ -32,12 +32,12 @@ function emptyHttp(): HTTPAnalysisResult {
 }
 
 function endpoint(ip: string | null, port: number | null) {
-  // Formatta endpoint con porta quando disponibile.
-  return ip ? `${ip}${port ? `:${port}` : ''}` : 'n/d'
+  // Formatta endpoint con port quando disponibile.
+  return ip ? `${ip}${port ? `:${port}` : ''}` : 'n/a'
 }
 
 function statusBadge(request: HTTPRequestEntry) {
-  // Colora lo stato HTTP con una semantica semplice: 2xx ok, 3xx redirect, 4xx/5xx errore.
+  // Colora lo stato HTTP con una semantica semplice: 2xx ok, 3xx redirect, 4xx/5xx error.
   const status = request.response_status_code
   if (!status) {
     return <span className="rounded border border-slate-600 bg-slate-700/40 px-2 py-1 text-[11px] text-slate-300">No response</span>
@@ -57,13 +57,13 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
 
   const methods = useMemo(() => ['all', ...new Set(http.requests.map((request) => request.method).sort())], [http.requests])
   const statuses = useMemo(() => {
-    // Include anche NO_RESPONSE per filtrare richieste senza risposta correlata.
+    // Include anche NO_RESPONSE per filtrare requests senza correlated response.
     const values = http.requests.map((request) => request.response_status_code?.toString() ?? 'NO_RESPONSE')
     return ['all', ...new Set(values.sort())]
   }, [http.requests])
 
   const filtered = useMemo(() => {
-    // Filtra per host, metodo, status code e User-Agent come richiesto.
+    // Filters by host, method, status code, and User-Agent as requested.
     const host = hostFilter.trim().toLowerCase()
     const ua = uaFilter.trim().toLowerCase()
     return http.requests.filter((request) => {
@@ -83,7 +83,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
           <div>
             <h2 className="text-base font-semibold text-slate-200">HTTP analysis</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Metadati HTTP estratti solo da traffico in chiaro. HTTPS/TLS non viene decifrato.
+              HTTP metadata extracted only from cleartext traffic. HTTPS/TLS is not decrypted.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
@@ -95,8 +95,8 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
-          ['Richieste', http.stats.total_requests, 'text-white'],
-          ['Risposte', http.stats.total_responses, 'text-slate-200'],
+          ['Requests', http.stats.total_requests, 'text-white'],
+          ['Responses', http.stats.total_responses, 'text-slate-200'],
           ['Correlate', http.stats.correlated_responses, 'text-emerald-300'],
           ['Host', http.stats.unique_hosts, 'text-sky-300'],
           ['Req parziali', http.stats.partial_requests, 'text-amber-300'],
@@ -113,7 +113,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
         <section className="card overflow-hidden">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-200">Richieste e risposte correlate</h3>
+              <h3 className="text-sm font-semibold text-slate-200">Correlated requests and responses</h3>
               <p className="mt-0.5 text-xs text-slate-500">{filtered.length} righe filtrate su {http.requests.length}</p>
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
               <input
                 value={hostFilter}
                 onChange={(event) => setHostFilter(event.target.value)}
-                placeholder="Filtra host..."
+                placeholder="Filter host..."
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
               />
             </div>
@@ -137,7 +137,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
             <input
               value={uaFilter}
               onChange={(event) => setUaFilter(event.target.value)}
-              placeholder="Filtra user-agent..."
+              placeholder="Filter user-agent..."
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600"
             />
           </div>
@@ -162,7 +162,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
                         <span className="rounded bg-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-200">{request.method}</span>
                         {request.partial && <span className="rounded bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100">parziale</span>}
                       </div>
-                      <div className="mt-1 font-mono text-slate-100">{request.host ?? 'host n/d'}</div>
+                      <div className="mt-1 font-mono text-slate-100">{request.host ?? 'host n/a'}</div>
                       <div className="mt-0.5 max-w-md truncate font-mono text-slate-500">{request.uri}</div>
                       {request.referer && <div className="mt-1 max-w-md truncate text-slate-500">Referer: {request.referer}</div>}
                     </td>
@@ -174,12 +174,12 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
                       {request.response_server && <div className="text-slate-500">Server: {request.response_server}</div>}
                     </td>
                     <td className="py-3 pr-3 align-top text-slate-400">
-                      <div>{request.response_content_type ?? request.content_type ?? 'n/d'}</div>
-                      <div className="text-slate-500">Len: {request.response_content_length ?? request.payload_size ?? 'n/d'}</div>
+                      <div>{request.response_content_type ?? request.content_type ?? 'n/a'}</div>
+                      <div className="text-slate-500">Len: {request.response_content_length ?? request.payload_size ?? 'n/a'}</div>
                       {request.response_file_name && <div className="max-w-40 truncate text-slate-500">File: {request.response_file_name}</div>}
                     </td>
                     <td className="max-w-sm py-3 pr-3 align-top text-slate-400">
-                      <div className="truncate">{request.user_agent ?? 'n/d'}</div>
+                      <div className="truncate">{request.user_agent ?? 'n/a'}</div>
                     </td>
                   </tr>
                 ))}
@@ -187,7 +187,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
             </table>
 
             {filtered.length === 0 && (
-              <p className="py-8 text-center text-sm text-slate-500">Nessuna richiesta HTTP corrisponde ai filtri.</p>
+              <p className="py-8 text-center text-sm text-slate-500">No HTTP request matches the filters.</p>
             )}
           </div>
         </section>
@@ -196,7 +196,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
           <div className="card">
             <div className="mb-3 flex items-center gap-2">
               <Globe2 className="h-4 w-4 text-brand-300" />
-              <h3 className="text-sm font-semibold text-slate-200">Host più contattati</h3>
+              <h3 className="text-sm font-semibold text-slate-200">Most contacted hosts</h3>
             </div>
             <div className="space-y-2">
               {http.top_hosts.slice(0, 10).map((item) => (
@@ -217,7 +217,7 @@ export default function HTTPAnalysisView({ result }: HTTPAnalysisViewProps) {
               {http.top_user_agents.slice(0, 10).map((item) => (
                 <div key={item.value} className="rounded-lg bg-slate-900/70 px-3 py-2">
                   <div className="truncate text-xs text-slate-200">{item.value}</div>
-                  <div className="mt-1 text-xs text-slate-500">{formatCount(item.count)} richieste</div>
+                  <div className="mt-1 text-xs text-slate-500">{formatCount(item.count)} requests</div>
                 </div>
               ))}
             </div>

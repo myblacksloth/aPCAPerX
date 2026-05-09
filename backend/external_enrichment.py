@@ -1,9 +1,9 @@
 """
-Arricchimento esterno degli indirizzi IP.
+External enrichment of IP addresses.
 
-Questo modulo viene usato solo quando l'utente preme il pulsante dedicato nel
-frontend. In questo modo gli indirizzi estratti dal PCAP non vengono inviati a
-servizi terzi durante la normale analisi del file.
+This module is used only when the user presses the dedicated button in the
+frontend. This way, addresses extracted from the PCAP are not sent to
+services terzi durante la normale analysis del file.
 """
 
 import ipaddress
@@ -21,7 +21,7 @@ from config import EXTERNAL_MAX_WORKERS, HTTP_TIMEOUT_SECONDS, MAX_ENRICHMENT_IP
 
 
 def _fetch_json(url: str) -> Dict:
-    """Scarica e decodifica JSON da un servizio esterno usando solo stdlib."""
+    """Downloads and decodes JSON from an external service using only stdlib."""
     request = urllib.request.Request(
         url,
         headers={
@@ -49,7 +49,7 @@ def _first_string(values: Iterable) -> Optional[str]:
 
 
 def _public_ip_or_skip(ip: str) -> Optional[ipaddress._BaseAddress]:
-    """Valida l'IP e ritorna None se non deve essere inviato a servizi esterni."""
+    """Validates the IP and returns None if it must not be sent to external services."""
     try:
         parsed = ipaddress.ip_address(ip)
     except ValueError:
@@ -77,7 +77,7 @@ def _team_cymru(ip: str, info: IPExternalInfo) -> None:
     """Interroga Team Cymru via WHOIS per ASN, prefisso BGP e registry."""
     try:
         with socket.create_connection(("whois.cymru.com", 43), timeout=SOCKET_TIMEOUT_SECONDS) as sock:
-            # -v abilita il formato esteso con prefisso, country, registry e descrizione AS.
+            # -v abilita il format esteso con prefisso, country, registry e descrizione AS.
             sock.sendall(f" -v {ip}\n".encode("ascii"))
             raw = sock.recv(4096).decode("utf-8", errors="replace")
     except OSError as exc:
@@ -86,10 +86,10 @@ def _team_cymru(ip: str, info: IPExternalInfo) -> None:
 
     lines = [line.strip() for line in raw.splitlines() if line.strip()]
     if len(lines) < 2:
-        info.errors.append("Team Cymru: risposta vuota")
+        info.errors.append("Team Cymru: empty response")
         return
 
-    # Formato atteso:
+    # Expected format:
     # AS | IP | BGP Prefix | CC | Registry | Allocated | AS Name
     parts = [part.strip() for part in lines[-1].split("|")]
     if len(parts) >= 7:
@@ -104,7 +104,7 @@ def _team_cymru(ip: str, info: IPExternalInfo) -> None:
 
 @lru_cache(maxsize=2)
 def _rdap_bootstrap(version: int) -> Dict:
-    """Carica il bootstrap RDAP IANA per IPv4 o IPv6."""
+    """Loads the IANA RDAP bootstrap for IPv4 or IPv6."""
     filename = "ipv4.json" if version == 4 else "ipv6.json"
     return _fetch_json(f"https://data.iana.org/rdap/{filename}")
 
@@ -124,7 +124,7 @@ def _rdap_base_url(parsed_ip: ipaddress._BaseAddress) -> Optional[str]:
 
 
 def _rdap_entities(data: Dict) -> List[str]:
-    """Estrae nomi leggibili dalle entità RDAP principali."""
+    """Extracts readable names from the main RDAP entities."""
     entities: List[str] = []
     for entity in data.get("entities", [])[:8]:
         name = None
@@ -142,7 +142,7 @@ def _rdap_entities(data: Dict) -> List[str]:
 
 
 def _rdap_remarks(data: Dict) -> List[str]:
-    """Estrae poche note RDAP utili evitando risposte troppo verbose."""
+    """Estrae poche note RDAP utili evitando responses troppo verbose."""
     remarks: List[str] = []
     for remark in data.get("remarks", [])[:4]:
         title = remark.get("title")
@@ -154,7 +154,7 @@ def _rdap_remarks(data: Dict) -> List[str]:
 
 
 def _rdap(ip: str, parsed_ip: ipaddress._BaseAddress, info: IPExternalInfo) -> None:
-    """Interroga RDAP per dati autoritativi di assegnazione della risorsa IP."""
+    """Interroga RDAP per data autoritativi di assegnazione della risorsa IP."""
     try:
         base_url = _rdap_base_url(parsed_ip)
         if not base_url:
@@ -195,7 +195,7 @@ def _ip_api(ip: str, info: IPExternalInfo) -> None:
         return
 
     if data.get("status") != "success":
-        info.errors.append(f"ip-api: {data.get('message', 'risposta non valida')}")
+        info.errors.append(f"ip-api: {data.get('message', 'invalid response')}")
         return
 
     info.country = info.country or data.get("country")
@@ -212,7 +212,7 @@ def _ip_api(ip: str, info: IPExternalInfo) -> None:
     info.proxy = data.get("proxy")
     info.hosting = data.get("hosting")
 
-    # Il campo "as" contiene spesso "AS12345 Nome"; manteniamo il numero se manca.
+    # The "as" field often contains "AS12345 Name"; keep the number if missing.
     as_field = data.get("as")
     if not info.asn and isinstance(as_field, str):
         info.asn = as_field.split()[0].replace("AS", "")
@@ -221,13 +221,13 @@ def _ip_api(ip: str, info: IPExternalInfo) -> None:
 
 
 def enrich_ip(ip: str) -> IPExternalInfo:
-    """Arricchisce un singolo IP pubblico aggregando più servizi esterni."""
+    """Enriches a single public IP by aggregating multiple external services."""
     parsed_ip = _public_ip_or_skip(ip)
     if parsed_ip is None:
         return IPExternalInfo(
             ip=ip,
             status="skipped",
-            reason="Indirizzo privato, locale, riservato o non valido: non inviato a servizi esterni.",
+            reason="Indirizzo private, locale, riservato o non valido: non inviato a external services.",
         )
 
     info = IPExternalInfo(ip=ip, status="enriched")
@@ -238,20 +238,20 @@ def enrich_ip(ip: str) -> IPExternalInfo:
 
     if not info.sources:
         info.status = "error"
-        info.reason = "Nessun servizio esterno ha restituito dati utili."
+        info.reason = "No external service returned useful data."
 
     return info
 
 
 def enrich_ips(ips: List[str]) -> Dict[str, IPExternalInfo]:
-    """Arricchisce una lista di IP con concorrenza limitata e ordine stabile."""
+    """Enriches a list of IPs with limited concurrency and stable ordering."""
     unique_ips = list(dict.fromkeys(ip.strip() for ip in ips if isinstance(ip, str) and ip.strip()))
     selected_ips = unique_ips[:MAX_ENRICHMENT_IPS]
     if not selected_ips:
         return {}
 
     results: Dict[str, IPExternalInfo] = {}
-    # Parallelizza per IP, ma con pochi worker per non stressare servizi gratuiti.
+    # Parallelizza per IP, ma con pochi worker per non stressare services gratuiti.
     with ThreadPoolExecutor(max_workers=min(EXTERNAL_MAX_WORKERS, len(selected_ips))) as executor:
         future_to_ip = {executor.submit(enrich_ip, ip): ip for ip in selected_ips}
         for future in as_completed(future_to_ip):
@@ -262,7 +262,7 @@ def enrich_ips(ips: List[str]) -> Dict[str, IPExternalInfo]:
                 results[ip] = IPExternalInfo(
                     ip=ip,
                     status="error",
-                    reason=f"Errore imprevisto durante l'arricchimento: {exc}",
+                    reason=f"Error imprevisto durante l'arricchimento: {exc}",
                 )
 
     return {ip: results[ip] for ip in selected_ips if ip in results}

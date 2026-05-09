@@ -1,10 +1,10 @@
 /**
- * Tab Security avanzata.
+ * Tab Advanced Security.
  *
- * La vista esegue una seconda analisi opt-in sul traffico completo usando:
- * - metadati pacchetto gia estratti dal backend;
- * - arricchimento IP ottenuto in precedenza dall'utente;
- * - fonti esterne di threat intelligence chiamate solo dopo conferma esplicita.
+ * La vista esegue una seconda analysis opt-in sul traffico completo usando:
+ * - packet metadata already extracted by the backend;
+ * - IP enrichment previously obtained by the user;
+ * - external threat-intelligence sources called only after explicit confirmation.
  */
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, ShieldAlert, ShieldCheck, Siren } from 'lucide-react'
@@ -16,12 +16,12 @@ interface SecurityAnalysisViewProps {
 }
 
 function enrichedIpCount(result: AnalysisResult): number {
-  // Conta gli IP con dati esterni gia disponibili; la tab li usa come contesto.
+  // Counts IPs with external data already available; the tab uses them as context.
   return Object.values(result.external_ip_info ?? {}).filter((item) => item.status === 'enriched').length
 }
 
 function buildSecurityPayload(result: AnalysisResult) {
-  // Invia solo i metadati necessari alla correlazione Security, non raw hex o layer completi.
+  // Invia solo i metadata necessari alla correlazione Security, non raw hex o layer completi.
   return {
     packets: result.packets.map((packet) => ({
       number: packet.number,
@@ -158,7 +158,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
   )
 
   const runAnalysis = async () => {
-    // La chiamata reale parte solo da qui, dopo conferma esplicita nel popup.
+    // The real call starts only here, after explicit confirmation in the popup.
     setConfirmOpen(false)
     setLoading(true)
     setError(null)
@@ -172,13 +172,13 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
+        throw new Error(data.detail ?? `Error ${response.status}: ${response.statusText}`)
       }
 
       const payload: SecurityAnalysisResponse = await response.json()
       setAnalysis(payload)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Errore sconosciuto durante l'analisi Security")
+      setError(err instanceof Error ? err.message : "Unknown error during Security analysis")
     } finally {
       setLoading(false)
     }
@@ -189,15 +189,15 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
       <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-200">Security avanzata</h2>
+            <h2 className="text-base font-semibold text-slate-200">Advanced Security</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Analisi professionale del traffico con scoring, threat intelligence, CVE, IOC, porte sensibili,
+              Professional traffic analysis with scoring, threat intelligence, CVEs, IOCs, sensitive ports,
               anomalie di relazione e raccomandazioni operative.
             </p>
           </div>
           <button
             onClick={() => {
-              // Dopo un'analisi riuscita il report resta attivo e non viene ricalcolato.
+              // Dopo un'analysis riuscita il report resta attivo e non viene ricalcolato.
               if (!analysisActive) setConfirmOpen(true)
             }}
             disabled={loading || enriched === 0 || analysisActive}
@@ -214,13 +214,13 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
               : loading
                 ? <Loader2 className="h-4 w-4 animate-spin" />
                 : <ShieldAlert className="h-4 w-4" />}
-            {analysisActive ? 'Analisi attiva' : loading ? 'Analisi in corso...' : 'Analisi di sicurezza'}
+            {analysisActive ? 'Analysis active' : loading ? 'Analysis running...' : 'Security analysis'}
           </button>
         </div>
 
         {enriched === 0 && (
           <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            Esegui prima "Analizza con tool esterni": la tab Security avanzata usa quei dati per evitare richieste inutili
+            Run "Analyze with external tools" first: the Advanced Security tab uses those data to avoid unnecessary requests
             e aumentare la qualita della correlazione.
           </div>
         )}
@@ -233,7 +233,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
 
         {analysisActive && (
           <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-            Analisi Security attiva: i risultati sono già stati recuperati e il comando è stato disabilitato.
+            Security analysis active: results have already been retrieved and the command has been disabled.
           </div>
         )}
       </div>
@@ -260,7 +260,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
             <div className="space-y-3">
               {analysis.findings.length === 0 ? (
                 <div className="card border-emerald-500/20 bg-emerald-500/10 text-sm text-emerald-100">
-                  Nessun finding rilevante con le fonti e i pacchetti disponibili.
+                  No findings rilevante con le fonti e i packets disponibili.
                 </div>
               ) : (
                 analysis.findings.map((finding) => <FindingCard key={finding.id} finding={finding} />)
@@ -269,7 +269,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
 
             <aside className="space-y-4">
               <div className="card">
-                <h3 className="text-sm font-semibold text-slate-200">Fonti usate</h3>
+                <h3 className="text-sm font-semibold text-slate-200">Sources used</h3>
                 <div className="mt-3 space-y-2">
                   {analysis.sources.map((source) => (
                     <div key={source.source} className="rounded-lg bg-slate-900/70 p-3">
@@ -284,14 +284,14 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
               </div>
 
               <div className="card overflow-hidden">
-                <h3 className="text-sm font-semibold text-slate-200">IP più rischiosi</h3>
+                <h3 className="text-sm font-semibold text-slate-200">Riskiest IPs</h3>
                 <div className="mt-3 overflow-x-auto">
                   <table className="min-w-full text-xs">
                     <thead className="text-left text-slate-500">
                       <tr>
                         <th className="pb-2 pr-3">IP</th>
                         <th className="pb-2 pr-3">Score</th>
-                        <th className="pb-2 pr-3">Traffico</th>
+                        <th className="pb-2 pr-3">Traffic</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/70">
@@ -299,7 +299,7 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
                         <tr key={item.ip}>
                           <td className="py-2 pr-3 font-mono text-slate-200">
                             {item.ip}
-                            <div className="mt-0.5 text-[11px] text-slate-500">{item.country ?? item.as_name ?? 'n/d'}</div>
+                            <div className="mt-0.5 text-[11px] text-slate-500">{item.country ?? item.as_name ?? 'n/a'}</div>
                           </td>
                           <td className="py-2 pr-3 text-slate-200">{item.risk_score}</td>
                           <td className="py-2 pr-3 text-slate-400">
@@ -332,13 +332,13 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
             <div className="flex items-start gap-3">
               <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-300" />
               <div>
-                <h3 className="text-base font-semibold text-white">Conferma uso di servizi esterni</h3>
+                <h3 className="text-base font-semibold text-white">Confirm external service usage</h3>
                 <p className="mt-2 text-sm text-slate-300">
-                  L'analisi inviera indirizzi IP pubblici e metadati di traffico a servizi esterni di threat intelligence:
+                  The analysis will send public IP addresses and traffic metadata to external threat-intelligence services:
                   Shodan InternetDB, Feodo Tracker e URLhaus se configurato con Auth-Key sul backend.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  IP privati/locali non vengono interrogati. I dati sono usati solo per produrre finding, score e raccomandazioni.
+                  Private/local IPs are not queried. Data is used only to produce findings, scores, and recommendations.
                 </p>
                 <a
                   href="https://book.shodan.io/developer-apis/internetdb/"
@@ -356,13 +356,13 @@ export default function SecurityAnalysisView({ result }: SecurityAnalysisViewPro
                 onClick={() => setConfirmOpen(false)}
                 className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600"
               >
-                Annulla
+                Cancel
               </button>
               <button
                 onClick={runAnalysis}
                 className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-400"
               >
-                Confermo e analizza
+                Confirm and analyze
               </button>
             </div>
           </div>

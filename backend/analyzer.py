@@ -1,16 +1,16 @@
 """
-Motore di analisi dei file PCAP/PCAPNG.
+Motore di analysis dei file PCAP/PCAPNG.
 
-Questo modulo contiene tutta la logica di lettura e decodifica dei pacchetti
-di rete tramite Scapy. Opera in modalità streaming per gestire file di grandi
+Questo modulo contiene tutta la logica di lettura e decodifica dei packets
+network traffic through Scapy. It operates in streaming mode to handle large
 dimensioni senza esaurire la memoria RAM.
 
-Flusso di elaborazione per ogni pacchetto:
+Flusso di elaborazione per ogni packet:
     1. Lettura dal file PCAP
-    2. Rilevamento del protocollo di più alto livello
-    3. Estrazione di indirizzi IP e porte
+    2. Rilevamento del protocol di most alto livello
+    3. Estrazione di IP addresses e ports
     4. Accumulo nelle strutture statistiche
-    5. Aggregazione finale dei risultati
+    5. Aggregazione finale dei results
 """
 
 import os
@@ -19,12 +19,12 @@ from datetime import datetime, timezone
 from collections import defaultdict, Counter
 from typing import Dict, List, Optional, Tuple
 
-# Import Scapy: libreria Python per l'analisi di pacchetti di rete
+# Import Scapy: libreria Python per l'analysis di packets di rete
 from scapy.all import PcapReader                   # lettore streaming di file PCAP
 from scapy.layers.l2 import Ether, ARP             # livello data-link
 from scapy.layers.inet import IP, TCP, UDP, ICMP   # livello rete e trasporto IPv4
 from scapy.layers.inet6 import IPv6                # livello rete IPv6
-from scapy.layers.dns import DNS                   # protocollo DNS
+from scapy.layers.dns import DNS                   # protocol DNS
 
 from models import (
     AnalysisResult, SummaryStats, ProtocolEntry, IPEntry,
@@ -41,8 +41,8 @@ from config import MAX_PACKET_LIST
 
 # ─── Costanti di configurazione ───────────────────────────────────────────────
 
-# Mappa porta → nome servizio per i protocolli well-known più diffusi.
-# Viene usata per "indovinare" il protocollo applicativo dalla porta TCP/UDP.
+# Port -> service name map for the most common well-known protocols.
+# Viene usata per "indovinare" il protocol applicativo dalla port TCP/UDP.
 PORT_SERVICES: Dict[int, str] = {
     20:    "FTP-DATA",
     21:    "FTP",
@@ -117,7 +117,7 @@ _LAYER_DISPLAY: Dict[str, str] = {
 
 def _extract_layers(pkt) -> List[LayerInfo]:
     """
-    Percorre lo stack protocollare del pacchetto e restituisce un albero
+    Percorre lo stack protocollare del packet e restituisce un albero
     di layer con i relativi campi, pronto per la visualizzazione Wireshark-style.
     """
     result: List[LayerInfo] = []
@@ -154,7 +154,7 @@ def _extract_layers(pkt) -> List[LayerInfo]:
                     raw_bytes: bytes = layer.load
                     try:
                         text = raw_bytes.decode("utf-8", errors="replace")
-                        # Se almeno il 70% dei caratteri è stampabile, mostralo come testo
+                        # Se almeno il 70% dei caratteri is stampabile, showslo come testo
                         printable = sum(32 <= ord(c) < 127 for c in text[:200])
                         if printable >= len(text[:200]) * 0.7:
                             fields.append(LayerField(
@@ -187,8 +187,8 @@ def _extract_layers(pkt) -> List[LayerInfo]:
 
 def _get_service(port: int, protocol: Optional[str] = None) -> str:
     """
-    Restituisce il nome del servizio per la porta indicata.
-    Se la porta non è tra quelle note, restituisce il numero come stringa.
+    Returns the service name for the specified port.
+    Se la port non is tra quelle note, restituisce il numero come stringa.
     """
     service = PORT_SERVICES.get(port)
     if service:
@@ -204,7 +204,7 @@ def _get_service(port: int, protocol: Optional[str] = None) -> str:
 
 
 def _is_named_service_port(port: int, protocol: str) -> bool:
-    """Indica se una porta ha un nome servizio noto."""
+    """Indicates whether a port has a known service name."""
     if port in PORT_SERVICES:
         return True
     try:
@@ -220,8 +220,8 @@ def _service_endpoint(
     protocol: str,
 ) -> Tuple[int, str, str]:
     """
-    Deduce quale porta rappresenta il servizio applicativo nel pacchetto.
-    Ritorna porta, nome servizio e lato server ("src" o "dst").
+    Infers which port represents the application service in the packet.
+    Returns port, service name, and server side ("src" or "dst").
     """
     src_known = _is_named_service_port(src_port, protocol)
     dst_known = _is_named_service_port(dst_port, protocol)
@@ -255,8 +255,8 @@ def _raw_payload_bytes(pkt) -> Optional[bytes]:
 
 def _record_dns_hostnames(pkt, dns_hostnames: Dict[str, set]) -> None:
     """
-    Estrae associazioni IP -> hostname dalle risposte DNS presenti nel PCAP.
-    Non effettua query esterne: usa solo evidenze contenute nella cattura.
+    Estrae associazioni IP -> hostname dalle responses DNS presenti nel PCAP.
+    Does not perform external queries: uses only evidence contained in the capture.
     """
     if not pkt.haslayer(DNS):
         return
@@ -294,7 +294,7 @@ def _remember_ip_activity(
     protocol: str,
     direction: str,
 ) -> None:
-    """Aggiorna gli accumulatori di dettaglio associati a un IP."""
+    """Aggiorna gli accumulatori di detailso associati a un IP."""
     if not ip:
         return
 
@@ -319,7 +319,7 @@ def _build_ip_entry(
     dns_hostnames: Dict[str, set],
     ip_peers: Dict[str, Counter],
 ) -> IPEntry:
-    """Costruisce l'entry IP completa di servizi, peer, protocolli e nomi DNS."""
+    """Costruisce l'entry IP completa di services, peer, protocolli e nomi DNS."""
     services: List[IPServiceEntry] = []
     relevant = [
         (key, svc_count)
@@ -355,13 +355,13 @@ def _build_ip_entry(
 
 def _get_protocol(pkt) -> str:
     """
-    Identifica il protocollo di più alto livello presente nel pacchetto.
+    Identifica il protocol di most alto livello presente nel packet.
 
-    La rilevazione percorre lo stack dal livello più specifico (applicativo)
-    al più generico (data-link), restituendo il primo protocollo riconosciuto.
-    Per TCP e UDP controlla anche le porte per individuare il servizio applicativo.
+    La rilevazione percorre lo stack dal livello most specifico (applicativo)
+    al most generico (data-link), restituendo il primo protocol riconosciuto.
+    For TCP and UDP, also checks ports to identify the application service.
 
-    Restituisce "Other" per pacchetti non riconosciuti (es. protocolli proprietari).
+    Restituisce "Other" per packets non riconosciuti (es. protocolli proprietari).
     """
     try:
         # ── Livello data-link speciale ─────────────────────────────────────
@@ -375,8 +375,8 @@ def _get_protocol(pkt) -> str:
         # ── Livello trasporto: TCP ─────────────────────────────────────────
         if pkt.haslayer(TCP):
             tcp = pkt[TCP]
-            # Controlla prima la porta di destinazione (servizio remoto),
-            # poi quella sorgente (risposta da servizio)
+            # Checks the destination port first (remote service),
+            # then the source port (service response)
             for port in (tcp.dport, tcp.sport):
                 svc = PORT_SERVICES.get(port)
                 if svc:
@@ -390,7 +390,7 @@ def _get_protocol(pkt) -> str:
                 svc = PORT_SERVICES.get(port)
                 if svc:
                     return svc
-            # Ulteriore tentativo via layer DNS (copre MDNS sulla porta 5353)
+            # Ulteriore tentativo via layer DNS (copre MDNS sulla port 5353)
             if pkt.haslayer(DNS):
                 return "DNS"
             return "UDP"
@@ -414,7 +414,7 @@ def _get_protocol(pkt) -> str:
             return "Ethernet"
 
     except Exception:
-        # Un pacchetto malformato non deve bloccare l'analisi
+        # Un packet malformat non deve bloccare l'analysis
         pass
 
     return "Other"
@@ -422,11 +422,11 @@ def _get_protocol(pkt) -> str:
 
 def _get_info(pkt, protocol: str) -> str:
     """
-    Genera una stringa informativa sintetica sul contenuto del pacchetto.
-    Imita il campo "Info" di Wireshark per i protocolli più comuni.
+    Genera una stringa informativa sintetica sul contenuto del packet.
+    Imita il campo "Info" di Wireshark per i protocolli most comuni.
     """
     try:
-        # ── DNS: mostra il nome della query o il tipo di risposta ──────────
+        # ── DNS: shows the query name or response type ──────────
         if pkt.haslayer(DNS):
             dns = pkt[DNS]
             if dns.qdcount > 0 and dns.qd is not None:
@@ -475,7 +475,7 @@ def _get_info(pkt, protocol: str) -> str:
             return f"Len={udp.len}"
 
     except Exception:
-        # Ignora pacchetti malformati e usa il nome del protocollo come fallback
+        # Ignora packets malformati e usa il nome del protocol come fallback
         pass
 
     return protocol
@@ -484,13 +484,13 @@ def _get_info(pkt, protocol: str) -> str:
 def _calc_bucket_size(duration: float) -> int:
     """
     Calcola la dimensione ottimale del bucket temporale per la timeline
-    in base alla durata totale della cattura.
+    based on total capture duration.
 
     Obiettivo: produrre tra 60 e 200 punti nel grafico, indipendentemente
-    dalla durata della cattura.
+    from capture duration.
 
     Soglie:
-        ≤ 1 min   → 1 secondo   per pacchetto
+        ≤ 1 min   → 1 secondo   per packet
         ≤ 10 min  → 5 secondi   per bucket
         ≤ 1 ora   → 30 secondi  per bucket
         ≤ 6 ore   → 2 minuti    per bucket
@@ -507,13 +507,13 @@ def _calc_bucket_size(duration: float) -> int:
     return 600
 
 
-# ─── Funzione principale di analisi ───────────────────────────────────────────
+# ─── Funzione principale di analysis ───────────────────────────────────────────
 
 def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     """
-    Analizza un file PCAP/PCAPNG e restituisce un report statistico completo.
+    Analyzes a PCAP/PCAPNG file e restituisce un report statistico completo.
 
-    Legge i pacchetti in modalità streaming tramite PcapReader, così anche
+    Reads packets in streaming mode through PcapReader, so even
     file da centinaia di MB vengono gestiti senza caricarli interamente in RAM.
 
     Args:
@@ -524,28 +524,28 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         AnalysisResult con tutte le statistiche estratte.
 
     Raises:
-        ValueError: Se il file è corrotto, vuoto o non è un PCAP valido.
+        ValueError: Se il file is corrotto, vuoto o non is un PCAP valido.
     """
 
     # ── Inizializzazione degli accumulatori statistici ─────────────────────
     total_packets: int = 0
     total_bytes:   int = 0
 
-    # Timestamp del primo e dell'ultimo pacchetto (secondi Unix in float)
+    # Timestamp del primo e dell'ultimo packet (secondi Unix in float)
     first_ts: Optional[float] = None
     last_ts:  Optional[float] = None
 
-    # Contatore occorrenze e byte per ogni protocollo rilevato
+    # Contatore occorrenze e byte per ogni protocol rilevato
     proto_count: Counter = Counter()
     proto_bytes: Dict[str, int] = defaultdict(int)
 
-    # Statistiche per indirizzi IP sorgente e destinazione
+    # Statistiche per IP addresses source e destination
     src_ip_count: Counter = Counter()
     dst_ip_count: Counter = Counter()
     src_ip_bytes: Dict[str, int] = defaultdict(int)
     dst_ip_bytes: Dict[str, int] = defaultdict(int)
 
-    # Statistiche per porte: la chiave è (numero_porta, "TCP"/"UDP")
+    # Statistiche per ports: la chiave is (numero_port, "TCP"/"UDP")
     src_port_count: Counter = Counter()
     dst_port_count: Counter = Counter()
 
@@ -557,7 +557,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     dns_hostnames: Dict[str, set] = defaultdict(set)
 
     # Conversazioni bidirezionali tra coppie di IP.
-    # Chiave: (min(ip1,ip2), max(ip1,ip2)) così A→B e B→A sono la stessa coppia.
+    # Chiave: (min(ip1,ip2), max(ip1,ip2)) so A→B e B→A sono la stessa coppia.
     conv_data: Dict[Tuple[str, str], Dict] = defaultdict(
         lambda: {"packets": 0, "bytes": 0, "protocols": set()}
     )
@@ -565,22 +565,22 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Bucket temporali per la timeline: chiave = secondo Unix (int)
     ts_buckets: Dict[int, Dict] = defaultdict(lambda: {"packets": 0, "bytes": 0})
 
-    # Lista dettagliata dei pacchetti (limitata a MAX_PACKET_LIST elementi)
+    # Lista detailsata dei packets (limitata a MAX_PACKET_LIST elementi)
     packet_list: List[PacketEntry] = []
 
-    # Analizzatore dedicato dei flow 5-tuple, aggiornato pacchetto per pacchetto.
+    # Analyzetore dedicato dei flow 5-tuple, aggiornato packet per packet.
     flow_analyzer = FlowAnalyzer()
 
-    # Analizzatore DNS locale: non invia dati all'esterno e lavora solo sul PCAP.
+    # Local DNS analyzer: sends no data externally and works only on the PCAP.
     dns_analyzer = DNSAnalyzer()
 
-    # Analizzatore HTTP in chiaro: usa solo payload TCP leggibili, senza decifrare TLS.
+    # Analyzetore HTTP in chiaro: usa solo payload TCP leggibili, senza decifrare TLS.
     http_analyzer = HTTPAnalyzer()
 
-    # Analizzatore TLS: estrae solo metadati visibili nel handshake, senza decifrare.
+    # Analyzetore TLS: estrae solo metadata visibili nel handshake, senza decifrare.
     tls_analyzer = TLSAnalyzer()
 
-    # ── Lettura del file PCAP in modalità streaming ────────────────────────
+    # ── Streaming PCAP file reading ────────────────────────
     try:
         with PcapReader(file_path) as reader:
             for pkt in reader:
@@ -588,44 +588,44 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 pkt_len = len(pkt)
                 total_bytes += pkt_len
 
-                # ── Timestamp del pacchetto ────────────────────────────────
+                # ── Timestamp del packet ────────────────────────────────
                 try:
                     ts = float(pkt.time)
                 except Exception:
                     ts = 0.0
 
-                # Aggiorna l'intervallo temporale della cattura
+                # Updates the capture time interval
                 if first_ts is None or ts < first_ts:
                     first_ts = ts
                 if last_ts is None or ts > last_ts:
                     last_ts = ts
 
-                # ── Rilevamento protocollo ─────────────────────────────────
+                # ── Rilevamento protocol ─────────────────────────────────
                 protocol = _get_protocol(pkt)
                 proto_count[protocol] += 1
                 proto_bytes[protocol] += pkt_len
                 _record_dns_hostnames(pkt, dns_hostnames)
 
-                # ── Estrazione indirizzi IP ────────────────────────────────
+                # ── Estrazione IP addresses ────────────────────────────────
                 src_ip: Optional[str] = None
                 dst_ip: Optional[str] = None
                 src_port: Optional[int] = None
                 dst_port: Optional[int] = None
 
                 if pkt.haslayer(IP):
-                    # Pacchetti IPv4: estrai sorgente e destinazione
+                    # Packets IPv4: estrai source e destination
                     src_ip = pkt[IP].src
                     dst_ip = pkt[IP].dst
                 elif pkt.haslayer(IPv6):
-                    # Pacchetti IPv6: stesso approccio
+                    # Packets IPv6: stesso approccio
                     src_ip = pkt[IPv6].src
                     dst_ip = pkt[IPv6].dst
                 elif pkt.haslayer(ARP):
-                    # ARP: usa i campi IP del protocollo ARP
+                    # ARP: usa i campi IP del protocol ARP
                     src_ip = pkt[ARP].psrc
                     dst_ip = pkt[ARP].pdst
 
-                # Aggiorna i contatori degli indirizzi IP
+                # Aggiorna i contatori degli IP addresses
                 if src_ip:
                     src_ip_count[src_ip] += 1
                     src_ip_bytes[src_ip] += pkt_len
@@ -633,7 +633,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     dst_ip_count[dst_ip] += 1
                     dst_ip_bytes[dst_ip] += pkt_len
 
-                # ── Estrazione porte TCP/UDP ───────────────────────────────
+                # ── Estrazione ports TCP/UDP ───────────────────────────────
                 if pkt.haslayer(TCP):
                     src_port = pkt[TCP].sport
                     dst_port = pkt[TCP].dport
@@ -678,8 +678,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     )
 
                 # ── Aggiornamento flow 5-tuple ────────────────────────────
-                # Il modulo flow_analysis mantiene una vista bidirezionale del flow
-                # ma conserva il 5-tuple della prima direzione osservata.
+                # The flow_analysis module keeps a bidirectional flow view
+                # but keeps the 5-tuple from the first observed direction.
                 flow_analyzer.add_packet(
                     packet_number=total_packets,
                     ts=ts,
@@ -692,8 +692,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     pkt=pkt,
                 )
 
-                # ── Aggiornamento analisi DNS strutturata ─────────────────
-                # Estrae query, risposte, rcode, TTL e indicatori dal layer DNS.
+                # ── Aggiornamento analysis DNS strutturata ─────────────────
+                # Extracts queries, responses, rcode, TTL, and indicators from the DNS layer.
                 dns_analyzer.add_packet(
                     packet_number=total_packets,
                     ts=ts,
@@ -704,7 +704,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
 
                 raw_tcp_payload = _raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None
 
-                # ── Aggiornamento analisi HTTP in chiaro ──────────────────
+                # ── Aggiornamento analysis HTTP in chiaro ──────────────────
                 # Parsing prudente: solo payload TCP Raw che sembrano HTTP testuale.
                 http_analyzer.add_packet(
                     packet_number=total_packets,
@@ -716,8 +716,8 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     payload=raw_tcp_payload,
                 )
 
-                # ── Aggiornamento analisi TLS/SSL ────────────────────────
-                # Il parser lavora sui record handshake TLS presenti nel Raw TCP
+                # ── Aggiornamento analysis TLS/SSL ────────────────────────
+                # The parser works on TLS handshake records present in Raw TCP
                 # e non tenta mai di leggere contenuti cifrati.
                 tls_analyzer.add_packet(
                     packet_number=total_packets,
@@ -741,12 +741,12 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                 ts_buckets[int(ts)]["packets"] += 1
                 ts_buckets[int(ts)]["bytes"]   += pkt_len
 
-                # Conserviamo solo i primi N pacchetti dettagliati nel JSON per
+                # Conserviamo solo i primi N packets detailsati nel JSON per
                 # evitare consumo eccessivo di memoria/browser su PCAP molto grandi.
                 if MAX_PACKET_LIST == 0 or len(packet_list) < MAX_PACKET_LIST:
-                    # ── Aggiunta alla lista dettagliata ───────────────────
+                    # ── Aggiunta alla lista detailsata ───────────────────
                     # Decodifica layer e raw hex sono costosi: li facciamo solo
-                    # per i pacchetti che finiranno realmente nella risposta.
+                    # per i packets che finiranno realmente nella risposta.
                     try:
                         ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
                         ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]
@@ -773,21 +773,21 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     ))
 
     except Exception as exc:
-        # Rilancia l'eccezione con un messaggio comprensibile all'utente
+        # Reraises the exception with a user-readable message
         raise ValueError(f"Impossibile analizzare il file PCAP: {exc}") from exc
 
     # ── Validazione del risultato ──────────────────────────────────────────
     if total_packets == 0:
-        raise ValueError("Il file PCAP non contiene pacchetti validi.")
+        raise ValueError("The PCAP file does not contain valid packets.")
 
     # ── Calcolo statistiche aggregate ─────────────────────────────────────
-    # Durata della cattura: differenza tra ultimo e primo timestamp
+    # Duration della cattura: differenza tra ultimo e primo timestamp
     duration    = float(last_ts - first_ts) if (first_ts and last_ts and last_ts > first_ts) else 0.0
-    # Pacchetti al secondo (evita divisione per zero)
+    # Packets al secondo (evita divisione per zero)
     pps         = total_packets / duration if duration > 0 else 0.0
     avg_size    = total_bytes / total_packets
 
-    # Converti i timestamp Unix in stringhe ISO 8601 per la risposta JSON
+    # Converts Unix timestamps to ISO 8601 strings for the JSON response
     start_str = datetime.fromtimestamp(first_ts, tz=timezone.utc).isoformat() if first_ts else None
     end_str   = datetime.fromtimestamp(last_ts,  tz=timezone.utc).isoformat() if last_ts  else None
 
@@ -813,7 +813,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         for proto, count in proto_count.most_common(20)
     ]
 
-    # ── Top 20 indirizzi IP sorgente e destinazione ───────────────────────
+    # ── Top 20 IP addresses source e destination ───────────────────────
     top_src_ips = [
         _build_ip_entry(
             ip, cnt, src_ip_bytes[ip],
@@ -831,7 +831,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         for ip, cnt in dst_ip_count.most_common(20)
     ]
 
-    # ── Top 15 porte sorgente e destinazione ──────────────────────────────
+    # ── Top 15 ports source e destination ──────────────────────────────
     top_src_ports = [
         PortEntry(port=port, service=_get_service(port, proto), count=cnt, protocol=proto)
         for (port, proto), cnt in src_port_count.most_common(15)
@@ -859,7 +859,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     bsize = _calc_bucket_size(duration)
     agg: Dict[int, Dict] = defaultdict(lambda: {"packets": 0, "bytes": 0})
     for ts_sec, data in ts_buckets.items():
-        # Arrotonda al bucket più vicino
+        # Arrotonda al bucket most vicino
         bucket_key = (ts_sec // bsize) * bsize
         agg[bucket_key]["packets"] += data["packets"]
         agg[bucket_key]["bytes"]   += data["bytes"]

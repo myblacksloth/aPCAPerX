@@ -1,9 +1,9 @@
 /**
- * Mappa geografica del traffico verso IP pubblici.
+ * Geographic map of traffic to public IPs.
  *
- * Il componente colora i paesi in base ai byte osservati verso IP di
- * destinazione per cui l'arricchimento esterno ha restituito un paese.
- * Le geometrie arrivano da world-atlas in formato TopoJSON e vengono
+ * This component colors countries based on bytes observed toward IPs from
+ * destination per cui l'arricchimento external ha restituito un paese.
+ * Le geometrie arrivano da world-atlas in format TopoJSON e vengono
  * proiettate in SVG con una semplice proiezione equirettangolare.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -82,7 +82,7 @@ function normalizeCountry(value: string) {
 }
 
 function countryAliases(country: string) {
-  // Alcuni servizi GeoIP e Natural Earth usano nomi diversi per lo stesso paese.
+  // Alcuni services GeoIP e Natural Earth usano nomi diversi per lo stesso paese.
   const aliases: Record<string, string> = {
     'united states': 'united states of america',
     'russian federation': 'russia',
@@ -160,7 +160,7 @@ function ringToPath(ring: Array<[number, number]>) {
 }
 
 function polygonToPath(topology: WorldTopology, polygon: number[][]) {
-  // Un poligono puo avere piu anelli: contorno esterno e buchi interni.
+  // A polygon can have multiple rings: outer boundary and inner holes.
   return polygon
     .map((ring) => {
       const points = ring.flatMap((arcIndex, index) => {
@@ -195,7 +195,7 @@ function topologyToShapes(topology: WorldTopology): CountryShape[] {
 }
 
 function getExternalInfo(result: AnalysisResult, ip: string): IPExternalInfo | null {
-  // Cerca i dati esterni prima nella mappa globale, poi nelle top list arricchite.
+  // Looks for external data first in the global map, then in enriched top lists.
   const fromMap = result.external_ip_info?.[ip]
   if (fromMap) return fromMap
 
@@ -207,7 +207,7 @@ function getExternalInfo(result: AnalysisResult, ip: string): IPExternalInfo | n
 }
 
 function aggregateTrafficByCountry(result: AnalysisResult) {
-  // Usa i byte delle top destinazioni e completa con i pacchetti dettagliati se disponibili.
+  // Uses bytes from top destinations and completes with detailed packets when available.
   const bytesByIp = new Map<string, { bytes: number; packets: number }>()
 
   for (const entry of result.top_dst_ips) {
@@ -250,7 +250,7 @@ function aggregateTrafficByCountry(result: AnalysisResult) {
 }
 
 function flowBytesForCountry(flow: FlowEntry, matchedIps: string[]) {
-  // Attribuisce al paese il traffico complessivo dell'endpoint geolocalizzato.
+  // Assigns the overall geolocated endpoint traffic to the country.
   let bytes = 0
   let packets = 0
   if (matchedIps.includes(flow.src_ip)) {
@@ -316,7 +316,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
         setLoading(true)
         setError(null)
         const response = await fetch(WORLD_ATLAS_URL)
-        if (!response.ok) throw new Error(`Errore mappa ${response.status}`)
+        if (!response.ok) throw new Error(`Error mappa ${response.status}`)
         const topology: WorldTopology = await response.json()
         if (active) setShapes(topologyToShapes(topology))
       } catch (err) {
@@ -342,9 +342,9 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
     <div className="card">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-200">Mappa traffico IP</h2>
+          <h2 className="text-base font-semibold text-slate-200">IP traffic map</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Paesi colorati in base al traffico verso gli IP di destinazione arricchiti
+            Countries colored by traffic toward enriched destination IPs
           </p>
         </div>
         <div className="flex gap-4 text-xs text-slate-500">
@@ -355,14 +355,14 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
 
       {trafficByCountry.size === 0 && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
-          Premi "Analizza con tool esterni" per recuperare i paesi degli IP pubblici e colorare la mappa.
+          Press "Analyze with external tools" to retrieve countries for public IPs and color the map.
         </div>
       )}
 
       <div className="relative overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
         {loading ? (
           <div className="flex h-[320px] items-center justify-center text-sm text-slate-500">
-            Caricamento mappa mondiale...
+            Loading world map...
           </div>
         ) : error ? (
           <div className="flex h-[320px] items-center justify-center px-4 text-center text-sm text-red-200">
@@ -396,7 +396,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                   onMouseEnter={() => setHovered(traffic ?? null)}
                   onMouseLeave={() => setHovered(null)}
                   onClick={() => {
-                    // Click sul paese: apre il dettaglio dei flow collegati a quel paese.
+                    // Click sul paese: apre il detailso dei flow collegati a quel paese.
                     if (traffic) {
                       setSelected({
                         traffic,
@@ -405,7 +405,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                     }
                   }}
                   onKeyDown={(event) => {
-                    // Accessibilità tastiera: Enter/Spazio aprono lo stesso popup del click.
+                    // Keyboard accessibility: Enter/Space open the same popup as click.
                     if (traffic && (event.key === 'Enter' || event.key === ' ')) {
                       event.preventDefault()
                       setSelected({
@@ -418,7 +418,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                   <title>
                     {traffic
                       ? `${traffic.country}: ${formatBytes(traffic.bytes)} verso ${traffic.ips.length} IP`
-                      : `${shape.name}: nessun traffico geolocalizzato`}
+                      : `${shape.name}: no geolocated traffic`}
                   </title>
                 </path>
               )
@@ -432,7 +432,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
               {hovered.country}{hovered.countryCode ? ` (${hovered.countryCode})` : ''}
             </p>
             <p className="mt-1 text-slate-300">{formatBytes(hovered.bytes)} verso {hovered.ips.length} IP</p>
-            <p className="text-slate-400">{formatCount(hovered.packets)} pacchetti</p>
+            <p className="text-slate-400">{formatCount(hovered.packets)} packets</p>
             <p className="mt-2 break-words font-mono text-[11px] text-slate-500">
               {hovered.ips.slice(0, 6).join(', ')}
               {hovered.ips.length > 6 ? `, +${hovered.ips.length - 6}` : ''}
@@ -459,7 +459,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                   Flow verso {selected.traffic.country}{selected.traffic.countryCode ? ` (${selected.traffic.countryCode})` : ''}
                 </h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {formatBytes(selected.traffic.bytes)} · {formatCount(selected.traffic.packets)} pacchetti · {selected.traffic.ips.length} IP geolocalizzati
+                  {formatBytes(selected.traffic.bytes)} · {formatCount(selected.traffic.packets)} packets · {selected.traffic.ips.length} IP geolocalizzati
                 </p>
               </div>
               <button
@@ -488,10 +488,10 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
                     <tr>
                       <th className="pb-2 pr-3">Flow</th>
                       <th className="pb-2 pr-3">Endpoint</th>
-                      <th className="pb-2 pr-3">Protocollo</th>
-                      <th className="pb-2 pr-3">Traffico paese</th>
+                      <th className="pb-2 pr-3">Protocol</th>
+                      <th className="pb-2 pr-3">Traffic paese</th>
                       <th className="pb-2 pr-3">Totale flow</th>
-                      <th className="pb-2 pr-3">Stato</th>
+                      <th className="pb-2 pr-3">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/70">
@@ -526,7 +526,7 @@ export default function WorldTrafficMap({ result }: WorldTrafficMapProps) {
 
               {selected.flows.length === 0 && (
                 <p className="py-8 text-center text-sm text-slate-500">
-                  Nessun flow 5-tuple collegato agli IP geolocalizzati di questo paese.
+                  No 5-tuple flow is linked to the geolocated IPs in this country.
                 </p>
               )}
             </div>

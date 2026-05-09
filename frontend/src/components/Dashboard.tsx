@@ -1,5 +1,5 @@
 /**
- * Componente principale del dashboard di analisi.
+ * Componente principale del dashboard di analysis.
  *
  * Organizza tutti i sotto-componenti in una griglia responsive:
  *
@@ -15,7 +15,7 @@
  *   │  [Packet List — full width]                              │
  *   └──────────────────────────────────────────────────────────┘
  *
- * Ogni sezione è incapsulata nel suo componente dedicato per
+ * Ogni sezione is incapsulata nel suo componente dedicato per
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
@@ -68,7 +68,7 @@ function collectIPs(result: AnalysisResult): string[] {
 }
 
 function mergeExternalInfo(entries: IPEntry[], external: Record<string, IPExternalInfo>): IPEntry[] {
-  // Aggiorna solo gli IP per cui il backend ha restituito dati esterni.
+  // Updates only IPs for which the backend returned external data.
   return entries.map((entry) => ({
     ...entry,
     external: external[entry.ip] ?? entry.external ?? null,
@@ -91,13 +91,13 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const externalFeatureActive = externalResultsCount > 0 || Boolean(externalSummary && !externalError)
 
   const openHost = (ip: string) => {
-    // Permette alle viste con IP cliccabili di aprire direttamente la tab Hosts.
+    // Permette alle viste con IP clickbili di aprire direttamente la tab Hosts.
     setSelectedHostIp(ip)
     setActiveTab('hosts')
   }
   /**
-   * Esporta il risultato dell'analisi come file JSON scaricabile.
-   * Utile per archiviare o condividere i dati estratti dal PCAP.
+   * Esport il risultato dell'analysis come file JSON scaricabile.
+   * Utile per archiviare o condividere i data estratti dal PCAP.
    */
   const handleExportJSON = () => {
     const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' })
@@ -110,11 +110,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   }
 
   /**
-   * Invia al backend gli IP osservati nel PCAP e fonde nel report corrente
-   * le informazioni recuperate da RDAP, ASN, reverse DNS e servizi GeoIP.
+   * Sends IPs observed in the PCAP to the backend and merges them into the current report
+   * information retrieved from RDAP, ASN, reverse DNS, and GeoIP services.
    */
   const handleExternalAnalysis = async () => {
-    // La chiamata ai servizi esterni parte solo dopo il popup di consenso.
+    // External-service calls start only after the consent popup.
     setExternalConfirmOpen(false)
     const ips = collectIPs(result)
     if (ips.length === 0) return
@@ -132,7 +132,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
+        throw new Error(data.detail ?? `Error ${response.status}: ${response.statusText}`)
       }
 
       const enrichment: IPEnrichmentResponse = await response.json()
@@ -149,9 +149,9 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         },
       })
 
-      setExternalSummary(`${enrichedCount} IP arricchiti, ${skippedCount} IP privati/locali non inviati`)
+      setExternalSummary(`${enrichedCount} IPs enriched, ${skippedCount} private/local IPs not sent`)
     } catch (err) {
-      setExternalError(err instanceof Error ? err.message : "Errore sconosciuto durante l'arricchimento")
+      setExternalError(err instanceof Error ? err.message : "Unknown error during enrichment")
     } finally {
       setExternalLoading(false)
     }
@@ -160,14 +160,14 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   return (
     <div className="max-w-[1600px] mx-auto px-4 py-6 space-y-4">
 
-      {/* ── Intestazione risultati ────────────────────────────────────── */}
+      {/* ── Results header ────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-brand-400" />
           <div>
             <h1 className="text-lg font-bold text-white">{result.filename}</h1>
             <p className="text-xs text-slate-500">
-              {result.summary.total_packets.toLocaleString('it-IT')} pacchetti analizzati
+              {result.summary.total_packets.toLocaleString('it-IT')} packets analyzed
               {result.summary.capture_start && (
                 <> · {new Date(result.summary.capture_start).toLocaleString('it-IT')}</>
               )}
@@ -197,7 +197,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                   : 'text-slate-400 hover:text-slate-200'}`}
             >
               <GitBranch className="w-3.5 h-3.5" />
-              Tracce
+              Traces
             </button>
             <button
               onClick={() => setActiveTab('advanced-traces')}
@@ -207,7 +207,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                   : 'text-slate-400 hover:text-slate-200'}`}
             >
               <GitBranch className="w-3.5 h-3.5" />
-              Tracce avanzate
+              Advanced traces
             </button>
             <button
               onClick={() => setActiveTab('hosts')}
@@ -237,7 +237,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                   : 'text-slate-400 hover:text-slate-200'}`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
-              Security avanzata
+              Advanced Security
             </button>
             <button
               onClick={() => setActiveTab('dns-analysis')}
@@ -271,7 +271,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             </button>
             <button
               onClick={() => {
-                // Se l'arricchimento e gia stato completato, non riapre il popup.
+                // If enrichment has already completed, do not reopen the popup.
                 if (!externalFeatureActive) setExternalConfirmOpen(true)
               }}
               disabled={externalLoading || externalFeatureActive}
@@ -283,7 +283,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                     : 'text-slate-300 hover:bg-slate-600 hover:text-slate-100'}`}
             >
               {externalFeatureActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-              {externalFeatureActive ? 'Tool esterni attivi' : externalLoading ? 'Ottenimento info...' : 'Analizza con tool esterni'}
+              {externalFeatureActive ? 'External tools active' : externalLoading ? 'Retrieving info...' : 'Analyze with external tools'}
             </button>
           </div>
 
@@ -294,29 +294,29 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                        text-slate-200 text-xs rounded-lg transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            Esporta JSON
+            Export JSON
           </button>
         </div>
       </div>
 
-      {/* Stato dell'arricchimento esterno avviato manualmente dall'utente */}
+      {/* Status of external enrichment manually started by the user */}
       {(externalSummary || externalError) && (
         <div className={`rounded-lg border px-4 py-2 text-xs ${
           externalError
             ? 'border-red-500/30 bg-red-500/10 text-red-200'
             : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
         }`}>
-          {externalError ?? `Tool esterni attivi: ${externalSummary}`}
+          {externalError ?? `External tools active: ${externalSummary}`}
         </div>
       )}
 
       {/* ── Tab: Overview ─────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <>
-          {/* Riga 1: 6 card di riepilogo */}
+          {/* Row 1: 6 summary cards */}
           <SummaryCards result={result} />
 
-          {/* Riga 2: filtri stile Wireshark applicati alle viste pacchetto */}
+          {/* Row 2: Wireshark-style filters applied to packet views */}
           <PacketFilters
             filter={packetFilter}
             filteredCount={filteredPackets.length}
@@ -325,33 +325,33 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             onFilterChange={setPacketFilter}
           />
 
-          {/* Riga 3: distribuzione protocolli + top IP */}
+          {/* Row 3: protocol distribution + top IPs */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ProtocolChart result={result} />
             <TopIPsChart   result={result} />
           </div>
 
-          {/* Riga 4: segnalazioni Security basate sulle informazioni IP raccolte */}
+          {/* Row 4: Security findings based on collected IP information */}
           <SecurityPanel result={result} />
 
-          {/* Riga 5: mappa mondiale del traffico verso IP pubblici */}
+          {/* Row 5: world map of traffic to public IPs */}
           <WorldTrafficMap result={result} />
 
-          {/* Riga 6: timeline del traffico */}
+          {/* Row 6: traffic timeline */}
           <TimelineChart result={result} />
 
-          {/* Riga 7: top porte + conversazioni */}
+          {/* Row 7: top ports + conversations */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <TopPortsChart      result={result} />
             <ConversationsTable conversations={result.conversations} />
           </div>
 
-          {/* Riga 8: lista pacchetti filtrata */}
+          {/* Row 8: filtered packet list */}
           <PacketTable packets={filteredPackets} onHostClick={openHost} />
         </>
       )}
 
-      {/* ── Tab: Tracce ───────────────────────────────────────────────── */}
+      {/* ── Tab: Traces ───────────────────────────────────────────────── */}
       {activeTab === 'traces' && (
         <>
           <PacketFilters
@@ -365,7 +365,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         </>
       )}
 
-      {/* ── Tab: Tracce avanzate ──────────────────────────────────────── */}
+      {/* ── Tab: Advanced traces ──────────────────────────────────────── */}
       {activeTab === 'advanced-traces' && (
         <>
           <PacketFilters
@@ -384,12 +384,12 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         <HostsView result={result} selectedHostIp={selectedHostIp} />
       )}
 
-      {/* ── Tab: Grafo di rete ────────────────────────────────────────── */}
+      {/* ── Tab: Network graph ────────────────────────────────────────── */}
       {activeTab === 'network-graph' && (
         <NetworkGraphView result={result} />
       )}
 
-      {/* ── Tab: Security avanzata ────────────────────────────────────── */}
+      {/* ── Tab: Advanced Security ────────────────────────────────────── */}
       {activeTab === 'security-analysis' && (
         <SecurityAnalysisView result={result} />
       )}
@@ -409,20 +409,20 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         <TLSAnalysisView result={result} />
       )}
 
-      {/* Popup privacy per l'arricchimento IP esterno generale */}
+      {/* Privacy popup for general external IP enrichment */}
       {externalConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
           <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
             <div className="flex items-start gap-3">
               <Search className="mt-0.5 h-5 w-5 flex-shrink-0 text-brand-300" />
               <div>
-                <h3 className="text-base font-semibold text-white">Conferma analisi con tool esterni</h3>
+                <h3 className="text-base font-semibold text-white">Confirm external-tool analysis</h3>
                 <p className="mt-2 text-sm text-slate-300">
-                  Verranno inviati solo gli IP pubblici osservati nel PCAP a servizi esterni per recuperare ASN,
-                  RDAP, reverse DNS e dati GeoIP. Gli IP privati, locali e riservati saranno scartati dal backend.
+                  Only public IPs observed in the PCAP will be sent to external services to retrieve ASN,
+                  RDAP, reverse DNS, and GeoIP data. Private, local, and reserved IPs will be discarded by the backend.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  Fonti usate: RDAP/IANA, Team Cymru, resolver DNS inverso e ip-api.
+                  Sources used: RDAP/IANA, Team Cymru, reverse DNS resolver, and ip-api.
                 </p>
               </div>
             </div>
@@ -432,13 +432,13 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                 onClick={() => setExternalConfirmOpen(false)}
                 className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600"
               >
-                Annulla
+                Cancel
               </button>
               <button
                 onClick={handleExternalAnalysis}
                 className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-400"
               >
-                Confermo e analizza
+                Confirm and analyze
               </button>
             </div>
           </div>

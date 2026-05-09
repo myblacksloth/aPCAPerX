@@ -1,16 +1,16 @@
 /**
- * Parser e valutatore per filtri pacchetto in stile Wireshark.
+ * Parser e valutatore per filtri packet in stile Wireshark.
  *
- * Il filtro viene applicato lato frontend sui pacchetti gia presenti nel report.
- * La sintassi supporta gli operatori piu utili per l'analisi rapida senza
+ * The filter is applied frontend-side to packets already present in the report.
+ * The syntax supports the most useful operators for quick analysis without
  * tentare di replicare tutta la display-filter language di Wireshark.
  */
 import type { PacketEntry } from '../types/analysis'
 
 export interface FilterParseResult {
-  /** Funzione pronta per valutare un pacchetto */
+  /** Funzione pronta per valutare un packet */
   predicate: (packet: PacketEntry) => boolean
-  /** Errore leggibile da mostrare in UI, se il filtro non e valido */
+  /** Readable error to show in the UI when the filter is invalid */
   error: string | null
 }
 
@@ -210,7 +210,7 @@ class Parser {
 }
 
 function packetField(packet: PacketEntry, field: string): string | number | null {
-  // Mappa i nomi in stile Wireshark sui campi disponibili nel report.
+  // Maps Wireshark-style names to available report fields.
   const normalized = field.toLowerCase()
   switch (normalized) {
     case 'ip.addr':

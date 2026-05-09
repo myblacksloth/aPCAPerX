@@ -1,10 +1,10 @@
 /**
- * Vista "Tracce avanzate".
+ * Advanced traces view.
  *
- * Mostra i flow come radici di un'alberatura e i pacchetti come nodi figli.
- * Per TCP prova a correlare ACK/risposte usando seq, ack, flag e direzione.
+ * Mostra i flow come radici di un'alberatura e i packets come nodi figli.
+ * For TCP, tries to correlate ACKs/responses using seq, ack, flags, and direction.
  * Per UDP o protocolli senza ACK usa una correlazione temporale e direzionale
- * tra richiesta e risposta nello stesso flow.
+ * between request and response in the same flow.
  */
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, GitBranch, Network, Search } from 'lucide-react'
@@ -52,26 +52,26 @@ interface AdvancedFlow {
 }
 
 function parseTimestamp(ts: string): number {
-  // Converte HH:MM:SS.mmm in secondi relativi alla giornata della cattura.
+  // Converts HH:MM:SS.mmm to seconds relative to the capture day.
   const parts = ts.split(':')
   if (parts.length !== 3) return 0
   return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseFloat(parts[2])
 }
 
 function endpointKey(endpoint: Endpoint) {
-  // Rappresentazione stabile di un endpoint IP:porta.
+  // Rappresentazione stabile di un endpoint IP:port.
   return `${endpoint.ip}:${endpoint.port ?? 0}`
 }
 
 function packetEndpoint(packet: PacketEntry, side: 'src' | 'dst'): Endpoint {
-  // Estrae un endpoint sorgente o destinazione dal pacchetto.
+  // Estrae un endpoint source o destination dal packet.
   return side === 'src'
     ? { ip: packet.src_ip ?? '?', port: packet.src_port }
     : { ip: packet.dst_ip ?? '?', port: packet.dst_port }
 }
 
 function canonicalFlow(packet: PacketEntry) {
-  // Normalizza la coppia di endpoint in modo che richiesta e risposta cadano nello stesso flow.
+  // Normalizes endpoint pairs so request and response fall into the same flow.
   const src = packetEndpoint(packet, 'src')
   const dst = packetEndpoint(packet, 'dst')
   return endpointKey(src) <= endpointKey(dst)
@@ -80,7 +80,7 @@ function canonicalFlow(packet: PacketEntry) {
 }
 
 function layerField(layer: LayerInfo | undefined, name: string) {
-  // Cerca un campo dentro un layer Scapy serializzato dal backend.
+  // Searches a field inside a Scapy layer serialized by the backend.
   return layer?.fields.find((field) => field.name === name)?.value ?? null
 }
 
@@ -138,14 +138,14 @@ function relationLabel(packet: PacketEntry, tcp: TcpMeta | null, parent: Correla
     return 'inizio flow'
   }
 
-  if (tcp?.flags.includes('SYN') && tcp.flags.includes('ACK')) return `risposta SYN/ACK a #${parent.packet.number}`
+  if (tcp?.flags.includes('SYN') && tcp.flags.includes('ACK')) return `SYN/ACK response to #${parent.packet.number}`
   if (tcp?.flags.includes('ACK') && tcp.payloadLen === 0) return `ACK di #${parent.packet.number}`
-  if (packet.protocol === 'DNS' && packet.info.toLowerCase().includes('response')) return `risposta DNS a #${parent.packet.number}`
-  return `risposta/correlato a #${parent.packet.number}`
+  if (packet.protocol === 'DNS' && packet.info.toLowerCase().includes('response')) return `DNS response to #${parent.packet.number}`
+  return `response/correlated to #${parent.packet.number}`
 }
 
 function findParent(nodes: CorrelatedPacket[], current: CorrelatedPacket) {
-  // Cerca il miglior pacchetto precedente da collegare al nodo corrente.
+  // Finds the best previous packet to link to the current node.
   const opposite = nodes
     .filter((node) => node.direction !== current.direction && node.time <= current.time)
     .reverse()
@@ -219,7 +219,7 @@ function buildCorrelatedFlow(packets: PacketEntry[], a: Endpoint, b: Endpoint, k
 }
 
 function buildFlows(packets: PacketEntry[]) {
-  // Raggruppa i pacchetti per flow bidirezionale e costruisce le alberature.
+  // Raggruppa i packets per flow bidirezionale e costruisce le alberature.
   const grouped = new Map<string, { a: Endpoint; b: Endpoint; packets: PacketEntry[] }>()
 
   for (const packet of packets) {
@@ -244,7 +244,7 @@ function flagBadges(flags: string[]) {
 }
 
 function endpointLabel(endpoint: Endpoint) {
-  // Formatta endpoint con porta opzionale.
+  // Formatta endpoint con port opzionale.
   return `${endpoint.ip}${endpoint.port ? `:${endpoint.port}` : ''}`
 }
 
@@ -333,7 +333,7 @@ function FlowTree({
           <p className="mt-1 text-xs text-slate-500">
             {backendFlow
               ? `Flow 5-tuple ${backendFlow.flow_id} · stato ${backendFlow.state} · C→S ${backendFlow.packets_client_to_server} pkt / S→C ${backendFlow.packets_server_to_client} pkt`
-              : 'Flow principale: connessione bidirezionale con pacchetti correlati in alberatura'}
+              : 'Flow principale: connessione bidirezionale con packets correlati in alberatura'}
           </p>
         </div>
         <div className="flex shrink-0 gap-4 text-xs text-slate-500">
@@ -367,7 +367,7 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
   const flows = useMemo(() => buildFlows(packets), [packets])
   const protocols = useMemo(() => ['all', ...new Set(packets.map((packet) => packet.protocol).sort())], [packets])
   const backendFlowByPacket = useMemo(() => {
-    // Collega i flow backend ai flow visuali usando i numeri pacchetto già inclusi nel JSON.
+    // Collega i flow backend ai flow visuali usando i numeri packet already inclusi nel JSON.
     const map = new Map<number, FlowEntry>()
     backendFlows.forEach((flow) => {
       flow.packet_numbers.forEach((packetNumber) => map.set(packetNumber, flow))
@@ -396,7 +396,7 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
   }, [flows, protocol, search, sortBy])
 
   const openPacketInspector = (packet: PacketEntry) => {
-    // Usa l'array `packets` corrente, gia filtrato dalla dashboard, per mantenere coerente la navigazione del popup.
+    // Uses the current `packets` array, already filtered by the dashboard, to keep popup navigation consistent.
     const index = packets.findIndex((item) => item.number === packet.number)
     if (index >= 0) setSelectedPacketIndex(index)
   }
@@ -409,14 +409,14 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
             <div className="flex items-center gap-2">
               <GitBranch className="h-4 w-4 text-brand-400" />
               <div>
-                <h2 className="text-base font-semibold text-slate-200">Tracce avanzate</h2>
+                <h2 className="text-base font-semibold text-slate-200">Advanced traces</h2>
                 <p className="text-xs text-slate-500">
-                  Alberatura per flow: pacchetto, risposta e ACK correlati quando deducibili
+                  Flow tree: packet, response, and ACK correlated when inferable
                 </p>
               </div>
             </div>
             <span className="text-xs text-slate-500">
-              {visibleFlows.length} flow visuali · {backendFlows.length} flow 5-tuple backend · {packets.length} pacchetti
+              {visibleFlows.length} flow visuali · {backendFlows.length} flow 5-tuple backend · {packets.length} packets
             </span>
           </div>
 
@@ -427,7 +427,7 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cerca IP, porta o info pacchetto..."
+                placeholder="Search IP, port, or packet info..."
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-600"
               />
             </div>
@@ -438,7 +438,7 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
             >
               {protocols.map((item) => (
-                <option key={item} value={item}>{item === 'all' ? 'Tutti i protocolli' : item}</option>
+                <option key={item} value={item}>{item === 'all' ? 'All protocols' : item}</option>
               ))}
             </select>
 
@@ -447,15 +447,15 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
               onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
             >
-              <option value="time">Cronologico</option>
-              <option value="packets">Piu pacchetti</option>
-              <option value="bytes">Piu volume</option>
+              <option value="time">Chronological</option>
+              <option value="packets">Most packets</option>
+              <option value="bytes">Most volume</option>
             </select>
           </div>
 
           <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3 text-xs text-slate-400">
-            <strong className="text-slate-200">Legenda:</strong> il nodo radice e il flow; i nodi figli sono pacchetti.
-            Le etichette "ACK di #N" e "risposta a #N" indicano il pacchetto precedente correlato tramite ACK TCP o risposta logica.
+            <strong className="text-slate-200">Legend:</strong> the root node is the flow; child nodes are packets.
+            Labels "ACK for #N" and "response to #N" indicate the previous packet correlated through TCP ACK or logical response.
           </div>
         </div>
 
@@ -471,13 +471,13 @@ export default function AdvancedTracesView({ packets, flows: backendFlows = [] }
 
           {visibleFlows.length === 0 && (
             <div className="card py-12 text-center text-sm text-slate-500">
-              Nessuna traccia avanzata corrisponde ai filtri applicati
+              No advanced trace matches the applied filters
             </div>
           )}
         </div>
       </div>
 
-      {/* Inspector pacchetto: riusa il popup Wireshark-style gia disponibile nella lista pacchetti. */}
+      {/* Packet inspector: reuses the Wireshark-style popup already available in the packet list. */}
       {selectedPacketIndex !== null && packets[selectedPacketIndex] && (
         <PacketDetailModal
           packet={packets[selectedPacketIndex]}

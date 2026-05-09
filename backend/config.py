@@ -12,7 +12,7 @@ from typing import Optional
 
 
 def _load_dotenv() -> None:
-    """Carica un file .env semplice senza introdurre dipendenze runtime."""
+    """Loads a simple .env file without introducing runtime dependencies."""
     candidates = [
         Path.cwd() / ".env",
         Path.cwd().parent / ".env",
@@ -62,11 +62,11 @@ UPLOAD_CHUNK_SIZE = _int_env("PCAPCAPER_UPLOAD_CHUNK_SIZE", 1024 * 1024, 64 * 10
 TEMP_DIR = os.getenv("PCAPCAPER_TEMP_DIR", tempfile.gettempdir())
 
 # Limiti di output per evitare JSON enormi e consumo eccessivo di memoria lato
-# browser. Il backend continua ad analizzare tutto il PCAP in streaming.
+# browser. The backend continues to analyze the full PCAP in streaming mode.
 MAX_PACKET_LIST = _int_env("PCAPCAPER_MAX_PACKET_LIST", 1000, 0)
 MAX_FLOW_PACKET_NUMBERS = _int_env("PCAPCAPER_MAX_FLOW_PACKET_NUMBERS", 200, 0)
 
-# Concorrenza prudente per servizi esterni gratuiti: parallelizza senza aprire
+# Concorrenza prudente per external services gratuiti: parallelizza senza aprire
 # decine di connessioni simultanee.
 EXTERNAL_MAX_WORKERS = _int_env("PCAPCAPER_EXTERNAL_MAX_WORKERS", 6, 1)
 MAX_ENRICHMENT_IPS = _int_env("PCAPCAPER_MAX_ENRICHMENT_IPS", 80, 1)

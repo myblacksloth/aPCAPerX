@@ -1,25 +1,25 @@
 /**
- * Funzioni di utilità per la formattazione dei valori nell'interfaccia.
+ * Utility functions for formatting values in the interface.
  * Ogni funzione trasforma un valore numerico grezzo in una stringa
- * leggibile dall'utente.
+ * readable by the user.
  */
 
 /**
- * Converte un valore in byte nella rappresentazione umana più appropriata.
+ * Converte un valore in byte nella rappresentazione umana most appropriata.
  * Es: 1536 → "1.5 KB", 2097152 → "2.0 MB"
  */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  // Calcola l'indice dell'unità usando il logaritmo in base 1024
+  // Computes the unit index using base-1024 logarithm
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   const value = bytes / Math.pow(1024, i)
-  // Un decimale è sufficiente per la leggibilità
+  // One decimal is enough for readability
   return `${value.toFixed(1)} ${units[i]}`
 }
 
 /**
- * Formatta una durata in secondi in un formato comprensibile.
+ * Formats a duration in seconds into a readable format.
  * Es: 0.453 → "0.453 s", 90 → "1m 30s", 3665 → "1h 01m"
  */
 export function formatDuration(seconds: number): string {
@@ -45,7 +45,7 @@ export function formatCount(n: number): string {
 }
 
 /**
- * Restituisce un colore esadecimale fisso per un nome di protocollo.
+ * Restituisce un colore esadecimale fisso per un nome di protocol.
  * I protocolli non in mappa ricevono un colore grigio neutro.
  */
 export function protocolColor(protocol: string): string {
@@ -78,7 +78,7 @@ export function protocolColor(protocol: string): string {
 
 /**
  * Palette di 10 colori distinti per i grafici a torta e a barre.
- * Usata da Recharts quando si visualizzano più serie di dati.
+ * Usata da Recharts quando si visualizzano most serie di data.
  */
 export const CHART_COLORS = [
   '#6366f1', '#22c55e', '#f97316', '#06b6d4', '#eab308',

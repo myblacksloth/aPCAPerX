@@ -1,13 +1,13 @@
 """
-Analisi dei flow 5-tuple.
+Analysis dei flow 5-tuple.
 
-Il modulo mantiene uno stato incrementale durante la lettura streaming del PCAP.
-Ogni nuovo pacchetto TCP/UDP viene associato a un flow identificato dalla prima
-direzione osservata:
+This module keeps incremental state while streaming the PCAP.
+Ogni nuovo packet TCP/UDP viene associato a un flow identificato dalla prima
+observed direction:
 
-    src_ip, src_port, dst_ip, dst_port, protocollo L4
+    src_ip, src_port, dst_ip, dst_port, protocol L4
 
-I pacchetti nel verso inverso vengono riconosciuti tramite una chiave
+I packets nel verso inverso vengono riconosciuti tramite una chiave
 bidirezionale e contribuiscono ai contatori server -> client dello stesso flow.
 """
 
@@ -27,41 +27,41 @@ BidirectionalKey = Tuple[Tuple[str, Optional[int]], Tuple[str, Optional[int]], s
 class FlowStats:
     """Stato interno accumulato per un flow 5-tuple."""
 
-    # Identificativo stabile calcolato dal 5-tuple della prima direzione osservata.
+    # Stable identifier computed from the 5-tuple of the first observed direction.
     flow_id: str
-    # Indirizzo IP sorgente del flow, interpretato come lato client.
+    # Indirizzo Source IP del flow, interpretato come lato client.
     src_ip: str
-    # Porta sorgente del flow.
+    # Porta source del flow.
     src_port: Optional[int]
-    # Indirizzo IP destinazione del flow, interpretato come lato server.
+    # Indirizzo Destination IP del flow, interpretato come lato server.
     dst_ip: str
-    # Porta destinazione del flow.
+    # Porta destination del flow.
     dst_port: Optional[int]
-    # Protocollo L4, ad esempio TCP o UDP.
+    # L4 protocol, for example TCP or UDP.
     protocol: str
-    # Timestamp Unix del primo pacchetto visto.
+    # Timestamp Unix del primo packet visto.
     first_ts: float
-    # Timestamp Unix dell'ultimo pacchetto visto.
+    # Timestamp Unix dell'ultimo packet visto.
     last_ts: float
-    # Numero totale di pacchetti del flow.
+    # Numero totale di packets del flow.
     packets_total: int = 0
     # Numero totale di byte del flow.
     bytes_total: int = 0
-    # Pacchetti nel verso client -> server.
+    # Packets nel verso client -> server.
     packets_client_to_server: int = 0
-    # Pacchetti nel verso server -> client.
+    # Packets nel verso server -> client.
     packets_server_to_client: int = 0
     # Byte nel verso client -> server.
     bytes_client_to_server: int = 0
     # Byte nel verso server -> client.
     bytes_server_to_client: int = 0
-    # Flag TCP aggregati osservati nel flow.
+    # Aggregated TCP flags observed in the flow.
     tcp_flags: Set[str] = field(default_factory=set)
     # Flag TCP visti nel verso client -> server.
     client_tcp_flags: Set[str] = field(default_factory=set)
     # Flag TCP visti nel verso server -> client.
     server_tcp_flags: Set[str] = field(default_factory=set)
-    # Numeri pacchetto associati, utili al frontend per correlare la traccia.
+    # Numeri packet associati, utili al frontend per correlare la traccia.
     packet_numbers: List[int] = field(default_factory=list)
 
 
@@ -72,7 +72,7 @@ def _stable_flow_id(src_ip: str, src_port: Optional[int], dst_ip: str, dst_port:
 
 
 def _endpoint(ip: str, port: Optional[int]) -> Tuple[str, Optional[int]]:
-    """Normalizza endpoint IP:porta per usarlo nelle chiavi."""
+    """Normalizza endpoint IP:port per usarlo nelle chiavi."""
     return ip, port
 
 
@@ -89,7 +89,7 @@ def _format_ts(ts: float) -> str:
 
 
 def _tcp_flags_from_packet(pkt) -> Set[str]:
-    """Estrae flag TCP principali da un pacchetto Scapy."""
+    """Estrae flag TCP principali da un packet Scapy."""
     flags: Set[str] = set()
     try:
         raw_flags = str(pkt.sprintf("%TCP.flags%"))
@@ -115,7 +115,7 @@ def _tcp_flags_from_packet(pkt) -> Set[str]:
 
 
 def _tcp_state(flow: FlowStats) -> str:
-    """Deduce uno stato TCP approssimativo dai flag osservati nei due versi."""
+    """Infers an approximate TCP state from flags observed in both directions."""
     if "RST" in flow.tcp_flags:
         return "reset"
 
@@ -149,7 +149,7 @@ def _udp_state(flow: FlowStats) -> str:
 
 
 def _state(flow: FlowStats) -> str:
-    """Seleziona la logica di stato in base al protocollo L4."""
+    """Seleziona la logica di stato in base al protocol L4."""
     if flow.protocol == "TCP":
         return _tcp_state(flow)
     if flow.protocol == "UDP":
@@ -158,10 +158,10 @@ def _state(flow: FlowStats) -> str:
 
 
 class FlowAnalyzer:
-    """Accumulatore modulare dei flow osservati nel PCAP."""
+    """Modular accumulator for flows observed in the PCAP."""
 
     def __init__(self) -> None:
-        # Mappa chiave bidirezionale -> flow creato dalla prima direzione osservata.
+        # Bidirectional key map -> flow created from the first observed direction.
         self._flows: Dict[BidirectionalKey, FlowStats] = {}
 
     def add_packet(
@@ -177,7 +177,7 @@ class FlowAnalyzer:
         length: int,
         pkt=None,
     ) -> None:
-        """Aggiunge un pacchetto al flow corrispondente, se il 5-tuple e valido."""
+        """Aggiunge un packet al flow corrispondente, se il 5-tuple e valido."""
         if not src_ip or not dst_ip:
             return
         if protocol not in {"TCP", "UDP"}:
@@ -206,7 +206,7 @@ class FlowAnalyzer:
         flow.packets_total += 1
         flow.bytes_total += length
         # Evita liste enormi nei flow su catture molto grandi. I contatori restano
-        # completi, ma il dettaglio packet_numbers viene campionato ai primi N.
+        # completi, ma il detailso packet_numbers viene campionato ai primi N.
         if MAX_FLOW_PACKET_NUMBERS == 0 or len(flow.packet_numbers) < MAX_FLOW_PACKET_NUMBERS:
             flow.packet_numbers.append(packet_number)
 

@@ -5,9 +5,9 @@ fastapi==0.115.12
 # Server ASGI ad alte prestazioni che esegue FastAPI
 uvicorn[standard]==0.34.2
 
-# Libreria per accettare upload di file in formato multipart/form-data
+# Libreria per accettare upload di file in format multipart/form-data
 python-multipart==0.0.20
 
-# Libreria principale per la lettura e l'analisi dei file PCAP/PCAPNG
+# Libreria principale per la lettura e l'analysis dei file PCAP/PCAPNG
 # Include decoder per tutti i principali protocolli di rete
 scapy==2.6.1

@@ -1,13 +1,12 @@
 /**
- * Componente radice dell'applicazione.
+ * Root application component.
  *
- * Gestisce lo stato globale della sessione di analisi:
- *   - null     → mostra la pagina di upload
- *   - loading  → mostra lo spinner di analisi
- *   - result   → mostra il dashboard con i risultati
+ * Manages the global state of the analysis session:
+ *   - null     → shows the upload page
+ *   - loading  → shows the analysis spinner
+ *   - result   → shows the dashboard with results
  *
- * La navigazione tra le tre viste avviene senza React Router:
- * basta cambiare lo stato locale.
+ * Navigation between the three views does not use React Router; changing local state is enough.
  */
 import { useState } from 'react'
 import { Network } from 'lucide-react'
@@ -22,23 +21,23 @@ export interface UploadProgress {
 }
 
 export default function App() {
-  // Risultato dell'ultima analisi (null = nessuna analisi ancora eseguita)
+  // Result of the latest analysis (null = no analysis has been run yet)
   const [result, setResult] = useState<AnalysisResult | null>(null)
 
-  // true durante la chiamata HTTP al backend
+  // true while the HTTP request to the backend is running
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState<UploadProgress>({
     phase: 'idle',
     percent: 0,
-    message: 'In attesa del file',
+    message: 'Waiting for file',
   })
 
-  // Messaggio di errore dell'ultima operazione (null = nessun errore)
+  // Error message from the latest operation (null = no error)
   const [error, setError] = useState<string | null>(null)
 
   /**
-   * Invia il file PCAP al backend e aggiorna lo stato con il risultato.
-   * Gestisce tutti i casi di errore (rete, server, formato non valido).
+   * Sends the PCAP file to the backend and updates state with the result.
+   * Handles network, server, and invalid-format errors.
    */
   const handleUpload = async (file: File) => {
     setLoading(true)
@@ -46,10 +45,10 @@ export default function App() {
     setProgress({
       phase: 'uploading',
       percent: 0,
-      message: 'Caricamento del file PCAP',
+      message: 'Uploading the PCAP file',
     })
 
-    // Costruisce il form multipart richiesto dall'endpoint /api/analyze
+    // Builds the multipart form required by the /api/analyze endpoint
     const formData = new FormData()
     formData.append('file', file)
 
@@ -59,29 +58,29 @@ export default function App() {
         xhr.open('POST', '/api/analyze')
 
         xhr.upload.onprogress = (event) => {
-          // Il browser espone il progresso di upload; il backend analizza dopo
-          // aver ricevuto il file, quindi le fasi successive sono determinate.
+          // The browser exposes upload progress; the backend analyzes after
+          // receiving the file, so later phases are inferred.
           if (event.lengthComputable) {
             const uploadPercent = Math.round((event.loaded / event.total) * 70)
             setProgress({
               phase: 'uploading',
               percent: uploadPercent,
-              message: `Caricamento file: ${Math.min(100, Math.round((event.loaded / event.total) * 100))}%`,
+              message: `File upload: ${Math.min(100, Math.round((event.loaded / event.total) * 100))}%`,
             })
           }
         }
 
         xhr.onloadstart = () => {
-          setProgress({ phase: 'uploading', percent: 5, message: 'Caricamento del file PCAP' })
+          setProgress({ phase: 'uploading', percent: 5, message: 'Uploading the PCAP file' })
         }
 
         xhr.upload.onload = () => {
-          setProgress({ phase: 'processing', percent: 75, message: 'File ricevuto, preparazione elaborazione' })
+          setProgress({ phase: 'processing', percent: 75, message: 'File received, preparing processing' })
         }
 
         xhr.onreadystatechange = () => {
           if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
-            setProgress({ phase: 'analyzing', percent: 85, message: 'Analisi del PCAP in corso' })
+            setProgress({ phase: 'analyzing', percent: 85, message: 'PCAP analysis in progress' })
           }
         }
 
@@ -89,51 +88,51 @@ export default function App() {
           if (xhr.status < 200 || xhr.status >= 300) {
             try {
               const data = JSON.parse(xhr.responseText || '{}')
-              reject(new Error(data.detail ?? `Errore ${xhr.status}: ${xhr.statusText}`))
+              reject(new Error(data.detail ?? `Error ${xhr.status}: ${xhr.statusText}`))
             } catch {
-              reject(new Error(`Errore ${xhr.status}: ${xhr.statusText}`))
+              reject(new Error(`Error ${xhr.status}: ${xhr.statusText}`))
             }
             return
           }
 
           try {
-            setProgress({ phase: 'complete', percent: 100, message: 'Analisi completata' })
+            setProgress({ phase: 'complete', percent: 100, message: 'Analysis completed' })
             resolve(JSON.parse(xhr.responseText) as AnalysisResult)
           } catch {
-            reject(new Error('Risposta del backend non valida'))
+            reject(new Error('Invalid backend response'))
           }
         }
 
-        xhr.onerror = () => reject(new Error('Errore di rete durante il caricamento'))
+        xhr.onerror = () => reject(new Error('Network error during upload'))
         xhr.send(formData)
       })
 
-      // Analisi completata: deserializza il JSON e aggiorna il dashboard
+      // Analysis completed: deserializza il JSON e aggiorna il dashboard
       setResult(analysisResult)
 
     } catch (err) {
-      // Errori di rete (backend non raggiungibile) o errori HTTP
-      setError(err instanceof Error ? err.message : 'Errore sconosciuto')
-      setProgress({ phase: 'idle', percent: 0, message: 'Analisi non completata' })
+      // Network errors (backend unreachable) or HTTP errors
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      setProgress({ phase: 'idle', percent: 0, message: 'Analysis not completed' })
     } finally {
       setLoading(false)
     }
   }
 
-  /** Resetta l'applicazione allo stato iniziale per analizzare un nuovo file */
+  /** Resets the application to its initial state to analyze a new file */
   const handleReset = () => {
     setResult(null)
     setError(null)
-    setProgress({ phase: 'idle', percent: 0, message: 'In attesa del file' })
+    setProgress({ phase: 'idle', percent: 0, message: 'Waiting for file' })
   }
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
 
-      {/* ── Header fisso in cima ──────────────────────────────────────── */}
+      {/* ── Sticky top header ──────────────────────────────────────── */}
       <header className="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          {/* Logo e nome dell'applicazione */}
+          {/* Application logo and name */}
           <div className="p-1.5 bg-brand-500 rounded-lg">
             <Network className="w-5 h-5 text-white" />
           </div>
@@ -145,25 +144,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* Pulsante visibile solo quando si visualizzano i risultati */}
+        {/* Button visible only while results are displayed */}
         {result && (
           <button
             onClick={handleReset}
             className="flex items-center gap-2 px-4 py-1.5 bg-slate-700 hover:bg-slate-600
                        text-slate-200 text-sm rounded-lg transition-colors"
           >
-            ↑ Nuova analisi
+            ↑ New analysis
           </button>
         )}
       </header>
 
-      {/* ── Contenuto principale ──────────────────────────────────────── */}
+      {/* ── Main content ──────────────────────────────────────── */}
       <main className="flex-1 pb-12">
         {result ? (
-          // Vista dashboard: mostra i risultati dell'analisi
+          // Dashboard view: shows analysis results
           <Dashboard result={result} onReset={handleReset} onResultUpdate={setResult} />
         ) : (
-          // Vista upload: mostra il form di caricamento file
+          // Upload view: shows the file upload form
           <FileUpload
             onUpload={handleUpload}
             loading={loading}
@@ -173,7 +172,7 @@ export default function App() {
         )}
       </main>
 
-      {/* ── Footer fisso sempre visibile come l'header ────────────────── */}
+      {/* ── Fixed footer, always visible like the header ────────────────── */}
       <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-700 bg-slate-800/95 px-4 py-2 text-center text-xs text-slate-400 backdrop-blur">
         <span>PCAPCaper - Open Source PCAP Analyzer</span>
         <span className="mx-2 text-slate-600">|</span>

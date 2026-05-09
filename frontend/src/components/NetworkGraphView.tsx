@@ -1,9 +1,9 @@
 /**
  * Vista grafo host-to-host.
  *
- * Usa un SVG leggero invece di introdurre nuove dipendenze: i nodi sono IP/host
- * e gli archi aggregano uno o piu flow tra la stessa coppia. Per mantenere
- * performance accettabili vengono considerati i flow piu pesanti e i nodi
+ * Use un SVG leggero invece di introdurre nuove dipendenze: i nodi sono IP/host
+ * and edges aggregate one or more flows between the same pair. To keep
+ * performance acceptable, only the heaviest flows and nodes are considered
  * vengono disposti su anelli deterministici.
  */
 import { useMemo, useState } from 'react'
@@ -79,7 +79,7 @@ function hostMap(result: AnalysisResult) {
 }
 
 function externalForIp(result: AnalysisResult, ip: string): IPExternalInfo | null {
-  // Recupera indicatori esterni gia disponibili dopo "Analizza con tool esterni".
+  // Retrieves external indicators already available after "Analyze with external tools".
   return (
     result.external_ip_info?.[ip]
     ?? result.top_src_ips.find((entry) => entry.ip === ip)?.external
@@ -105,7 +105,7 @@ function severityForHost(host: HostEntry | null, external: IPExternalInfo | null
 }
 
 function nodeColor(severity: Severity, isPrivate: boolean): string {
-  // Colore del nodo: finding prima, altrimenti distinzione interno/esterno.
+  // Colore del nodo: finding prima, altrimenti distinzione interno/external.
   if (severity === 'critical') return '#ef4444'
   if (severity === 'high') return '#f97316'
   if (severity === 'medium') return '#eab308'
@@ -130,7 +130,7 @@ function edgeKey(flow: FlowEntry): string {
 }
 
 function passScope(edge: GraphEdge, nodes: Map<string, GraphNode>, scope: ScopeFilter): boolean {
-  // Applica filtro interno/esterno sul tipo di comunicazione.
+  // Applica filtro interno/external sul tipo di comunicazione.
   if (scope === 'all') return true
   const source = nodes.get(edge.source)
   const target = nodes.get(edge.target)
@@ -141,7 +141,7 @@ function passScope(edge: GraphEdge, nodes: Map<string, GraphNode>, scope: ScopeF
 }
 
 function passSeverity(edge: GraphEdge, nodes: Map<string, GraphNode>, severity: Severity | 'all'): boolean {
-  // Mantiene un arco se almeno uno dei due nodi soddisfa la severita richiesta.
+  // Keeps an edge if at least one of its nodes satisfies the requested severity.
   if (severity === 'all') return true
   const source = nodes.get(edge.source)
   const target = nodes.get(edge.target)
@@ -247,7 +247,7 @@ function buildGraph(result: AnalysisResult, protocolFilter: string, scopeFilter:
 }
 
 function edgeWidth(edge: GraphEdge, maxWeight: number, mode: WeightMode): number {
-  // Peso visivo dell'arco basato su byte o pacchetti.
+  // Peso visivo dell'arco basato su byte o packets.
   const value = mode === 'bytes' ? edge.bytes : edge.packets
   const ratio = maxWeight > 0 ? value / maxWeight : 0
   return Math.max(1.2, Math.min(9, 1.2 + ratio * 7.8))
@@ -260,7 +260,7 @@ function severityBadge(severity: Severity) {
     medium: 'media',
     low: 'bassa',
     info: 'info',
-    none: 'nessuna',
+    none: 'none',
   }
   return labels[severity]
 }
@@ -270,7 +270,7 @@ function SelectionPanel({ selection }: { selection: Selection }) {
     return (
       <div className="card h-full">
         <h3 className="text-sm font-semibold text-slate-200">Dettaglio</h3>
-        <p className="mt-2 text-xs text-slate-500">Clicca un nodo o un arco per vedere host, flow e finding collegati.</p>
+        <p className="mt-2 text-xs text-slate-500">Click a node or an edge to view linked hosts, flows, and findings.</p>
       </div>
     )
   }
@@ -294,11 +294,11 @@ function SelectionPanel({ selection }: { selection: Selection }) {
             <p className="mt-1 text-slate-200">{host?.role ?? 'ignoto'}</p>
           </div>
           <div className="rounded bg-slate-900/70 p-3">
-            <p className="text-slate-500">Severità</p>
+            <p className="text-slate-500">Severity</p>
             <p className="mt-1 text-slate-200">{severityBadge(node.severity)}</p>
           </div>
           <div className="rounded bg-slate-900/70 p-3">
-            <p className="text-slate-500">Traffico</p>
+            <p className="text-slate-500">Traffic</p>
             <p className="mt-1 text-slate-200">{formatBytes(node.bytes)}</p>
           </div>
           <div className="rounded bg-slate-900/70 p-3">
@@ -309,19 +309,19 @@ function SelectionPanel({ selection }: { selection: Selection }) {
 
         <div className="mt-4 space-y-3 text-xs">
           <div>
-            <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Protocolli</p>
-            <p className="text-slate-300">{host?.protocols.join(', ') || 'n/d'}</p>
+            <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Protocols</p>
+            <p className="text-slate-300">{host?.protocols.join(', ') || 'n/a'}</p>
           </div>
           <div>
-            <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Host osservati</p>
+            <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Observed hosts</p>
             <p className="break-words text-slate-300">
-              {[...(host?.hostnames ?? []), ...(host?.sni_hosts ?? []), ...(host?.http_hosts ?? [])].slice(0, 12).join(', ') || 'n/d'}
+              {[...(host?.hostnames ?? []), ...(host?.sni_hosts ?? []), ...(host?.http_hosts ?? [])].slice(0, 12).join(', ') || 'n/a'}
             </p>
           </div>
           <div>
             <p className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Finding</p>
             {node.findings.length === 0 ? (
-              <p className="text-slate-500">Nessun finding associato.</p>
+              <p className="text-slate-500">No findings associato.</p>
             ) : (
               <div className="space-y-1">
                 {node.findings.slice(0, 8).map((finding) => (
@@ -360,7 +360,7 @@ function SelectionPanel({ selection }: { selection: Selection }) {
           <p className="mt-1 text-slate-200">{formatCount(edge.flows.length)}</p>
         </div>
         <div className="rounded bg-slate-900/70 p-3">
-          <p className="text-slate-500">Traffico</p>
+          <p className="text-slate-500">Traffic</p>
           <p className="mt-1 text-slate-200">{formatBytes(edge.bytes)}</p>
         </div>
       </div>
@@ -376,7 +376,7 @@ function SelectionPanel({ selection }: { selection: Selection }) {
               {flow.src_ip}:{flow.src_port ?? '-'} → {flow.dst_ip}:{flow.dst_port ?? '-'}
             </p>
             <p className="mt-1 text-slate-400">
-              {formatBytes(flow.bytes_total)} · {formatCount(flow.packets_total)} pacchetti · {flow.state}
+              {formatBytes(flow.bytes_total)} · {formatCount(flow.packets_total)} packets · {flow.state}
             </p>
           </div>
         ))}
@@ -404,15 +404,15 @@ export default function NetworkGraphView({ result }: NetworkGraphViewProps) {
       <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-200">Grafo di rete</h2>
+            <h2 className="text-base font-semibold text-slate-200">Network graph</h2>
             <p className="mt-1 max-w-3xl text-xs text-slate-500">
-              Grafo host-to-host basato sui flow 5-tuple. Ogni nodo è un IP/host, ogni arco aggrega i flow tra due host.
+              Host-to-host graph based on 5-tuple flows. Each node is an IP/host, each edge aggregates flows between two hosts.
             </p>
           </div>
           {graph.limited && (
             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               <AlertTriangle className="h-4 w-4" />
-              Vista limitata ai flow più pesanti
+              View limited to the heaviest flows
             </div>
           )}
         </div>
@@ -422,28 +422,28 @@ export default function NetworkGraphView({ result }: NetworkGraphViewProps) {
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_170px_170px_170px_170px]">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Network className="h-4 w-4 text-brand-300" />
-            {formatCount(graph.nodes.length)} nodi · {formatCount(graph.edges.length)} archi · peso su {weightMode === 'bytes' ? 'byte' : 'pacchetti'}
+            {formatCount(graph.nodes.length)} nodi · {formatCount(graph.edges.length)} archi · peso su {weightMode === 'bytes' ? 'byte' : 'packets'}
           </div>
           <select value={protocolFilter} onChange={(event) => setProtocolFilter(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
-            {protocols.map((item) => <option key={item} value={item}>{item === 'all' ? 'Protocollo' : item}</option>)}
+            {protocols.map((item) => <option key={item} value={item}>{item === 'all' ? 'Protocol' : item}</option>)}
           </select>
           <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as ScopeFilter)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
-            <option value="all">Interni/esterni</option>
+            <option value="all">Internal/external</option>
             <option value="internal">Solo interni</option>
-            <option value="external">Solo esterni</option>
-            <option value="mixed">Interno ↔ esterno</option>
+            <option value="external">External only</option>
+            <option value="mixed">Internal ↔ external</option>
           </select>
           <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as Severity | 'all')} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
-            <option value="all">Severità finding</option>
+            <option value="all">Severity finding</option>
             <option value="critical">Critica</option>
             <option value="high">Alta</option>
             <option value="medium">Media</option>
             <option value="low">Bassa</option>
-            <option value="none">Nessun finding</option>
+            <option value="none">No findings</option>
           </select>
           <select value={weightMode} onChange={(event) => setWeightMode(event.target.value as WeightMode)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
             <option value="bytes">Peso: byte</option>
-            <option value="packets">Peso: pacchetti</option>
+            <option value="packets">Peso: packets</option>
           </select>
         </div>
       </div>
@@ -453,13 +453,13 @@ export default function NetworkGraphView({ result }: NetworkGraphViewProps) {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
               <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> interno</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-indigo-500" /> esterno</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-indigo-500" /> external</span>
               <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> finding</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> severità alta/critica</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> high/critical severity</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <Filter className="h-3.5 w-3.5" />
-              Clicca nodi o archi per i dettagli
+              Click nodes or edges for details
             </div>
           </div>
 
@@ -537,7 +537,7 @@ export default function NetworkGraphView({ result }: NetworkGraphViewProps) {
           </div>
 
           {graph.nodes.length === 0 && (
-            <p className="py-8 text-center text-sm text-slate-500">Nessun flow corrisponde ai filtri selezionati.</p>
+            <p className="py-8 text-center text-sm text-slate-500">No flows match the selected filters.</p>
           )}
         </section>
 
