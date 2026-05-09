@@ -21,6 +21,35 @@ export default function AIChatWidget({ result }: AIChatWidgetProps) {
   const [lastSelectionCount, setLastSelectionCount] = useState<number | null>(null)
   const [modelName, setModelName] = useState<string | null>(null)
 
+  const compactPackets = result.packets.map(({ number, timestamp, src_ip, dst_ip, protocol, length, src_port, dst_port, info }) => ({
+    number,
+    timestamp,
+    src_ip,
+    dst_ip,
+    protocol,
+    length,
+    src_port,
+    dst_port,
+    info,
+  }))
+
+  const sanitizedAnalysis = {
+    filename: result.filename,
+    summary: result.summary,
+    protocols: result.protocols,
+    top_src_ips: result.top_src_ips,
+    top_dst_ips: result.top_dst_ips,
+    top_src_ports: result.top_src_ports,
+    top_dst_ports: result.top_dst_ports,
+    conversations: result.conversations,
+    flows: result.flows ?? [],
+    dns: result.dns ?? null,
+    http: result.http ?? null,
+    tls: result.tls ?? null,
+    hosts: result.hosts ?? null,
+    external_ip_info: result.external_ip_info ?? {},
+  }
+
   const sendQuestion = async () => {
     const question = input.trim()
     if (!question || loading) return
@@ -37,18 +66,10 @@ export default function AIChatWidget({ result }: AIChatWidgetProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question,
-          // Send packet metadata only. Raw bytes and layer trees stay in the browser.
-          packets: result.packets.map(({ number, timestamp, src_ip, dst_ip, protocol, length, src_port, dst_port, info }) => ({
-            number,
-            timestamp,
-            src_ip,
-            dst_ip,
-            protocol,
-            length,
-            src_port,
-            dst_port,
-            info,
-          })),
+          // Send the full analysis in sanitized form. Raw bytes and layer trees
+          // stay in the browser; the backend extracts bounded technical evidence.
+          packets: compactPackets,
+          analysis: sanitizedAnalysis,
           history: messages.slice(-8),
         }),
       })

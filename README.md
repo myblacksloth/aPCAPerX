@@ -93,7 +93,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 | **Advanced security** | Dedicated opt-in tab with threat intelligence, CVEs, IOCs, scoring, evidence, and recommendations. |
 | **IP traffic map** | World map colored by geolocated destination IP traffic; country click opens related flows. |
 | **Advanced traces** | Flow tree with correlated packets, responses, and ACKs, based on backend 5-tuple flows. |
-| **AI packet assistant** | Floating chat powered by a separate lightweight Ollama container; only question-relevant packets are sent to the model. |
+| **Technical AI assistant** | Floating chat backed by a local Ollama model. The backend analyzes the full sanitized report and sends bounded technical evidence to the model. |
 | **Timeline** | Area chart of traffic over time with adaptive buckets. |
 | **Packet list** | Paginated packet details; the backend JSON limit is configurable through `PCAPCAPER_MAX_PACKET_LIST`. |
 | **JSON export** | Download the complete analysis result as JSON. |
@@ -421,15 +421,26 @@ The repository includes `.env.example`. Local `.env` files are ignored by git an
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | HTTP timeout for external services. |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Socket timeout for WHOIS and reverse lookup operations. |
 | `URLHAUS_AUTH_KEY` | empty | Optional URLhaus Auth-Key. |
-| `PCAPCAPER_AI_ENABLED` | `1` | Enables the local AI assistant endpoint. |
-| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | Internal Ollama service URL. |
-| `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Lightweight default model suitable for Raspberry Pi 5 / 4 GB RAM. |
-| `PCAPCAPER_AI_TIMEOUT_SECONDS` | `120` | Maximum time allowed for one model response. The backend interrupts the request on timeout. |
-| `PCAPCAPER_AI_MAX_PACKETS` | `40` | Maximum number of relevant compact packets sent to the model. |
-| `PCAPCAPER_AI_NUM_PREDICT` | `384` | Maximum generated tokens per answer. |
-| `PCAPCAPER_AI_NUM_CTX` | `2048` | Model context size. Increase only on stronger hardware. |
+| `PCAPCAPER_AI_ENABLED` | `1` | Enables the local technical AI assistant. |
+| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | Internal Ollama API URL. |
+| `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Default lightweight model. |
+| `PCAPCAPER_AI_TIMEOUT_SECONDS` | `360` | Maximum time allowed for one model response. |
+| `PCAPCAPER_AI_MAX_PACKETS` | `40` | Maximum selected packets included in AI technical evidence. |
+| `PCAPCAPER_AI_NUM_CTX` | `2048` | Ollama context size used by the assistant. |
+| `PCAPCAPER_AI_NUM_PREDICT` | `384` | Maximum generated tokens per response. |
 | `OLLAMA_NUM_PARALLEL` | `1` | Ollama parallel request limit for low-power hardware. |
 | `OLLAMA_MAX_LOADED_MODELS` | `1` | Prevents multiple loaded models from consuming RAM. |
+
+### Technical AI assistant
+
+The AI chat is now split into two layers:
+
+- the chat widget keeps the conversation and forwards the user question;
+- the backend technical context builder inspects the sanitized full report: summary, protocols, top IPs, ports, conversations, 5-tuple flows, DNS, HTTP, TLS, hosts, enrichment data, and selected packet metadata.
+
+The model does **not** receive raw packet bytes or full Scapy layer trees. It receives a bounded technical evidence JSON built from the whole analysis, plus a small list of packet numbers relevant to the question. This keeps the assistant technical without trying to push an entire PCAP into a small local model.
+
+The `/api/ai-chat` endpoint returns the model answer, selected packet metadata, and the technical context metadata used for the answer. If the model exceeds `PCAPCAPER_AI_TIMEOUT_SECONDS`, the backend returns `504` and the chat keeps its history.
 
 ### Temporary storage
 
@@ -930,44 +941,22 @@ Analyzes a PCAP file and returns the report.
 
 ### `POST /api/ai-chat`
 
-Asks the lightweight local AI assistant a question about the current analysis.
+Sends a chat question to the local AI assistant. The frontend includes compact packet metadata and the sanitized analysis report; the backend extracts a bounded technical context before calling Ollama.
 
-The frontend may send the packet list it already has in memory, but the backend selects a bounded subset of relevant packets and forwards only compact packet summaries to the Ollama container.
-
-**Request:**
+**Request:** `Content-Type: application/json`
 
 ```json
 {
-  "question": "Which packets involve 8.8.8.8?",
-  "packets": [
-    {
-      "number": 1,
-      "timestamp": "12:00:00.000",
-      "src_ip": "192.168.1.10",
-      "dst_ip": "8.8.8.8",
-      "protocol": "DNS",
-      "length": 76,
-      "src_port": 53500,
-      "dst_port": 53,
-      "info": "DNS Query example.com"
-    }
-  ],
-  "history": []
+  "question": "Summarize suspicious DNS activity",
+  "packets": [{ "number": 1, "src_ip": "192.168.1.10", "dst_ip": "8.8.8.8", "protocol": "DNS" }],
+  "analysis": { "summary": {}, "flows": [], "dns": {}, "http": {}, "tls": {}, "hosts": {} },
+  "history": [{ "role": "user", "content": "What happened?" }]
 }
 ```
 
-**Response:**
+**Privacy note:** raw packet bytes and decoded layer trees are not sent to the model. The backend forwards only limited technical evidence such as flows, DNS/HTTP/TLS metadata, host summaries, and selected packet references.
 
-```json
-{
-  "answer": "The selected packets show DNS traffic from 192.168.1.10 to 8.8.8.8.",
-  "model": "qwen2.5:0.5b",
-  "selected_packet_count": 1,
-  "timed_out": false
-}
-```
-
-**Timeout behavior:** if the model takes longer than `PCAPCAPER_AI_TIMEOUT_SECONDS`, the backend returns `504` and the chat shows the error without clearing the conversation.
+**Timeout behavior:** if the model exceeds `PCAPCAPER_AI_TIMEOUT_SECONDS`, the backend returns `504` and interrupts the request.
 
 ---
 

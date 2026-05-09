@@ -190,22 +190,22 @@ def dns_reputation_endpoint(payload: DNSReputationRequest):
         ) from exc
 
 
-# ─── Endpoint: lightweight AI packet chat ─────────────────────────────────
+# ─── Endpoint: lightweight technical AI assistant ─────────────────────────
 
 @app.post(
     "/api/ai-chat",
     response_model=AIChatResponse,
     tags=["AI"],
-    summary="Ask the lightweight AI assistant about selected PCAP packets",
-    response_description="AI answer plus packet-selection metadata",
+    summary="Ask the technical AI assistant about the analyzed PCAP",
+    response_description="AI answer plus packet and technical-context metadata",
 )
 async def ai_chat_endpoint(payload: AIChatRequest):
     """
     Answers a user question using a small model running in a separate container.
 
-    The backend selects only question-relevant packets and sends that compact
-    packet subset to the model service. The full analysis object is never sent
-    to the model.
+    The backend receives a sanitized analysis snapshot, builds technical
+    evidence from the full report, and sends only that bounded evidence to the
+    model. Raw bytes and full packet layer dumps are never forwarded.
     """
     if not AI_ENABLED:
         raise HTTPException(status_code=503, detail="AI assistant is disabled by configuration.")
