@@ -1,9 +1,12 @@
 """
 Entry point dell'API REST — PCAPCaper Backend.
 
-Espone due endpoint:
+Espone cinque endpoint:
   GET  /api/health   → verifica che il servizio sia attivo
   POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
+  POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
+  POST /api/security-analysis → esegue threat intelligence opt-in sul traffico
+  POST /api/dns-reputation → confronta domini DNS con liste esterne opt-in
 
 Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
 analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
@@ -15,9 +18,25 @@ import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
-from models import AnalysisResult
-from analyzer import analyze_pcap, MAX_FILE_SIZE
+from models import (
+    AnalysisResult,
+    IPEnrichmentRequest,
+    IPEnrichmentResponse,
+    DNSReputationRequest,
+    DNSReputationResponse,
+    SecurityAnalysisRequest,
+    SecurityAnalysisResponse,
+    AIChatRequest,
+    AIChatResponse,
+)
+from analyzer import analyze_pcap
+from external_enrichment import enrich_ips
+from security_analysis import analyze_security
+from dns_intelligence import analyze_dns_reputation
+from ai_chat import AIModelError, ask_ai
+from config import AI_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -70,6 +89,146 @@ def health_check():
     return {"status": "ok", "service": "pcap-analyzer"}
 
 
+# ─── Endpoint: arricchimento IP tramite tool esterni ──────────────────────────
+
+@app.post(
+    "/api/enrich-ips",
+    response_model=IPEnrichmentResponse,
+    tags=["Analisi"],
+    summary="Arricchisce indirizzi IP usando servizi esterni",
+    response_description="Mappa IP -> dati esterni recuperati",
+)
+def enrich_ips_endpoint(payload: IPEnrichmentRequest):
+    """
+    Riceve una lista di indirizzi IP già estratti dal PCAP e interroga servizi
+    esterni per recuperare ASN, prefissi BGP, RDAP, reverse DNS e dati GeoIP.
+
+    Nota privacy: gli indirizzi privati, locali e riservati vengono scartati
+    prima di qualunque chiamata esterna. L'endpoint viene chiamato solo su
+    azione esplicita dell'utente dal pulsante "Analizza con tool esterni".
+    """
+    try:
+        logger.info("Avvio arricchimento esterno per %d IP", len(payload.ips))
+        results = enrich_ips(payload.ips)
+        logger.info("Arricchimento esterno completato per %d IP", len(results))
+        return IPEnrichmentResponse(results=results)
+    except Exception as exc:
+        # Un errore inatteso viene loggato per poter diagnosticare problemi di rete/API.
+        logger.exception("Errore imprevisto durante l'arricchimento IP")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'arricchimento esterno degli IP.",
+        ) from exc
+
+
+# ─── Endpoint: analisi di sicurezza avanzata ───────────────────────────────
+
+@app.post(
+    "/api/security-analysis",
+    response_model=SecurityAnalysisResponse,
+    tags=["Analisi"],
+    summary="Analizza il traffico con motore Security e threat intelligence",
+    response_description="Finding, score e raccomandazioni di sicurezza",
+)
+def security_analysis_endpoint(payload: SecurityAnalysisRequest):
+    """
+    Riceve i pacchetti gia estratti dal PCAP e le informazioni IP arricchite.
+
+    Nota privacy: questo endpoint puo interrogare fonti esterne di threat
+    intelligence per gli IP pubblici osservati. Il frontend lo chiama solo dopo
+    conferma esplicita dell'utente nel popup della tab Security avanzata.
+    """
+    try:
+        logger.info(
+            "Avvio analisi di sicurezza avanzata su %d pacchetti",
+            len(payload.packets),
+        )
+        result = analyze_security(payload)
+        logger.info(
+            "Analisi Security completata: %d finding, %d IP pubblici",
+            result.summary.total_findings,
+            result.summary.analyzed_public_ips,
+        )
+        return result
+    except Exception as exc:
+        # L'errore viene loggato per distinguere problemi di rete da bug del motore.
+        logger.exception("Errore imprevisto durante l'analisi Security")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'analisi di sicurezza avanzata.",
+        ) from exc
+
+
+# ─── Endpoint: reputazione DNS esterna ─────────────────────────────────────
+
+@app.post(
+    "/api/dns-reputation",
+    response_model=DNSReputationResponse,
+    tags=["Analisi"],
+    summary="Controlla domini DNS osservati su liste esterne",
+    response_description="Reputazione dominio -> fonti e categorie",
+)
+def dns_reputation_endpoint(payload: DNSReputationRequest):
+    """
+    Confronta i domini richiesti via DNS con liste esterne aperte.
+
+    Nota privacy: l'endpoint viene chiamato solo dopo conferma esplicita
+    dell'utente nella tab DNS. Il backend riceve domini gia estratti dal PCAP
+    e non effettua alcun controllo esterno durante la normale analisi.
+    """
+    try:
+        logger.info("Avvio reputazione DNS per %d domini", len(payload.domains))
+        result = analyze_dns_reputation(payload.domains, payload.max_domains)
+        logger.info("Reputazione DNS completata per %d domini", len(result.results))
+        return result
+    except Exception as exc:
+        # Log completo per distinguere problemi di download liste da errori applicativi.
+        logger.exception("Errore imprevisto durante la reputazione DNS")
+        raise HTTPException(
+            status_code=500,
+            detail="Errore durante l'analisi reputazionale DNS.",
+        ) from exc
+
+
+# ─── Endpoint: lightweight AI packet chat ─────────────────────────────────
+
+@app.post(
+    "/api/ai-chat",
+    response_model=AIChatResponse,
+    tags=["AI"],
+    summary="Ask the lightweight AI assistant about selected PCAP packets",
+    response_description="AI answer plus packet-selection metadata",
+)
+async def ai_chat_endpoint(payload: AIChatRequest):
+    """
+    Answers a user question using a small model running in a separate container.
+
+    The backend selects only question-relevant packets and sends that compact
+    packet subset to the model service. The full analysis object is never sent
+    to the model.
+    """
+    if not AI_ENABLED:
+        raise HTTPException(status_code=503, detail="AI assistant is disabled by configuration.")
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    try:
+        return await run_in_threadpool(ask_ai, payload)
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="The AI model took too long to answer. The request was interrupted; try a narrower question.",
+        ) from exc
+    except AIModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error while querying the AI assistant")
+        raise HTTPException(
+            status_code=502,
+            detail="AI assistant is unavailable or returned an invalid response.",
+        ) from exc
+
+
 # ─── Endpoint: analisi PCAP ───────────────────────────────────────────────────
 
 @app.post(
@@ -91,7 +250,8 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
     - **timeline**: andamento del traffico nel tempo
     - **packets**: lista dettagliata di tutti i pacchetti
 
-    **Limite dimensione**: 100 MB.
+    Il file viene copiato su disco temporaneo in streaming per non tenerlo in RAM.
+    Se `PCAPCAPER_UPLOAD_MAX_MB=0` non viene applicato alcun limite applicativo.
     """
 
     # ── Validazione dell'estensione del file ──────────────────────────────
@@ -107,37 +267,44 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
             ),
         )
 
-    # ── Lettura del contenuto e controllo dimensione ──────────────────────
+    # ── Lettura streaming e controllo dimensione opzionale ────────────────
     logger.info("File ricevuto: %s", filename)
-    content = await file.read()
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    max_bytes = UPLOAD_MAX_MB * 1_048_576 if UPLOAD_MAX_MB > 0 else 0
+    total_bytes = 0
 
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="Il file è vuoto.")
-
-    if len(content) > MAX_FILE_SIZE:
-        size_mb = len(content) / 1_048_576
-        raise HTTPException(
-            status_code=413,
-            detail=f"File troppo grande ({size_mb:.1f} MB). Limite massimo: 100 MB.",
-        )
-
-    # ── Scrittura del file temporaneo ed esecuzione dell'analisi ─────────
-    # Il file temporaneo viene eliminato nel blocco `finally`, anche in caso di errore.
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+    # Il file temporaneo viene eliminato nel blocco `finally`, anche in caso di
+    # errore. Usiamo dir configurabile per Docker/produzione.
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=TEMP_DIR)
 
     try:
-        # Scrivi il contenuto del file caricato sul disco temporaneo
-        tmp_file.write(content)
+        # Scrive l'upload a chunk per evitare di caricare PCAP grandi in memoria.
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if max_bytes and total_bytes > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File troppo grande ({total_bytes / 1_048_576:.1f} MB). Limite configurato: {UPLOAD_MAX_MB} MB.",
+                )
+            tmp_file.write(chunk)
+
         tmp_file.flush()
         tmp_file.close()
 
+        if total_bytes == 0:
+            raise HTTPException(status_code=400, detail="Il file è vuoto.")
+
         logger.info(
             "Avvio analisi: %s (%d byte, %.2f MB)",
-            filename, len(content), len(content) / 1_048_576
+            filename, total_bytes, total_bytes / 1_048_576
         )
 
-        # Delega l'analisi al modulo analyzer.py
-        result = analyze_pcap(tmp_file.name, filename)
+        # Delega l'analisi CPU-bound a un thread per non bloccare l'event loop
+        # FastAPI mentre altri endpoint servono richieste leggere o progress UI.
+        result = await run_in_threadpool(analyze_pcap, tmp_file.name, filename)
 
         logger.info(
             "Analisi completata: %d pacchetti, %.3f s di cattura",
@@ -145,6 +312,9 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
             result.summary.duration_seconds,
         )
         return result
+
+    except HTTPException:
+        raise
 
     except ValueError as exc:
         # Errori noti: file corrotto, nessun pacchetto, formato non valido
@@ -160,6 +330,10 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
 
     finally:
         # Elimina sempre il file temporaneo per non lasciare dati sul server
+        try:
+            tmp_file.close()
+        except OSError:
+            pass
         try:
             os.unlink(tmp_file.name)
         except OSError:
