@@ -183,6 +183,30 @@ export interface SecurityAnalysisResponse {
   errors: string[]
 }
 
+export interface AIChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AISelectedPacket {
+  number: number
+  timestamp: string
+  src: string | null
+  dst: string | null
+  protocol: string
+  length: number
+  info: string
+  score: number
+}
+
+export interface AIChatResponse {
+  answer: string
+  model: string
+  selected_packets: AISelectedPacket[]
+  selected_packet_count: number
+  timed_out: boolean
+}
+
 /** Reputazione esterna per un dominio DNS */
 export interface DNSDomainIntel {
   domain: string
