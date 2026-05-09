@@ -31,6 +31,99 @@
 
 # PCAPCaper 🔍
 
+## English
+
+**PCAPCaper** is an open source PCAP/PCAPNG analyzer with a modern web interface.
+Upload a network capture and quickly inspect protocols, IP addresses, ports, conversations, DNS, HTTP, TLS, traffic timelines, packet filters, external IP enrichment, geolocation maps, advanced packet correlation, host profiles, network graphs, and security findings.
+
+> Inspired by [apackets.com](https://apackets.com/), but fully open source and self-hostable.
+
+### Main features
+
+| Section | Details |
+| --- | --- |
+| **Overview** | Total packets, bytes, duration, packets/second, average packet size |
+| **Protocols** | Donut chart and percentage table for the top protocols |
+| **Top IP** | Most active source/destination IPs, service details popup, DNS, peers, and optional external data |
+| **Top ports** | Most used TCP/UDP source and destination ports with service names |
+| **Packet filters** | Wireshark-style syntax plus GUI controls for quick filtering |
+| **Hosts** | Collapsible IP detail view with role, flows, DNS, HTTP/SNI, ASN/geo, findings, and activity timeline |
+| **Network graph** | Host-to-host graph based on 5-tuple flows, with finding-aware node colors |
+| **Security** | Heuristic and advanced opt-in security analysis with external threat intelligence only after user confirmation |
+| **DNS** | AdGuard-style DNS dashboard with queries, answers, rcode, TTL, suspicious TXT, tunneling indicators, and optional reputation checks |
+| **HTTP analysis** | Cleartext HTTP metadata extraction only; HTTPS/TLS is not decrypted |
+| **TLS analysis** | Observable TLS metadata such as SNI, version, cipher, ALPN, certificates, fingerprints, and anomalies |
+| **IP traffic map** | World map colored by geolocated destination IP traffic; country click opens related flows |
+| **Advanced traces** | Collapsed flow tree based on backend 5-tuple flows, with packet/response/ACK correlation |
+
+Supported formats: `.pcap`, `.pcapng`, `.cap`. There is no default application-level upload limit; operational limits can be configured through `.env`.
+
+### Privacy model
+
+PCAPCaper is privacy-by-default. Standard analysis is local to the uploaded capture. Features that contact external services, such as IP enrichment, DNS reputation, or advanced threat intelligence, are opt-in and show a confirmation popup before any public IP, domain, or traffic metadata is sent. Private, local, multicast, reserved, and otherwise non-global IP addresses are filtered out before external enrichment.
+
+### Performance and storage
+
+Uploads are streamed to a configurable temporary directory instead of being fully loaded into memory. Temporary files are removed in the backend endpoint cleanup path, and the Docker setup mounts `/tmp/pcapcaper` as `tmpfs` so files also disappear when the container stops. Packet details are paginated in the frontend and capped in the backend JSON through `PCAPCAPER_MAX_PACKET_LIST`; summaries, flows, DNS, HTTP, TLS, and hosts are still computed over the full capture.
+
+Redis was evaluated but is not required for the current synchronous request model. It is the natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and longer-lived result caching.
+
+### Quick start
+
+Docker:
+
+```bash
+docker-compose up --build
+```
+
+Manual backend:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Manual frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Configuration
+
+Copy `.env.example` to `.env` and adjust values when needed. Important variables include:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Upload limit in MB; `0` means no application-level limit |
+| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory for temporary uploaded PCAP files |
+| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Maximum detailed packet rows included in the JSON response |
+| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Maximum packet numbers stored per flow for UI correlation |
+| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Maximum parallel workers for external enrichment |
+| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | Maximum public IPs enriched per request |
+| `URLHAUS_AUTH_KEY` | empty | Optional key for URLhaus host intelligence |
+
+### API overview
+
+- `GET /api/health`: health check.
+- `POST /api/analyze`: analyzes a PCAP/PCAPNG/CAP file and returns the full JSON report.
+- `POST /api/enrich-ips`: enriches public IPs after explicit user confirmation.
+- `POST /api/security-analysis`: runs advanced opt-in security analysis.
+- `POST /api/dns-reputation`: checks DNS domains against open reputation sources after explicit user confirmation.
+
+### Contributing
+
+Contribution guidelines and GitHub issue/PR templates are written in English. Do not commit real PCAP files, credentials, payloads, or personal data. Features that send data to external services must stay opt-in, visible to the user, and documented.
+
+---
+
+## Italiano
+
 **PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
 Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, DNS, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica, correlazione avanzata dei pacchetti e analisi security con threat intelligence.
 

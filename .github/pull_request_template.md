@@ -1,50 +1,50 @@
-## Descrizione
+## Description
 
-Spiega in modo sintetico cosa cambia e perche.
+Briefly explain what changed and why.
 
-## Tipo di modifica
+## Type of change
 
 - [ ] Bug fix
-- [ ] Nuova funzionalita
+- [ ] New feature
 - [ ] Refactor
-- [ ] Documentazione
+- [ ] Documentation
 - [ ] Security hardening
 - [ ] Build/CI/Docker
 
-## Aree impattate
+## Impacted areas
 
-- [ ] Backend FastAPI
-- [ ] Analisi PCAP / Scapy
-- [ ] Frontend React
-- [ ] Filtri pacchetto
-- [ ] Arricchimento IP esterno
+- [ ] FastAPI backend
+- [ ] PCAP / Scapy analysis
+- [ ] React frontend
+- [ ] Packet filters
+- [ ] External IP enrichment
 - [ ] Security panel
-- [ ] Documentazione
+- [ ] Documentation
 
-## Verifiche eseguite
+## Verification performed
 
-Indica i comandi eseguiti e il risultato.
+List the commands you ran and their result.
 
 ```bash
-# esempi
+# examples
 python -m py_compile backend/main.py backend/models.py backend/analyzer.py backend/external_enrichment.py
 npm run build
 docker-compose up --build
 ```
 
-## Privacy e dati sensibili
+## Privacy and sensitive data
 
-- [ ] Non ho incluso file PCAP reali o dati sensibili nel commit.
-- [ ] Non ho aggiunto log che espongono payload, credenziali o dati personali.
-- [ ] Se la modifica invia dati a servizi esterni, il comportamento e opt-in e documentato.
+- [ ] I did not include real PCAP files or sensitive data in this commit.
+- [ ] I did not add logs that expose payloads, credentials, or personal data.
+- [ ] If this change sends data to external services, the behavior is opt-in and documented.
 
-## Screenshot / note UI
+## Screenshots / UI notes
 
-Allega screenshot o descrivi le modifiche visuali, se rilevante.
+Attach screenshots or describe visual changes when relevant.
 
 ## Checklist
 
-- [ ] Il codice e commentato dove la logica non e ovvia.
-- [ ] La documentazione e aggiornata, se necessario.
-- [ ] Le modifiche sono limitate allo scopo della PR.
-- [ ] Ho controllato che non ci siano file temporanei o artefatti locali.
+- [ ] Code is commented where the logic is not obvious.
+- [ ] Documentation is updated when needed.
+- [ ] Changes are limited to the PR scope.
+- [ ] I checked that no temporary files or local artifacts are included.
