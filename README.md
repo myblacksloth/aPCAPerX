@@ -31,6 +31,8 @@
 
 ![](./stuff/i/SCR-20260508-rsrq.png)
 
+![](./stuff/i/SCR-20260509-jpwv.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -54,6 +56,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 - [Local setup](#local-setup)
 - [Docker setup](#docker-setup)
 - [Configuration and performance](#configuration-and-performance)
+- [Lightweight AI assistant](#lightweight-ai-assistant)
 - [Wireshark-style packet filters](#wireshark-style-packet-filters)
 - [External IP enrichment](#external-ip-enrichment)
 - [5-tuple flows and advanced traces](#5-tuple-flows-and-advanced-traces)
@@ -90,6 +93,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 | **Advanced security** | Dedicated opt-in tab with threat intelligence, CVEs, IOCs, scoring, evidence, and recommendations. |
 | **IP traffic map** | World map colored by geolocated destination IP traffic; country click opens related flows. |
 | **Advanced traces** | Flow tree with correlated packets, responses, and ACKs, based on backend 5-tuple flows. |
+| **AI packet assistant** | Floating chat powered by a separate lightweight Ollama container; only question-relevant packets are sent to the model. |
 | **Timeline** | Area chart of traffic over time with adaptive buckets. |
 | **Packet list** | Paginated packet details; the backend JSON limit is configurable through `PCAPCAPER_MAX_PACKET_LIST`. |
 | **JSON export** | Download the complete analysis result as JSON. |
@@ -181,19 +185,23 @@ graph TB
     EXT["Optional external tools\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
     SECEXT["Opt-in threat intelligence\nShodan InternetDB\nFeodo Tracker\nOptional URLhaus"]
     DNSEXT["Opt-in DNS reputation\nAdGuard DNS filter\nStevenBlack hosts\nOptional URLhaus"]
+    AI["Lightweight AI\nOllama container\nconfigurable model"]
 
     U -->|"Drag and drop PCAP"| FE
     FE -->|"POST /api/analyze"| BE
     FE -->|"POST /api/enrich-ips\nuser click only"| BE
     FE -->|"POST /api/security-analysis\nafter consent"| BE
     FE -->|"POST /api/dns-reputation\nafter consent"| BE
+    FE -->|"POST /api/ai-chat\nquestion + packets"| BE
     BE -->|"Streaming PcapReader"| SC
     BE -->|"Public IPs"| EXT
     BE -->|"Public IPs + metadata"| SECEXT
     BE -->|"Observed DNS domains"| DNSEXT
+    BE -->|"Selected compact packets only"| AI
     EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
     SECEXT -->|"CVEs, IOCs, C2, malware hosts"| BE
     DNSEXT -->|"Ads, tracking, malware lists"| BE
+    AI -->|"Answer"| BE
     SC -->|"Decoded packets"| BE
     BE -->|"Complete statistics JSON"| FE
     FE -->|"Interactive dashboard"| U
@@ -230,6 +238,7 @@ graph TB
 | --- | --- |
 | Docker + Docker Compose | Containerization |
 | Nginx 1.27 | Frontend serving and API proxy |
+| Ollama | Lightweight local AI model container |
 
 ---
 
@@ -412,6 +421,15 @@ The repository includes `.env.example`. Local `.env` files are ignored by git an
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | HTTP timeout for external services. |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Socket timeout for WHOIS and reverse lookup operations. |
 | `URLHAUS_AUTH_KEY` | empty | Optional URLhaus Auth-Key. |
+| `PCAPCAPER_AI_ENABLED` | `1` | Enables the local AI assistant endpoint. |
+| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | Internal Ollama service URL. |
+| `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Lightweight default model suitable for Raspberry Pi 5 / 4 GB RAM. |
+| `PCAPCAPER_AI_TIMEOUT_SECONDS` | `120` | Maximum time allowed for one model response. The backend interrupts the request on timeout. |
+| `PCAPCAPER_AI_MAX_PACKETS` | `40` | Maximum number of relevant compact packets sent to the model. |
+| `PCAPCAPER_AI_NUM_PREDICT` | `384` | Maximum generated tokens per answer. |
+| `PCAPCAPER_AI_NUM_CTX` | `2048` | Model context size. Increase only on stronger hardware. |
+| `OLLAMA_NUM_PARALLEL` | `1` | Ollama parallel request limit for low-power hardware. |
+| `OLLAMA_MAX_LOADED_MODELS` | `1` | Prevents multiple loaded models from consuming RAM. |
 
 ### Temporary storage
 
@@ -428,6 +446,34 @@ The packet list in the frontend is paginated with 50 rows per page.
 By default, the backend sends the first `PCAPCAPER_MAX_PACKET_LIST=1000` detailed packets. Summaries, flows, DNS, HTTP, TLS, and hosts are still computed over the full PCAP.
 
 Increasing this value for very large PCAP files makes the JSON heavier and may slow down the browser.
+
+---
+
+## Lightweight AI assistant
+
+PCAPCaper includes an optional floating chat in the bottom-right corner of the dashboard. The chat talks to `/api/ai-chat`, and the backend forwards the request to a separate Ollama container.
+
+The assistant is designed for low-power hardware:
+
+- default model: `qwen2.5:0.5b`;
+- Docker limits the AI container to `1` CPU and `3 GB` RAM by default;
+- Ollama is configured for one parallel request and one loaded model;
+- the backend sends at most `PCAPCAPER_AI_MAX_PACKETS` compact packet summaries to the model;
+- raw packet bytes and the full analysis object are not sent to the model;
+- if the model exceeds `PCAPCAPER_AI_TIMEOUT_SECONDS`, the backend returns `504` and the UI shows an error.
+
+Docker Compose includes the `ai-model-pull` one-shot service, so `docker compose up --build` starts an automatic model download through Ollama's HTTP API. The backend can start while the model is downloading; the chat will work as soon as the pull completes.
+
+If you start only the AI service manually or need to refresh the model, run:
+
+```bash
+docker compose up -d ai
+docker compose exec ai ollama pull qwen2.5:0.5b
+```
+
+To move to stronger hardware, change `PCAPCAPER_AI_MODEL`, `PCAPCAPER_AI_NUM_CTX`, `PCAPCAPER_AI_NUM_PREDICT`, and the `cpus` / `mem_limit` values in `docker-compose.yml`.
+
+The chat history is preserved while the dashboard is open: closing the popup hides it but does not clear the conversation.
 
 ---
 
@@ -882,6 +928,49 @@ Analyzes a PCAP file and returns the report.
 
 ---
 
+### `POST /api/ai-chat`
+
+Asks the lightweight local AI assistant a question about the current analysis.
+
+The frontend may send the packet list it already has in memory, but the backend selects a bounded subset of relevant packets and forwards only compact packet summaries to the Ollama container.
+
+**Request:**
+
+```json
+{
+  "question": "Which packets involve 8.8.8.8?",
+  "packets": [
+    {
+      "number": 1,
+      "timestamp": "12:00:00.000",
+      "src_ip": "192.168.1.10",
+      "dst_ip": "8.8.8.8",
+      "protocol": "DNS",
+      "length": 76,
+      "src_port": 53500,
+      "dst_port": 53,
+      "info": "DNS Query example.com"
+    }
+  ],
+  "history": []
+}
+```
+
+**Response:**
+
+```json
+{
+  "answer": "The selected packets show DNS traffic from 192.168.1.10 to 8.8.8.8.",
+  "model": "qwen2.5:0.5b",
+  "selected_packet_count": 1,
+  "timed_out": false
+}
+```
+
+**Timeout behavior:** if the model takes longer than `PCAPCAPER_AI_TIMEOUT_SECONDS`, the backend returns `504` and the chat shows the error without clearing the conversation.
+
+---
+
 ### `POST /api/enrich-ips`
 
 Enriches a list of public IPs using external tools. This endpoint is used by the **Analyze with external tools** button.
@@ -929,6 +1018,7 @@ pcapcaper/
 │   ├── external_enrichment.py   # Opt-in external IP enrichment
 │   ├── security_analysis.py     # Advanced security and threat intelligence engine
 │   ├── dns_intelligence.py      # Opt-in DNS reputation checks
+│   ├── ai_chat.py               # Packet-scoped lightweight AI assistant
 │   ├── models.py                # Pydantic request/response models
 │   ├── requirements.txt         # Python dependencies
 │   └── Dockerfile               # Backend Docker image
@@ -942,14 +1032,14 @@ pcapcaper/
 │   │   ├── utils/
 │   │   │   ├── format.ts        # Formatting helpers
 │   │   │   └── packetFilters.ts # Wireshark-style filter parser
-│   │   └── components/          # UI components and dashboard views
+│   │   └── components/          # UI components, dashboard views, and AI chat widget
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.ts           # Dev proxy: /api -> backend
 │   ├── tailwind.config.js
 │   ├── nginx.conf               # Nginx SPA serving and API proxy
 │   └── Dockerfile               # Frontend Docker image
-├── docker-compose.yml           # Two-container orchestration
+├── docker-compose.yml           # Backend, frontend, and Ollama AI orchestration
 └── README.md
 ```
 
