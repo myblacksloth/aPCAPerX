@@ -12,7 +12,7 @@ import re
 import socket
 import urllib.error
 import urllib.request
-from typing import Iterable, List, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple
 
 from config import (
     AI_BASE_URL,
@@ -37,6 +37,11 @@ _PORT_RE = re.compile(r"(?:port|porta|tcp|udp|:)\s*(\d{1,5})\b", re.IGNORECASE)
 _WORD_RE = re.compile(r"[a-zA-Z0-9_.:-]{3,}")
 _GENERIC_TERMS = {"summary", "summarize", "overview", "capture", "traffic", "analisi", "riepilogo", "traffico"}
 _KNOWN_PROTOCOLS = {"arp", "icmp", "dns", "http", "https", "tls", "tcp", "udp", "dhcp", "ntp", "smtp", "ftp", "ssh"}
+_TECHNICAL_TERMS = {
+    "ack", "asn", "certificate", "cipher", "dns", "domain", "flow", "flows",
+    "host", "http", "ip", "ja3", "nxdomain", "packet", "packets", "port",
+    "rcode", "security", "sni", "tcp", "tls", "ttl", "udp", "uri",
+}
 
 
 class AIModelError(RuntimeError):
@@ -156,6 +161,95 @@ def select_relevant_packets(question: str, packets: Sequence[PacketEntry]) -> Li
     return [_compact_packet(packet, score) for score, packet in scored[:AI_MAX_PACKETS]]
 
 
+def _safe_list(value: Any) -> List[Any]:
+    """Return a list for JSON fields that may be absent or malformed."""
+    return value if isinstance(value, list) else []
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    """Return a dict for JSON fields that may be absent or malformed."""
+    return value if isinstance(value, dict) else {}
+
+
+def _matches_text(item: Any, terms: Set[str], ips: Set[str], ports: Set[int], protocols: Set[str]) -> bool:
+    """Check if a report item is relevant to the user question."""
+    text = json.dumps(item, ensure_ascii=True, default=str).lower()
+    if any(ip in text for ip in ips):
+        return True
+    if any(str(port) in text for port in ports):
+        return True
+    if any(protocol in text for protocol in protocols):
+        return True
+    return any(term in text for term in terms if term not in _GENERIC_TERMS)
+
+
+def _take_relevant(items: Sequence[Any], terms: Set[str], ips: Set[str], ports: Set[int], protocols: Set[str], limit: int) -> List[Any]:
+    """Take relevant report rows, falling back to the first rows for broad questions."""
+    relevant = [item for item in items if _matches_text(item, terms, ips, ports, protocols)]
+    if not relevant and (terms & _GENERIC_TERMS):
+        relevant = list(items)
+    return relevant[:limit]
+
+
+def build_technical_context(question: str, analysis: Dict[str, Any], selected: Sequence[AISelectedPacket]) -> Dict[str, Any]:
+    """Build a technical evidence pack from the sanitized full analysis report."""
+    terms = _tokens(question)
+    ips = set(_IP_RE.findall(question))
+    ports = _ports(question)
+    protocols = {term for term in terms if term in _KNOWN_PROTOCOLS}
+    technical_mode = bool((terms & _TECHNICAL_TERMS) or ips or ports or protocols)
+
+    dns = _safe_dict(analysis.get("dns"))
+    http = _safe_dict(analysis.get("http"))
+    tls = _safe_dict(analysis.get("tls"))
+    hosts = _safe_dict(analysis.get("hosts"))
+
+    context: Dict[str, Any] = {
+        "mode": "technical" if technical_mode else "general",
+        "summary": analysis.get("summary"),
+        "protocols": _safe_list(analysis.get("protocols"))[:12],
+        "top_src_ips": _safe_list(analysis.get("top_src_ips"))[:12],
+        "top_dst_ips": _safe_list(analysis.get("top_dst_ips"))[:12],
+        "top_src_ports": _safe_list(analysis.get("top_src_ports"))[:10],
+        "top_dst_ports": _safe_list(analysis.get("top_dst_ports"))[:10],
+        "conversations": _take_relevant(_safe_list(analysis.get("conversations")), terms, ips, ports, protocols, 12),
+        "flows": _take_relevant(_safe_list(analysis.get("flows")), terms, ips, ports, protocols, 18),
+        "selected_packets": [packet.model_dump() for packet in selected],
+    }
+
+    if dns:
+        context["dns"] = {
+            "stats": dns.get("stats"),
+            "top_domains": _safe_list(dns.get("top_domains"))[:15],
+            "tunneling_indicators": _take_relevant(_safe_list(dns.get("tunneling_indicators")), terms, ips, ports, protocols, 15),
+            "queries": _take_relevant(_safe_list(dns.get("queries")), terms, ips, ports, protocols, 30),
+            "correlations": _take_relevant(_safe_list(dns.get("correlations")), terms, ips, ports, protocols, 15),
+        }
+    if http:
+        context["http"] = {
+            "stats": http.get("stats"),
+            "top_hosts": _safe_list(http.get("top_hosts"))[:15],
+            "top_user_agents": _safe_list(http.get("top_user_agents"))[:10],
+            "requests": _take_relevant(_safe_list(http.get("requests")), terms, ips, ports, protocols, 20),
+            "responses": _take_relevant(_safe_list(http.get("responses")), terms, ips, ports, protocols, 20),
+        }
+    if tls:
+        context["tls"] = {
+            "stats": tls.get("stats"),
+            "top_sni": _safe_list(tls.get("top_sni"))[:15],
+            "versions": tls.get("versions"),
+            "connections": _take_relevant(_safe_list(tls.get("connections")), terms, ips, ports, protocols, 20),
+            "anomalies": _take_relevant(_safe_list(tls.get("anomalies")), terms, ips, ports, protocols, 20),
+        }
+    if hosts:
+        context["hosts"] = {
+            "total_hosts": hosts.get("total_hosts"),
+            "items": _take_relevant(_safe_list(hosts.get("hosts")), terms, ips, ports, protocols, 20),
+        }
+
+    return context
+
+
 def _history_lines(history: Iterable[AIChatMessage]) -> str:
     """Keep only a short text history so the model preserves chat continuity."""
     messages = list(history)[-AI_MAX_HISTORY_MESSAGES:]
@@ -166,23 +260,26 @@ def _history_lines(history: Iterable[AIChatMessage]) -> str:
     return "\n".join(lines)
 
 
-def _build_prompt(payload: AIChatRequest, selected: Sequence[AISelectedPacket]) -> str:
-    """Create the final prompt with only selected packet context."""
-    packet_json = json.dumps([packet.dict() for packet in selected], ensure_ascii=True, separators=(",", ":"))
+def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> str:
+    """Create the final prompt from bounded technical evidence."""
+    context_json = json.dumps(technical_context, ensure_ascii=True, separators=(",", ":"), default=str)
     return (
-        "You are PCAPCaper's lightweight network-analysis assistant.\n"
-        "Answer using only the selected packet context below. If the context is insufficient, say so clearly.\n"
-        "Be concise, technical, and practical. Do not invent packets, hosts, ports, or payloads.\n\n"
+        "You are PCAPCaper's technical network-analysis assistant.\n"
+        "Use the structured evidence below to produce a precise technical answer.\n"
+        "Prioritize flows, DNS, HTTP, TLS, host profiles, and packet numbers when available.\n"
+        "Mention concrete IPs, ports, protocols, domains, SNI, rcodes, status codes, flow IDs, and packet numbers.\n"
+        "If evidence is insufficient, state what is missing. Do not invent packets, payloads, hosts, or threat intel.\n\n"
         f"Recent chat:\n{_history_lines(payload.history) or '(none)'}\n\n"
         f"User question:\n{payload.question}\n\n"
-        f"Selected packets ({len(selected)} max {AI_MAX_PACKETS}):\n{packet_json}\n"
+        f"Technical evidence JSON:\n{context_json}\n"
     )
 
 
 def ask_ai(payload: AIChatRequest) -> AIChatResponse:
     """Query the configured model service with a bounded packet context."""
     selected = select_relevant_packets(payload.question, payload.packets)
-    prompt = _build_prompt(payload, selected)
+    technical_context = build_technical_context(payload.question, payload.analysis, selected)
+    prompt = _build_prompt(payload, technical_context)
     request_body = json.dumps({
         "model": AI_MODEL,
         "prompt": prompt,
@@ -227,5 +324,6 @@ def ask_ai(payload: AIChatRequest) -> AIChatResponse:
         model=AI_MODEL,
         selected_packets=selected,
         selected_packet_count=len(selected),
+        technical_context=technical_context,
         timed_out=False,
     )
