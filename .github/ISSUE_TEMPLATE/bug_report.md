@@ -1,50 +1,50 @@
 ---
 name: Bug report
-about: Segnala un malfunzionamento di PCAPCaper
+about: Report a PCAPCaper malfunction
 title: "[Bug]: "
 labels: ["bug"]
 assignees: []
 ---
 
-## Descrizione
+## Description
 
-Descrivi il problema in modo chiaro.
+Describe the problem clearly.
 
-## Passi per riprodurre
+## Steps to reproduce
 
-1. Vai su ...
-2. Carica ...
-3. Clicca ...
-4. Osserva ...
+1. Go to ...
+2. Upload ...
+3. Click ...
+4. Observe ...
 
-## Comportamento atteso
+## Expected behavior
 
-Cosa ti aspettavi che succedesse?
+What did you expect to happen?
 
-## Comportamento osservato
+## Actual behavior
 
-Cosa succede invece?
+What happened instead?
 
-## Ambiente
+## Environment
 
 - OS:
 - Browser:
-- Modalita avvio: Docker / locale
-- Versione Node, se locale:
-- Versione Python, se locale:
+- Startup mode: Docker / local
+- Node version, if local:
+- Python version, if local:
 
-## Log o errori
+## Logs or errors
 
-Incolla solo log rilevanti. Rimuovi IP privati, payload, credenziali o dati sensibili.
+Paste only relevant logs. Remove private IPs, payloads, credentials, or sensitive data.
 
 ```text
 ...
 ```
 
-## File PCAP
+## PCAP file
 
-Non allegare PCAP con dati sensibili. Se serve un esempio, usa una cattura sintetica o anonimizzata.
+Do not attach PCAP files containing sensitive data. If an example is needed, use a synthetic or anonymized capture.
 
-## Contesto aggiuntivo
+## Additional context
 
-Aggiungi screenshot o dettagli utili.
+Add screenshots or useful details.
