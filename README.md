@@ -1,3 +1,9 @@
+# PCAPCaper
+
+| English  | Italian  |
+| ------------ | ------------ |
+|  here | file: readme.ita.md  |
+
 
 ![](./stuff/i/SCR-20260509-bmlx.png)
 
@@ -29,598 +35,464 @@
 ![](./stuff/i/.png)
 -->
 
-# PCAPCaper 🔍
 
-## English
+**PCAPCaper** is an open source PCAP/PCAPNG/CAP analyzer with a modern web interface.
 
-**PCAPCaper** is an open source PCAP/PCAPNG analyzer with a modern web interface.
 Upload a network capture and quickly inspect protocols, IP addresses, ports, conversations, DNS, HTTP, TLS, traffic timelines, packet filters, external IP enrichment, geolocation maps, advanced packet correlation, host profiles, network graphs, and security findings.
 
 > Inspired by [apackets.com](https://apackets.com/), but fully open source and self-hostable.
 
-### Main features
+---
+
+## Table of contents
+
+- [Main features](#main-features)
+- [Screenshots](#screenshots)
+- [Architecture](#architecture)
+- [Technology stack](#technology-stack)
+- [Analysis flow](#analysis-flow)
+- [Local setup](#local-setup)
+- [Docker setup](#docker-setup)
+- [Configuration and performance](#configuration-and-performance)
+- [Wireshark-style packet filters](#wireshark-style-packet-filters)
+- [External IP enrichment](#external-ip-enrichment)
+- [5-tuple flows and advanced traces](#5-tuple-flows-and-advanced-traces)
+- [Security analysis](#security-analysis)
+- [DNS analysis](#dns-analysis)
+- [HTTP analysis](#http-analysis)
+- [TLS analysis](#tls-analysis)
+- [Hosts](#hosts)
+- [Network graph](#network-graph)
+- [API reference](#api-reference)
+- [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Main features
 
 | Section | Details |
 | --- | --- |
-| **Overview** | Total packets, bytes, duration, packets/second, average packet size |
-| **Protocols** | Donut chart and percentage table for the top protocols |
-| **Top IP** | Most active source/destination IPs, service details popup, DNS, peers, and optional external data |
-| **Top ports** | Most used TCP/UDP source and destination ports with service names |
-| **Packet filters** | Wireshark-style syntax plus GUI controls for quick filtering |
-| **Hosts** | Collapsible IP detail view with role, flows, DNS, HTTP/SNI, ASN/geo, findings, and activity timeline |
-| **Network graph** | Host-to-host graph based on 5-tuple flows, with finding-aware node colors |
-| **Security** | Heuristic and advanced opt-in security analysis with external threat intelligence only after user confirmation |
-| **DNS** | AdGuard-style DNS dashboard with queries, answers, rcode, TTL, suspicious TXT, tunneling indicators, and optional reputation checks |
-| **HTTP analysis** | Cleartext HTTP metadata extraction only; HTTPS/TLS is not decrypted |
-| **TLS analysis** | Observable TLS metadata such as SNI, version, cipher, ALPN, certificates, fingerprints, and anomalies |
-| **IP traffic map** | World map colored by geolocated destination IP traffic; country click opens related flows |
-| **Advanced traces** | Collapsed flow tree based on backend 5-tuple flows, with packet/response/ACK correlation |
+| **Overview** | Total packets, bytes, capture duration, packets per second, and average packet size. |
+| **Protocols** | Donut chart and percentage table for the top protocols. |
+| **Top IPs** | Most active source and destination IPs, service details popup, DNS data, peers, and optional external enrichment. |
+| **Top ports** | Most used TCP/UDP source and destination ports with service names. |
+| **Conversations** | Bidirectional IP-to-IP conversations sortable by packets or bytes. |
+| **Packet filters** | Wireshark-style syntax plus GUI controls for quick filtering. |
+| **Hosts** | Collapsible IP detail view with role, flows, DNS, HTTP/SNI, ASN/geo, findings, and activity timeline. |
+| **Network graph** | Host-to-host graph based on 5-tuple flows, with finding-aware node colors. |
+| **DNS** | AdGuard-style DNS dashboard with queries, answers, rcodes, TTLs, suspicious TXT records, tunneling indicators, and optional reputation checks. |
+| **HTTP analysis** | Cleartext HTTP metadata extraction: requests, correlated responses, hosts, user agents, and status codes. |
+| **TLS analysis** | Observable TLS metadata: SNI, version, cipher, ALPN, certificates, fingerprints, JA3/JA3S, and anomalies. |
+| **External IP enrichment** | RDAP/IANA, Team Cymru ASN, reverse DNS, and GeoIP, only after explicit user confirmation. |
+| **Security** | Heuristic findings for proxy/VPN, hosting, sensitive ports, cleartext services, and abnormal traffic volumes. |
+| **Advanced security** | Dedicated opt-in tab with threat intelligence, CVEs, IOCs, scoring, evidence, and recommendations. |
+| **IP traffic map** | World map colored by geolocated destination IP traffic; country click opens related flows. |
+| **Advanced traces** | Flow tree with correlated packets, responses, and ACKs, based on backend 5-tuple flows. |
+| **Timeline** | Area chart of traffic over time with adaptive buckets. |
+| **Packet list** | Paginated packet details; the backend JSON limit is configurable through `PCAPCAPER_MAX_PACKET_LIST`. |
+| **JSON export** | Download the complete analysis result as JSON. |
 
-Supported formats: `.pcap`, `.pcapng`, `.cap`. There is no default application-level upload limit; operational limits can be configured through `.env`.
+Supported formats: `.pcap`, `.pcapng`, `.cap`.
 
-### Privacy model
-
-PCAPCaper is privacy-by-default. Standard analysis is local to the uploaded capture. Features that contact external services, such as IP enrichment, DNS reputation, or advanced threat intelligence, are opt-in and show a confirmation popup before any public IP, domain, or traffic metadata is sent. Private, local, multicast, reserved, and otherwise non-global IP addresses are filtered out before external enrichment.
-
-### Performance and storage
-
-Uploads are streamed to a configurable temporary directory instead of being fully loaded into memory. Temporary files are removed in the backend endpoint cleanup path, and the Docker setup mounts `/tmp/pcapcaper` as `tmpfs` so files also disappear when the container stops. Packet details are paginated in the frontend and capped in the backend JSON through `PCAPCAPER_MAX_PACKET_LIST`; summaries, flows, DNS, HTTP, TLS, and hosts are still computed over the full capture.
-
-Redis was evaluated but is not required for the current synchronous request model. It is the natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and longer-lived result caching.
-
-### Quick start
-
-Docker:
-
-```bash
-docker-compose up --build
-```
-
-Manual backend:
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Manual frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Configuration
-
-Copy `.env.example` to `.env` and adjust values when needed. Important variables include:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Upload limit in MB; `0` means no application-level limit |
-| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory for temporary uploaded PCAP files |
-| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Maximum detailed packet rows included in the JSON response |
-| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Maximum packet numbers stored per flow for UI correlation |
-| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Maximum parallel workers for external enrichment |
-| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | Maximum public IPs enriched per request |
-| `URLHAUS_AUTH_KEY` | empty | Optional key for URLhaus host intelligence |
-
-### API overview
-
-- `GET /api/health`: health check.
-- `POST /api/analyze`: analyzes a PCAP/PCAPNG/CAP file and returns the full JSON report.
-- `POST /api/enrich-ips`: enriches public IPs after explicit user confirmation.
-- `POST /api/security-analysis`: runs advanced opt-in security analysis.
-- `POST /api/dns-reputation`: checks DNS domains against open reputation sources after explicit user confirmation.
-
-### Contributing
-
-Contribution guidelines and GitHub issue/PR templates are written in English. Do not commit real PCAP files, credentials, payloads, or personal data. Features that send data to external services must stay opt-in, visible to the user, and documented.
+There is no default application-level upload limit. Operational limits can be configured through `.env`.
 
 ---
 
-## Italiano
+## Privacy model
 
-**PCAPCaper** è un analizzatore open source di file PCAP/PCAPNG con interfaccia web moderna.
-Carica un file di cattura di rete e ottieni in secondi statistiche complete su protocolli, indirizzi IP, porte, conversazioni, DNS, timeline del traffico, filtri pacchetto, arricchimento IP esterno, mappa geografica, correlazione avanzata dei pacchetti e analisi security con threat intelligence.
+PCAPCaper is privacy-by-default. Standard analysis is local to the uploaded capture.
 
-> Ispirato a [apackets.com](https://apackets.com/), ma completamente open source e auto-ospitabile.
+Features that contact external services, such as IP enrichment, DNS reputation, and advanced threat intelligence, are opt-in and show a confirmation popup before any public IP address, domain, or traffic metadata is sent.
 
----
-
-- [PCAPCaper 🔍](#pcapcaper-)
-  - [✨ Funzionalità](#-funzionalità)
-  - [Screenshot](#screenshot)
-    - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
-    - [Mappa degli indirizzi IP](#mappa-degli-indirizzi-ip)
-    - [Advanced packet tracing](#advanced-packet-tracing)
-    - [Conferma prima di inviare traffico verso servizi esterni](#conferma-prima-di-inviare-traffico-verso-servizi-esterni)
-    - [Nuovo tab sui report di sicurezza](#nuovo-tab-sui-report-di-sicurezza)
-    - [DNS analysis](#dns-analysis)
-    - [HTTP anaysis](#http-anaysis)
-    - [TLS analysis](#tls-analysis)
-    - [Classificazione per host](#classificazione-per-host)
-    - [Analisi dei flussi di rete per singolo stato](#analisi-dei-flussi-di-rete-per-singolo-stato)
-  - [🏗️ Architettura](#️-architettura)
-  - [🧩 Stack tecnologico](#-stack-tecnologico)
-    - [Backend](#backend)
-    - [Frontend](#frontend)
-    - [Infrastruttura](#infrastruttura)
-  - [📊 Flusso di analisi](#-flusso-di-analisi)
-  - [🚀 Avvio locale (senza Docker)](#-avvio-locale-senza-docker)
-    - [Prerequisiti](#prerequisiti)
-    - [1. Clona il repository](#1-clona-il-repository)
-    - [2. Avvia il Backend](#2-avvia-il-backend)
-    - [3. Avvia il Frontend](#3-avvia-il-frontend)
-  - [🐳 Avvio con Docker](#-avvio-con-docker)
-    - [Prerequisiti](#prerequisiti-1)
-    - [Avvio completo](#avvio-completo)
-    - [Comandi utili](#comandi-utili)
-    - [Porte esposte](#porte-esposte)
-  - [⚙️ Prestazioni e configurazione](#️-prestazioni-e-configurazione)
-    - [Variabili `.env`](#variabili-env)
-    - [Storage temporaneo](#storage-temporaneo)
-    - [Paginazione e limiti JSON](#paginazione-e-limiti-json)
-  - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
-    - [Operatori logici](#operatori-logici)
-    - [Operatori di confronto](#operatori-di-confronto)
-    - [Campi supportati](#campi-supportati)
-    - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
-    - [Esempi utili](#esempi-utili)
-  - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
-  - [🌳 Flow 5-tuple e Tracce avanzate](#-flow-5-tuple-e-tracce-avanzate)
-  - [🛡️ Security](#️-security)
-  - [🚨 Security avanzata](#-security-avanzata)
-    - [Fonti e dati usati](#fonti-e-dati-usati)
-    - [Output della tab](#output-della-tab)
-    - [Privacy e controllo](#privacy-e-controllo)
-  - [🌐 Analisi DNS](#-analisi-dns)
-    - [Analisi locale](#analisi-locale)
-    - [Controllo liste esterne](#controllo-liste-esterne)
-    - [Privacy DNS](#privacy-dns)
-  - [🌍 HTTP analysis](#-http-analysis)
-    - [Limiti HTTP](#limiti-http)
-  - [🔐 TLS analysis](#-tls-analysis)
-    - [Anomalie TLS](#anomalie-tls)
-    - [Limiti TLS](#limiti-tls)
-  - [🖥️ Hosts](#️-hosts)
-  - [🕸️ Grafo di rete](#️-grafo-di-rete)
-  - [📡 API Reference](#-api-reference)
-    - [`GET /api/health`](#get-apihealth)
-    - [`POST /api/analyze`](#post-apianalyze)
-    - [`POST /api/enrich-ips`](#post-apienrich-ips)
-    - [`POST /api/security-analysis`](#post-apisecurity-analysis)
-    - [`POST /api/dns-reputation`](#post-apidns-reputation)
-  - [📁 Struttura del progetto](#-struttura-del-progetto)
-  - [🔄 Diagramma dei componenti frontend](#-diagramma-dei-componenti-frontend)
-  - [🤝 Contribuire](#-contribuire)
-  - [📄 Licenza](#-licenza)
-
+Private, local, multicast, reserved, and otherwise non-global IP addresses are filtered out before external enrichment.
 
 ---
 
-## ✨ Funzionalità
+## Screenshots
 
-| Sezione | Dettagli |
-|---|---|
-| **Riepilogo** | Pacchetti totali, byte, durata, pacchetti/sec, dimensione media |
-| **Protocolli** | Distribuzione con grafico donut + tabella percentuali (top 20) |
-| **Top IP** | Indirizzi sorgente/destinazione più attivi, popup dettagli servizi, DNS, peer e dati esterni |
-| **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
-| **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
-| **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
-| **Hosts** | Vista dettaglio IP collapsable con ruolo, flow, DNS, HTTP/SNI, ASN/geo e timeline attività |
-| **Grafo di rete** | Network graph host-to-host basato sui flow, con filtri per protocollo, scope e finding |
-| **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
-| **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
-| **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
-| **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
-| **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
-| **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
-| **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
-| **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
-| **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
-| **Lista Pacchetti** | Dettaglio pacchetti paginato; il limite JSON è configurabile con `PCAPCAPER_MAX_PACKET_LIST` |
-| **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
+### IP address details
 
-Formati supportati: `.pcap`, `.pcapng`, `.cap` · Nessun limite applicativo predefinito sulla dimensione upload.
+![IP details](./stuff/i/SCR-20260508-otsa.png)
 
----
+### IP address analysis service
 
-## Screenshot
+![IP service 1](./stuff/i/SCR-20260508-oxxe.png)
+![IP service 2](./stuff/i/SCR-20260508-oyca.png)
+![IP service 3](./stuff/i/SCR-20260508-oypg.png)
 
-**dettaglio su indirizzi IP**
+### IP traffic map
 
-![](./stuff/i/SCR-20260508-otsa.png)
+![IP traffic map](./stuff/i/SCR-20260508-pbqj.png)
 
-### Servizio di analisi degli indirizzi IP
+The **IP traffic map** uses public IP geolocation enrichment to color countries based on observed traffic.
 
-![](./stuff/i/SCR-20260508-oxxe.png)
+Clicking a colored country opens a popup with:
 
-![](./stuff/i/SCR-20260508-oyca.png)
-
-![](./stuff/i/SCR-20260508-oypg.png)
-
-### Mappa degli indirizzi IP
-
-![](./stuff/i/SCR-20260508-pbqj.png)
-
-La sezione **Mappa traffico IP** usa l'arricchimento geografico degli IP pubblici per colorare i paesi in base al traffico osservato. Cliccando su un paese colorato si apre un popup con:
-- IP geolocalizzati in quel paese;
-- flow 5-tuple che coinvolgono quegli IP;
-- endpoint sorgente/destinazione;
-- protocollo, stato, byte e pacchetti del flow;
-- quota di traffico attribuita al paese.
+- geolocated IPs in that country;
+- 5-tuple flows involving those IPs;
+- source and destination endpoints;
+- protocol, state, bytes, and packets for each flow;
+- traffic share attributed to the country.
 
 ### Advanced packet tracing
 
-![](./stuff/i/SCR-20260508-rhxk.png)
+![Advanced packet tracing](./stuff/i/SCR-20260508-rhxk.png)
 
-### Conferma prima di inviare traffico verso servizi esterni
+### Confirmation before sending data to external services
 
-![](./stuff/i/SCR-20260508-rneg.png)
+![External services confirmation](./stuff/i/SCR-20260508-rneg.png)
 
-### Nuovo tab sui report di sicurezza
+### Security report tab
 
-![](./stuff/i/SCR-20260508-rnlr.png)
+![Security report](./stuff/i/SCR-20260508-rnlr.png)
 
 ### DNS analysis
 
-![](./stuff/i/SCR-20260508-twqb.png)
+![DNS analysis](./stuff/i/SCR-20260508-twqb.png)
 
-### HTTP anaysis
+### HTTP analysis
 
-![](./stuff/i/SCR-20260508-uceg.png)
+![HTTP analysis](./stuff/i/SCR-20260508-uceg.png)
 
 ### TLS analysis
 
-![](./stuff/i/SCR-20260508-uhnh.png)
+![TLS analysis](./stuff/i/SCR-20260508-uhnh.png)
 
-### Classificazione per host
+### Host classification
 
-![](./stuff/i/SCR-20260509-bcqx.png)
+![Host classification](./stuff/i/SCR-20260509-bcqx.png)
 
-### Analisi dei flussi di rete per singolo stato
+### Flow state analysis
 
-![](./stuff/i/SCR-20260509-bigy.png)
-
-<!--
-![](./stuff/i/.png)
--->
+![Flow state analysis](./stuff/i/SCR-20260509-bigy.png)
 
 ---
 
-## 🏗️ Architettura
+## Architecture
 
 ```mermaid
 graph TB
-    U["👤 Utente"]
-    FE["🖥️ Frontend\nReact 18 + Vite\nNginx (Docker)\nporta 3000 / 5173"]
-    BE["⚙️ Backend\nFastAPI + Python 3.11\nUvicorn ASGI\nporta 8000"]
-    SC["📦 Scapy\nPCAP Parser\nDecoder protocolli"]
-    EXT["🌐 Tool esterni opzionali\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
-    SECEXT["🚨 Threat intelligence opt-in\nShodan InternetDB\nFeodo Tracker\nURLhaus opzionale"]
-    DNSEXT["🌐 DNS reputation opt-in\nAdGuard DNS filter\nStevenBlack hosts\nURLhaus opzionale"]
+    U["User"]
+    FE["Frontend\nReact 18 + Vite\nNginx in Docker\nports 3000 / 5173"]
+    BE["Backend\nFastAPI + Python 3.11\nUvicorn ASGI\nport 8000"]
+    SC["Scapy\nPCAP parser\nProtocol decoder"]
+    EXT["Optional external tools\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
+    SECEXT["Opt-in threat intelligence\nShodan InternetDB\nFeodo Tracker\nOptional URLhaus"]
+    DNSEXT["Opt-in DNS reputation\nAdGuard DNS filter\nStevenBlack hosts\nOptional URLhaus"]
 
-    U -->|"Drag & drop file PCAP"| FE
-    FE -->|"POST /api/analyze\nmultipart/form-data"| BE
-    FE -->|"POST /api/enrich-ips\nsolo su click utente"| BE
-    FE -->|"POST /api/security-analysis\nsolo dopo popup consenso"| BE
-    FE -->|"POST /api/dns-reputation\nsolo dopo popup consenso"| BE
-    BE -->|"PcapReader streaming"| SC
-    BE -->|"IP pubblici"| EXT
-    BE -->|"IP pubblici + metadati"| SECEXT
-    BE -->|"Domini DNS osservati"| DNSEXT
+    U -->|"Drag and drop PCAP"| FE
+    FE -->|"POST /api/analyze"| BE
+    FE -->|"POST /api/enrich-ips\nuser click only"| BE
+    FE -->|"POST /api/security-analysis\nafter consent"| BE
+    FE -->|"POST /api/dns-reputation\nafter consent"| BE
+    BE -->|"Streaming PcapReader"| SC
+    BE -->|"Public IPs"| EXT
+    BE -->|"Public IPs + metadata"| SECEXT
+    BE -->|"Observed DNS domains"| DNSEXT
     EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
-    SECEXT -->|"CVE, IOC, C2, host malware"| BE
-    DNSEXT -->|"Liste ads/tracking/malware"| BE
-    SC -->|"Pacchetti decodificati"| BE
-    BE -->|"JSON: statistiche complete"| FE
-    FE -->|"Dashboard interattivo"| U
-
-    style FE fill:#1e293b,stroke:#6366f1,color:#f1f5f9
-    style BE fill:#1e293b,stroke:#22c55e,color:#f1f5f9
-    style SC fill:#1e293b,stroke:#eab308,color:#f1f5f9
-    style EXT fill:#1e293b,stroke:#f97316,color:#f1f5f9
-    style SECEXT fill:#1e293b,stroke:#ef4444,color:#f1f5f9
-    style DNSEXT fill:#1e293b,stroke:#10b981,color:#f1f5f9
+    SECEXT -->|"CVEs, IOCs, C2, malware hosts"| BE
+    DNSEXT -->|"Ads, tracking, malware lists"| BE
+    SC -->|"Decoded packets"| BE
+    BE -->|"Complete statistics JSON"| FE
+    FE -->|"Interactive dashboard"| U
 ```
 
 ---
 
-## 🧩 Stack tecnologico
+## Technology stack
 
 ### Backend
-| Tecnologia | Versione | Ruolo |
-|---|---|---|
+
+| Technology | Version | Role |
+| --- | --- | --- |
 | Python | 3.11 | Runtime |
-| FastAPI | 0.115 | Framework REST API |
-| Scapy | 2.6 | Lettura e decodifica PCAP |
-| Uvicorn | 0.34 | Server ASGI |
-| Pydantic | v2 | Validazione e serializzazione dati |
+| FastAPI | 0.115 | REST API framework |
+| Scapy | 2.6 | PCAP reading and decoding |
+| Uvicorn | 0.34 | ASGI server |
+| Pydantic | v2 | Data validation and serialization |
 
 ### Frontend
-| Tecnologia | Versione | Ruolo |
-|---|---|---|
+
+| Technology | Version | Role |
+| --- | --- | --- |
 | React | 18 | UI framework |
 | TypeScript | 5.5 | Type safety |
-| Vite | 5 | Build tool e dev server |
+| Vite | 5 | Build tool and development server |
 | Tailwind CSS | 3.4 | Utility-first CSS |
-| Recharts | 2.12 | Grafici (Area, Bar, Pie) |
-| Lucide React | — | Icone SVG |
+| Recharts | 2.12 | Charts |
+| Lucide React | — | SVG icons |
 
-### Infrastruttura
-| Tecnologia | Ruolo |
-|---|---|
-| Docker + docker-compose | Containerizzazione |
-| Nginx 1.27 | Serve il frontend + proxy verso il backend |
+### Infrastructure
+
+| Technology | Role |
+| --- | --- |
+| Docker + Docker Compose | Containerization |
+| Nginx 1.27 | Frontend serving and API proxy |
 
 ---
 
-## 📊 Flusso di analisi
+## Analysis flow
 
 ```mermaid
 flowchart LR
     subgraph Upload
-        A["File PCAP"] -->|"multipart POST"| B["Validazione\nestensione + dim."]
-        B --> C["Salvataggio\nfile temporaneo"]
+        A["PCAP file"] -->|"multipart POST"| B["Validation\nextension + size"]
+        B --> C["Temporary file\nstorage"]
     end
 
-    subgraph "Analisi - analyzer.py"
+    subgraph "Analysis - analyzer.py"
         C --> D["PcapReader\nstreaming"]
-        D --> E["Per ogni pacchetto"]
-        E --> F["_get_protocol()"]
-        E --> G["Estrazione IP\nsrc / dst"]
-        E --> H["Estrazione porte\nTCP / UDP"]
-        F --> I["Contatori\nprotocolli"]
-        G --> J["Contatori IP\ne conversazioni"]
-        H --> K["Contatori\nporte"]
-        E --> L["Bucket\ntimeline"]
-        E --> M["Lista pacchetti\nmax 1000"]
-        E --> Q["Servizi per IP\nDNS, peer, porte"]
-        E --> Z["Flow 5-tuple\nTCP/UDP bidirezionali"]
-        E --> HT["HTTP in chiaro\nrequest/response metadata"]
-        E --> TLS["TLS handshake\nSNI, cert, JA3"]
-        E --> HOSTS["Host/IP\nprofilo aggregato"]
+        D --> E["For each packet"]
+        E --> F["Protocol detection"]
+        E --> G["Source/destination IP extraction"]
+        E --> H["TCP/UDP port extraction"]
+        F --> I["Protocol counters"]
+        G --> J["IP counters\nand conversations"]
+        H --> K["Port counters"]
+        E --> L["Timeline buckets"]
+        E --> M["Packet list"]
+        E --> Q["IP services\nDNS, peers, ports"]
+        E --> Z["5-tuple TCP/UDP flows"]
+        E --> HT["Cleartext HTTP metadata"]
+        E --> TLS["TLS handshake metadata"]
+        E --> HOSTS["Host/IP profiles"]
     end
 
-    subgraph Aggregazione
+    subgraph Aggregation
         I & J & K & L & M & Q & Z & HT & TLS & HOSTS --> N["AnalysisResult\nPydantic"]
-        N -->|"JSON"| O["Frontend\nDashboard"]
+        N -->|"JSON"| O["Frontend dashboard"]
     end
 
-    subgraph "Arricchimento opzionale"
-        O -->|"click utente"| P["/api/enrich-ips"]
+    subgraph "Optional enrichment"
+        O -->|"user click"| P["/api/enrich-ips"]
         P --> R["RDAP, ASN,\nReverse DNS, GeoIP"]
         R --> O
     end
 
-    subgraph "Security avanzata opt-in"
-        O -->|"click + conferma popup"| S["/api/security-analysis"]
-        S --> T["Threat intel\nShodan, Feodo, URLhaus opz."]
-        S --> U["Scoring, evidenze,\nraccomandazioni"]
+    subgraph "Advanced security opt-in"
+        O -->|"click + consent popup"| S["/api/security-analysis"]
+        S --> T["Threat intelligence"]
+        S --> U["Scoring, evidence,\nrecommendations"]
         T & U --> O
     end
 
-    subgraph "Analisi DNS opt-in"
-        O -->|"tab DNS"| V["Classificazione locale\nquery, client, resolver"]
-        V -->|"click + conferma popup"| W["/api/dns-reputation"]
-        W --> X["AdGuard DNS filter,\nStevenBlack, URLhaus opz."]
+    subgraph "DNS reputation opt-in"
+        O -->|"DNS tab"| V["Local DNS classification"]
+        V -->|"click + consent popup"| W["/api/dns-reputation"]
+        W --> X["AdGuard, StevenBlack,\noptional URLhaus"]
         X --> O
     end
 ```
 
 ---
 
-## 🚀 Avvio locale (senza Docker)
+## Local setup
 
-### Prerequisiti
-- Python **3.11** o superiore
-- Node.js **20** o superiore
-- `pip` e `npm`
-- Su macOS: `brew install libpcap` (necessario per Scapy)
-- Su Linux (Debian/Ubuntu): `sudo apt-get install libpcap-dev`
+### Requirements
 
-### 1. Clona il repository
+- Python **3.11** or newer
+- Node.js **20** or newer
+- `pip` and `npm`
+- macOS: `brew install libpcap` for Scapy support
+- Debian/Ubuntu: `sudo apt-get install libpcap-dev`
+
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/tuo-utente/pcapcaper.git
-cd pcapcaper
+git clone https://github.com/myblacksloth/aPCAPerX.git
+cd aPCAPerX
 ```
 
-### 2. Avvia il Backend
+### 2. Start the backend
 
 ```bash
 cd backend
 
-# Crea e attiva un virtual environment (raccomandato)
 python -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-# oppure: .venv\Scripts\activate  # Windows
+source .venv/bin/activate          # Linux/macOS
+# .venv\Scripts\activate          # Windows
 
-# Installa le dipendenze
 pip install -r requirements.txt
-
-# Avvia il server FastAPI con hot-reload
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Il backend sarà disponibile su `http://localhost:8000`  
-Documentazione API interattiva: `http://localhost:8000/docs`
+The backend is available at `http://localhost:8000`.
 
-### 3. Avvia il Frontend
+Interactive API documentation is available at `http://localhost:8000/docs`.
 
-Apri un **nuovo terminale**:
+### 3. Start the frontend
+
+Open a new terminal:
 
 ```bash
 cd frontend
-
-# Installa le dipendenze npm
 npm install
-
-# Avvia il dev server Vite con proxy verso il backend
 npm run dev
 ```
 
-Il frontend sarà disponibile su `http://localhost:5173`
+The frontend is available at `http://localhost:5173`.
 
-> Vite proxy-izza automaticamente le richieste `/api/*` verso `localhost:8000`,
-> quindi non è necessario configurare nulla manualmente.
+> Vite automatically proxies `/api/*` requests to `localhost:8000`, so no manual configuration is required for local development.
 
 ---
 
-## 🐳 Avvio con Docker
+## Docker setup
 
-### Prerequisiti
+### Requirements
+
 - Docker **24+**
-- Docker Compose **v2** (incluso in Docker Desktop)
+- Docker Compose **v2**
 
-### Avvio completo
-
-```bash
-# Clona il repository (se non l'hai già fatto)
-git clone https://github.com/tuo-utente/pcapcaper.git
-cd pcapcaper
-
-# Build delle immagini e avvio dei container
-docker-compose up --build
-```
-
-Apri il browser su **`http://localhost:3000`** 🎉
-
-### Comandi utili
+### Start the full stack
 
 ```bash
-# Avvio in background (detached)
-docker-compose up --build -d
+git clone https://github.com/myblacksloth/aPCAPerX.git
+cd aPCAPerX
 
-# Visualizza i log in tempo reale
-docker-compose logs -f
-
-# Ferma i container (mantieni le immagini)
-docker-compose stop
-
-# Ferma e rimuovi container e reti
-docker-compose down
-
-# Ricostruisci solo il backend dopo modifiche
-docker-compose up --build backend
+docker compose up --build
 ```
 
-### Porte esposte
+Open `http://localhost:3000` in your browser.
 
-| Servizio  | Porta host | Porta container | Note |
-|-----------|-----------|-----------------|------|
-| Frontend  | 3000      | 80              | Interfaccia web |
-| Backend   | 8000      | 8000            | API REST (opzionale, per debug) |
+### Useful commands
+
+```bash
+# Start in detached mode
+docker compose up --build -d
+
+# Follow logs
+docker compose logs -f
+
+# Stop containers without removing them
+docker compose stop
+
+# Stop and remove containers and networks
+docker compose down
+
+# Rebuild only the backend
+docker compose up --build backend
+```
+
+### Exposed ports
+
+| Service | Host port | Container port | Notes |
+| --- | --- | --- | --- |
+| Frontend | 3000 | 80 | Web interface |
+| Backend | 8000 | 8000 | REST API, mostly for debugging |
 
 ---
 
-## ⚙️ Prestazioni e configurazione
+## Configuration and performance
 
-L'analisi PCAP è stata ottimizzata per ridurre RAM e blocchi del server:
-- upload scritto su disco temporaneo a chunk, senza caricare l'intero file in memoria;
-- limite applicativo di 100 MB rimosso;
-- analisi PCAP eseguita in thread separato rispetto all'event loop FastAPI;
-- dettaglio pacchetti e `packet_numbers` dei flow limitati in modo configurabile per evitare JSON enormi;
-- arricchimento IP esterno parallelizzato con numero di worker limitato;
-- liste DNS esterne scaricate e indicizzate con cache di processo;
-- UI con stati separati per upload, elaborazione, analisi e chiamate esterne.
+PCAP analysis is optimized to reduce memory usage and avoid blocking the server:
 
-### Variabili `.env`
+- uploads are written to temporary storage in chunks;
+- the old 100 MB application-level upload limit has been removed;
+- PCAP analysis runs in a separate thread from the FastAPI event loop;
+- packet details and per-flow packet numbers are limited through configuration to avoid huge JSON responses;
+- external IP enrichment is parallelized with a bounded number of workers;
+- external DNS lists are downloaded and indexed with process-level caching;
+- the UI has separate states for upload, processing, analysis, and external calls.
 
-Il repository include `.env.example`. Il file `.env` locale è ignorato da git e può essere usato per personalizzare l'ambiente:
+### `.env` variables
 
-| Variabile | Default | Descrizione |
-|-----------|---------|-------------|
-| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Limite upload in MB. `0` = nessun limite applicativo |
-| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory dei file PCAP temporanei |
-| `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
-| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
-| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
-| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Worker paralleli massimi per arricchimento esterno |
-| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | IP pubblici massimi arricchiti per richiesta |
-| `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
-| `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
-| `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+The repository includes `.env.example`. Local `.env` files are ignored by git and can be used to customize the environment.
 
-### Storage temporaneo
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Upload limit in MB. `0` means no application-level limit. |
+| `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Temporary PCAP file directory. |
+| `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Upload chunk size in bytes. |
+| `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Maximum detailed packet rows included in the JSON response. `0` means unlimited. |
+| `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Maximum packet numbers stored per flow. `0` means unlimited. |
+| `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Maximum parallel workers for external enrichment. |
+| `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | Maximum public IPs enriched per request. |
+| `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | HTTP timeout for external services. |
+| `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Socket timeout for WHOIS and reverse lookup operations. |
+| `URLHAUS_AUTH_KEY` | empty | Optional URLhaus Auth-Key. |
 
-Durante `/api/analyze`, il backend salva il PCAP in `PCAPCAPER_TEMP_DIR` con `tempfile.NamedTemporaryFile(delete=False)`. Il file viene cancellato nel blocco `finally` dell'endpoint, anche in caso di errore. In Docker la directory `/tmp/pcapcaper` è montata come `tmpfs`, quindi viene eliminata anche allo stop del container.
+### Temporary storage
 
-Redis è stato valutato ma non introdotto: il flusso corrente non richiede persistenza dei risultati tra richieste e Redis aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache risultati.
+During `/api/analyze`, the backend stores the uploaded PCAP in `PCAPCAPER_TEMP_DIR` using `tempfile.NamedTemporaryFile(delete=False)`.
 
-### Paginazione e limiti JSON
+The file is removed in the endpoint `finally` block, including error cases. In Docker, `/tmp/pcapcaper` is mounted as `tmpfs`, so files are also removed when the container stops.
 
-La lista pacchetti nel frontend è paginata a 50 righe per pagina. Il backend invia per default i primi `PCAPCAPER_MAX_PACKET_LIST=1000` pacchetti dettagliati, mentre riepiloghi, flow, DNS, HTTP, TLS e host restano calcolati sull'intero PCAP. Per PCAP molto grandi, aumentare questo valore rende più pesante il JSON e può rallentare il browser.
+Redis was evaluated but is not required by the current synchronous request model. It remains a natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and longer-lived result caching.
+
+### Pagination and JSON limits
+
+The packet list in the frontend is paginated with 50 rows per page.
+
+By default, the backend sends the first `PCAPCAPER_MAX_PACKET_LIST=1000` detailed packets. Summaries, flows, DNS, HTTP, TLS, and hosts are still computed over the full PCAP.
+
+Increasing this value for very large PCAP files makes the JSON heavier and may slow down the browser.
 
 ---
 
-## 🔎 Filtri pacchetti stile Wireshark
+## Wireshark-style packet filters
 
-La dashboard include una scheda **Filtri pacchetti** applicata alla lista pacchetti e alla vista **Tracce**. I riepiloghi statistici principali restano calcolati sull'intero PCAP, mentre le viste pacchetto mostrano solo gli elementi che corrispondono al filtro.
+The dashboard includes a **Packet filters** tab applied to the packet list and trace views. Main statistical summaries remain computed over the full PCAP, while packet-oriented views show only matching items.
 
-Puoi usare sia il campo testuale sia i controlli GUI per comporre il filtro.
+You can use both the text input and GUI controls to build filters.
 
-### Operatori logici
+### Logical operators
 
-| Operatore | Descrizione | Esempio |
-|-----------|-------------|---------|
-| `and` / `&&` | Entrambe le condizioni devono essere vere | `dns and ip.dst == 8.8.8.8` |
-| `or` / `||` | Almeno una condizione deve essere vera | `http or https` |
-| `not` / `!` | Nega una condizione | `not arp` |
-| `( ... )` | Raggruppa condizioni | `(dns or http) and frame.len > 100` |
+| Operator | Description | Example |
+| --- | --- | --- |
+| `and` / `&&` | Both conditions must be true. | `dns and ip.dst == 8.8.8.8` |
+| `or` / `||` | At least one condition must be true. | `http or https` |
+| `not` / `!` | Negates a condition. | `not arp` |
+| `( ... )` | Groups conditions. | `(dns or http) and frame.len > 100` |
 
-### Operatori di confronto
+### Comparison operators
 
-| Operatore | Descrizione | Esempio |
-|-----------|-------------|---------|
-| `==` | Valore uguale | `tcp.port == 443` |
-| `!=` | Valore diverso | `ip.src != 192.168.1.10` |
-| `contains` | Campo testuale che contiene una stringa | `info contains "Query"` |
-| `>` | Maggiore di | `frame.len > 1000` |
-| `>=` | Maggiore o uguale | `frame.number >= 500` |
-| `<` | Minore di | `frame.len < 128` |
-| `<=` | Minore o uguale | `frame.number <= 100` |
+| Operator | Description | Example |
+| --- | --- | --- |
+| `==` | Equal to. | `tcp.port == 443` |
+| `!=` | Different from. | `ip.src != 192.168.1.10` |
+| `contains` | Text field contains a string. | `info contains "Query"` |
+| `>` | Greater than. | `frame.len > 1000` |
+| `>=` | Greater than or equal to. | `frame.number >= 500` |
+| `<` | Less than. | `frame.len < 128` |
+| `<=` | Less than or equal to. | `frame.number <= 100` |
 
-### Campi supportati
+### Supported fields
 
-| Campo | Alias | Descrizione |
-|-------|-------|-------------|
-| `ip.addr` | `ip` | IP sorgente o destinazione |
-| `ip.src` | `src`, `src.ip` | IP sorgente |
-| `ip.dst` | `dst`, `dst.ip` | IP destinazione |
-| `tcp.port` | `port` | Porta sorgente o destinazione nei pacchetti TCP |
-| `udp.port` | `port` | Porta sorgente o destinazione nei pacchetti UDP |
-| `tcp.srcport` | `udp.srcport`, `src.port` | Porta sorgente |
-| `tcp.dstport` | `udp.dstport`, `dst.port` | Porta destinazione |
-| `frame.len` | `len`, `length` | Lunghezza del pacchetto in byte |
-| `frame.number` | `number`, `no` | Numero progressivo del pacchetto |
-| `frame.time` | `time` | Timestamp mostrato nella tabella |
-| `protocol` | `proto` | Protocollo rilevato |
-| `info` | - | Campo informativo del pacchetto |
+| Field | Aliases | Description |
+| --- | --- | --- |
+| `ip.addr` | `ip` | Source or destination IP. |
+| `ip.src` | `src`, `src.ip` | Source IP. |
+| `ip.dst` | `dst`, `dst.ip` | Destination IP. |
+| `tcp.port` | `port` | Source or destination TCP port. |
+| `udp.port` | `port` | Source or destination UDP port. |
+| `tcp.srcport` | `udp.srcport`, `src.port` | Source port. |
+| `tcp.dstport` | `udp.dstport`, `dst.port` | Destination port. |
+| `frame.len` | `len`, `length` | Packet length in bytes. |
+| `frame.number` | `number`, `no` | Packet number. |
+| `frame.time` | `time` | Timestamp shown in the packet table. |
+| `protocol` | `proto` | Detected protocol. |
+| `info` | — | Packet information field. |
 
-### Filtri protocollo rapidi
+### Quick protocol filters
 
-Puoi scrivere direttamente il nome del protocollo senza campo e operatore:
+You can write protocol names directly, without a field or operator.
 
-| Filtro | Significato |
-|--------|-------------|
-| `ip` | Pacchetti IP/IPv4/IPv6 |
-| `tcp` | Pacchetti TCP |
-| `udp` | Pacchetti UDP |
-| `dns` | DNS/mDNS |
-| `http` | HTTP/HTTP-Alt |
-| `https` | HTTPS/HTTPS-Alt |
-| `tls` | Traffico classificato come HTTPS/TLS |
-| `arp` | ARP |
-| `icmp` | ICMP |
-| `ssh` | SSH |
+| Filter | Meaning |
+| --- | --- |
+| `ip` | IP, IPv4, or IPv6 packets. |
+| `tcp` | TCP packets. |
+| `udp` | UDP packets. |
+| `dns` | DNS or mDNS packets. |
+| `http` | HTTP or HTTP-Alt traffic. |
+| `https` | HTTPS or HTTPS-Alt traffic. |
+| `tls` | Traffic classified as HTTPS/TLS. |
+| `arp` | ARP packets. |
+| `icmp` | ICMP packets. |
+| `ssh` | SSH traffic. |
 
-### Esempi utili
+### Useful examples
 
 ```text
 ip.addr == 8.8.8.8
@@ -634,559 +506,387 @@ info contains "Query"
 
 ---
 
-## 🛰️ Arricchimento IP esterno
+## External IP enrichment
 
-Il pulsante **Analizza con tool esterni** mostra prima un popup di consenso, poi invia al backend gli IP osservati nel PCAP e recupera informazioni aggiuntive usando più fonti:
+The **Analyze with external tools** button first shows a consent popup, then sends observed public IPs to the backend and collects additional information from multiple sources.
 
-| Fonte | Dati recuperati |
-|-------|-----------------|
-| RDAP/IANA | Registry, range IP, handle, nome risorsa, entità e note RDAP |
-| Team Cymru | ASN, prefisso BGP, registry, country code e AS name |
-| Reverse DNS | Nome PTR associato all'indirizzo IP |
-| ip-api | Paese, regione, città, ISP, organizzazione, timezone, proxy/VPN, mobile e hosting |
+| Source | Data retrieved |
+| --- | --- |
+| RDAP/IANA | Registry, IP range, handle, resource name, entities, and RDAP notes. |
+| Team Cymru | ASN, BGP prefix, registry, country code, and AS name. |
+| Reverse DNS | PTR name associated with the IP address. |
+| ip-api | Country, region, city, ISP, organization, timezone, proxy/VPN, mobile, and hosting flags. |
 
-Gli indirizzi privati, locali, multicast, riservati o comunque non globali vengono scartati e **non vengono inviati a servizi esterni**. L'arricchimento è opt-in: avviene solo quando l'utente conferma il popup dedicato.
+Private, local, multicast, reserved, and otherwise non-global addresses are discarded and are **not sent to external services**.
 
-I risultati vengono usati per:
-- arricchire il popup **Top IP**;
-- colorare la **Mappa traffico IP** e mostrare i flow collegati quando si clicca su un paese;
-- alimentare il pannello **Security**;
-- fornire contesto alla tab **Security avanzata**;
-- includere le informazioni esterne nell'export JSON.
+Enrichment is opt-in and only runs after the user confirms the dedicated popup.
+
+Results are used to:
+
+- enrich the **Top IPs** popup;
+- color the **IP traffic map** and show related flows by country;
+- feed the **Security** panel;
+- provide context to the **Advanced security** tab;
+- include external information in the JSON export.
 
 ---
 
-## 🌳 Flow 5-tuple e Tracce avanzate
+## 5-tuple flows and advanced traces
 
-Il backend ricostruisce veri flow 5-tuple TCP/UDP durante la lettura streaming del PCAP. Ogni flow è identificato dal primo verso osservato:
+The backend reconstructs true 5-tuple TCP/UDP flows while streaming the PCAP.
+
+Each flow is identified by the first observed direction:
 
 ```text
-src_ip, src_port, dst_ip, dst_port, protocollo L4
+src_ip, src_port, dst_ip, dst_port, L4 protocol
 ```
 
-I pacchetti nel verso inverso vengono associati allo stesso flow tramite una chiave bidirezionale, ma il JSON conserva il 5-tuple originale e un `flow_id` stabile.
+Packets in the reverse direction are associated with the same flow through a bidirectional key, while the JSON keeps the original 5-tuple and a stable `flow_id`.
 
-Per ogni elemento in `flows` vengono calcolati:
+For each item in `flows`, PCAPCaper computes:
+
 - `flow_id`;
-- IP e porta sorgente;
-- IP e porta destinazione;
-- protocollo L4;
-- primo e ultimo timestamp;
-- durata;
-- pacchetti e byte totali;
-- pacchetti e byte client -> server;
-- pacchetti e byte server -> client;
-- flag TCP aggregati;
-- stato approssimativo (`opening`, `established`, `closing`, `closed`, `reset`, `request_response`, `one_way`, ecc.);
-- numeri dei pacchetti appartenenti al flow.
+- source IP and port;
+- destination IP and port;
+- L4 protocol;
+- first and last timestamp;
+- duration;
+- total packets and bytes;
+- client-to-server packets and bytes;
+- server-to-client packets and bytes;
+- aggregated TCP flags;
+- approximate state, such as `opening`, `established`, `closing`, `closed`, `reset`, `request_response`, or `one_way`;
+- packet numbers that belong to the flow.
 
-La tab **Tracce avanzate** usa questi dati per mostrare sulle radici dell'alberatura l'ID del flow, lo stato calcolato dal backend e i contatori direzionali C->S/S->C. La correlazione visuale pacchetto-risposta-ACK resta disponibile come albero navigabile.
-
----
-
-## 🛡️ Security
-
-Il container **Security** segnala connessioni potenzialmente rischiose usando le informazioni raccolte localmente e tramite arricchimento esterno. Le segnalazioni sono euristiche e non sostituiscono feed di threat intelligence o blacklist dedicate.
-
-Le regole attuali considerano:
-- IP segnalati come proxy/VPN;
-- IP associati a hosting/datacenter;
-- traffico verso servizi non cifrati come HTTP, FTP, Telnet, SMTP, POP3 e IMAP;
-- servizi di amministrazione remota come SSH, RDP, VNC, SMB e Telnet;
-- servizi database come MySQL, PostgreSQL, Redis, MongoDB, MSSQL e Oracle;
-- porte sensibili;
-- volume di traffico elevato rispetto alle altre destinazioni;
-- destinazioni geolocalizzate fuori dal contesto locale.
-
-Ogni finding mostra IP, severità, score, ASN/paese se disponibili, volume, pacchetti e motivazioni concrete.
+The **Advanced traces** tab uses these data to show the flow ID, backend-computed state, and directional counters at the roots of the trace tree. Visual packet-response-ACK correlation remains available as a navigable tree.
 
 ---
 
-## 🚨 Security avanzata
+## Security analysis
 
-La tab **Security avanzata** esegue un'analisi più profonda e più simile a un triage professionale. Per ridurre spreco di CPU e richieste esterne, il workflow è esplicito:
+The **Security** panel reports potentially risky connections using locally collected data and optional external enrichment.
 
-1. carica e analizza il PCAP;
-2. premi **Analizza con tool esterni** per arricchire gli IP;
-3. apri **Security avanzata**;
-4. premi **Analisi di sicurezza**;
-5. conferma il popup che informa sull'uso di servizi esterni.
+Findings are heuristic and do not replace dedicated threat intelligence feeds or blacklists.
 
-Solo dopo la conferma vengono chiamati i servizi di threat intelligence.
+Current rules consider:
 
-### Fonti e dati usati
+- IPs reported as proxy/VPN;
+- IPs associated with hosting or datacenters;
+- traffic to cleartext services such as HTTP, FTP, Telnet, SMTP, POP3, and IMAP;
+- remote administration services such as SSH, RDP, VNC, SMB, and Telnet;
+- database services such as MySQL, PostgreSQL, Redis, MongoDB, MSSQL, and Oracle;
+- sensitive ports;
+- high traffic volume compared with other destinations;
+- destinations geolocated outside the local context.
 
-| Fonte | Requisiti | Dati usati |
-|-------|-----------|-----------|
-| Shodan InternetDB | Nessuna API key | Porte esposte, CPE, tag, hostname e CVE associate all'IP |
-| Feodo Tracker | Nessuna API key | Indicatori C2 botnet dal feed pubblico JSON |
-| URLhaus | Variabile backend `URLHAUS_AUTH_KEY` | Host associati a URL di distribuzione malware |
-| Motore locale PCAPCaper | Nessuno | Peer, porte, protocolli, volumi, fan-out, campioni pacchetto |
-| Arricchimento IP precedente | Click su "Analizza con tool esterni" | ASN, paese, proxy/VPN, hosting/datacenter, reverse DNS |
+Each finding shows IP, severity, score, ASN/country when available, traffic volume, packets, and concrete reasons.
 
-### Output della tab
+### Advanced security
 
-La tab mostra:
-- conteggi per severità: critica, alta, media, bassa;
-- finding ordinati per rischio;
-- score 0-100 e confidenza;
-- evidenze concrete tratte da pacchetti e fonti esterne;
-- raccomandazioni operative per triage, contenimento o verifica;
-- riferimenti MITRE ATT&CK quando pertinenti;
-- stato delle fonti usate e errori non bloccanti;
-- classifica degli IP più rischiosi.
+The **Advanced security** tab runs a deeper triage-oriented analysis. To reduce CPU usage and avoid unwanted external requests, the workflow is explicit:
 
-### Privacy e controllo
+1. upload and analyze the PCAP;
+2. click **Analyze with external tools** to enrich IPs;
+3. open **Advanced security**;
+4. click **Security analysis**;
+5. confirm the popup explaining which external services may be used.
 
-La chiamata a `/api/security-analysis` è opt-in. Il popup informa l'utente prima di inviare dati a servizi terzi. Il backend analizza solo IP pubblici per le interrogazioni esterne; IP privati, locali o riservati non vengono usati per le query di threat intelligence.
+Only after confirmation are threat intelligence services called.
 
-Per abilitare URLhaus:
+### Sources and data used
+
+| Source | Requirements | Data used |
+| --- | --- | --- |
+| Shodan InternetDB | No API key | Exposed ports, CPEs, tags, hostnames, and CVEs associated with the IP. |
+| Feodo Tracker | No API key | Botnet C2 indicators from the public JSON feed. |
+| URLhaus | Backend variable `URLHAUS_AUTH_KEY` | Hosts associated with malware distribution URLs. |
+| Local PCAPCaper engine | None | Peers, ports, protocols, volumes, fan-out, and packet samples. |
+| Previous IP enrichment | Click on **Analyze with external tools** | ASN, country, proxy/VPN, hosting/datacenter, and reverse DNS. |
+
+### Tab output
+
+The tab shows:
+
+- severity counters: critical, high, medium, low;
+- findings sorted by risk;
+- 0-100 score and confidence;
+- concrete evidence from packets and external sources;
+- operational recommendations for triage, containment, or verification;
+- MITRE ATT&CK references when relevant;
+- status of used sources and non-blocking errors;
+- ranking of the riskiest IPs.
+
+### Privacy and control
+
+The `/api/security-analysis` call is opt-in. The popup informs the user before sending data to third-party services.
+
+The backend only uses public IP addresses for external lookups. Private, local, and reserved IPs are not used for threat intelligence queries.
+
+To enable URLhaus:
 
 ```bash
-export URLHAUS_AUTH_KEY="la-tua-auth-key"
+export URLHAUS_AUTH_KEY="your-auth-key"
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Senza `URLHAUS_AUTH_KEY`, la fonte URLhaus viene mostrata come `skipped` e l'analisi prosegue con le altre fonti.
+Without `URLHAUS_AUTH_KEY`, URLhaus is shown as `skipped` and analysis continues with the other sources.
 
 ---
 
-## 🌐 Analisi DNS
+## DNS analysis
 
-La tab **DNS** è dedicata esclusivamente alle richieste DNS osservate nel PCAP. La vista è pensata in stile AdGuard: riepilogo immediato, domini più richiesti, client più attivi, resolver usati e indicatori di tracking, advertising o rischio.
+The **DNS** tab is dedicated to DNS requests observed in the PCAP. The view is AdGuard-inspired and provides immediate summaries, top domains, most active clients, resolvers, and tracking, advertising, or risk indicators.
 
-### Analisi locale
+### Local analysis
 
-Senza inviare dati all'esterno, il backend produce una sezione `dns` nel JSON dell'analisi. La tab:
-- estrae query DNS, tipo record e transaction ID;
-- correla risposte alla query quando possibile;
-- mostra codice risposta (`NOERROR`, `NXDOMAIN`, `SERVFAIL`, `REFUSED`, ecc.);
-- mostra answer e TTL quando disponibili;
-- calcola client richiedente e resolver interrogato;
-- aggrega domini più richiesti, client più attivi e resolver più usati;
-- calcola il rapporto NXDOMAIN;
-- segnala query TXT sospette;
-- evidenzia possibili indicatori di DNS tunneling: label molto lunghe, molti sottodomini unici, entropia approssimata elevata e volume anomalo verso lo stesso dominio;
-- correla dominio -> IP di risposta -> flow successivi quando l'IP restituito compare nei flow 5-tuple.
+Without sending data outside, the backend produces a `dns` section in the analysis JSON.
 
-La vista include filtri per dominio, client, tipo record e rcode.
+The tab:
 
-### Controllo liste esterne
+- extracts DNS queries, record types, and transaction IDs;
+- correlates responses with queries when possible;
+- shows response codes such as `NOERROR`, `NXDOMAIN`, `SERVFAIL`, and `REFUSED`;
+- shows answers and TTLs when available;
+- identifies requesting clients and queried resolvers;
+- aggregates top domains, top clients, and top resolvers;
+- calculates the NXDOMAIN ratio;
+- flags suspicious TXT queries;
+- highlights possible DNS tunneling indicators, such as very long labels, many unique subdomains, high approximate entropy, and abnormal volume toward the same domain;
+- correlates domain → answer IP → later flows when the returned IP appears in the 5-tuple flows.
 
-Il pulsante **Controlla liste esterne** mostra prima un popup di consenso. Solo dopo la conferma, il backend confronta i domini con:
+The view includes filters by domain, client, record type, and rcode.
 
-| Fonte | Requisiti | Dati usati |
-|-------|-----------|-----------|
-| AdGuard DNS filter | Nessuna API key | Regole DNS-level per ads, tracking, cryptomining e domini malevoli |
-| StevenBlack hosts | Nessuna API key | Hosts list aggregata con domini ads/tracking/malware |
-| URLhaus | Variabile backend `URLHAUS_AUTH_KEY` | Host associati a URL di distribuzione malware |
+### External list checks
 
-La risposta mostra fonti usate, stato dei download, errori non bloccanti, categorie e regole che hanno prodotto il match.
+The **Check external lists** button shows a consent popup before any external request.
 
-### Privacy DNS
+After confirmation, the backend checks domains against:
 
-L'analisi DNS locale è privacy-by-default: usa solo il PCAP caricato e non invia domini a servizi esterni. La reputazione DNS esterna è opt-in. Nessun dominio viene inviato a servizi esterni durante il caricamento PCAP o l'analisi standard. L'invio avviene solo dalla tab **DNS**, dopo conferma esplicita dell'utente.
+| Source | Requirements | Data used |
+| --- | --- | --- |
+| AdGuard DNS filter | No API key | DNS-level rules for ads, tracking, cryptomining, and malicious domains. |
+| StevenBlack hosts | No API key | Aggregated hosts list for ads, tracking, and malware. |
+| URLhaus | Backend variable `URLHAUS_AUTH_KEY` | Hosts associated with malware distribution URLs. |
+
+The response shows used sources, download status, non-blocking errors, categories, and rules that produced matches.
+
+### DNS privacy
+
+Local DNS analysis is privacy-by-default: it only uses the uploaded PCAP and does not send domains to external services.
+
+External DNS reputation is opt-in. No domain is sent to external services during PCAP upload or standard analysis. Sending happens only from the **DNS** tab, after explicit user confirmation.
 
 ---
 
-## 🌍 HTTP analysis
+## HTTP analysis
 
-La tab **HTTP analysis** mostra metadati HTTP estratti solo da traffico in chiaro. Non decifra HTTPS/TLS e non invia dati a servizi esterni.
+The **HTTP analysis** tab shows HTTP metadata extracted only from cleartext traffic. It does not decrypt HTTPS/TLS and does not send data to external services.
 
-Per le richieste HTTP vengono estratti, quando disponibili:
+For HTTP requests, PCAPCaper extracts, when available:
+
 - timestamp;
-- client IP/porta;
-- server IP/porta;
-- metodo;
+- client IP and port;
+- server IP and port;
+- method;
 - host;
 - URI/path;
 - user-agent;
 - referer;
 - content-type;
-- dimensione approssimativa payload.
+- approximate payload size.
 
-Per le risposte HTTP vengono estratti:
+For HTTP responses, it extracts:
+
 - status code;
 - reason phrase;
-- header `Server`;
+- `Server` header;
 - content-type;
 - content-length;
-- file name dedotto da `Content-Disposition` o dalla URI della richiesta.
+- file name inferred from `Content-Disposition` or the request URI.
 
-La tab include:
-- tabella richieste con risposta correlata quando possibile;
-- host più contattati;
-- user-agent più frequenti;
-- filtri per host, metodo, status e user-agent.
+The tab includes:
 
-### Limiti HTTP
+- request table with correlated responses when possible;
+- most contacted hosts;
+- most frequent user agents;
+- filters by host, method, status, and user-agent.
 
-Il parser è prudente:
-- analizza solo payload TCP che iniziano come HTTP testuale;
-- non ricostruisce stream TCP completi;
-- header o body frammentati possono essere marcati come parziali;
-- la dimensione payload è stimata da `Content-Length` o dai byte presenti nel segmento osservato;
-- il traffico cifrato HTTPS/TLS non viene interpretato.
+### HTTP limitations
 
----
+The parser is conservative:
 
-## 🔐 TLS analysis
-
-La tab **TLS analysis** analizza SSL/TLS usando solo metadati osservabili nei record di handshake presenti nel PCAP. Non decifra traffico, non richiede chiavi private e non mostra contenuti applicativi cifrati.
-
-Quando disponibili vengono estratti:
-- SNI dal `ClientHello`;
-- versione TLS offerta o negoziata;
-- cipher suite negoziata dal `ServerHello`;
-- ALPN annunciato o negoziato;
-- subject e issuer del certificato leaf;
-- validità del certificato;
-- fingerprint SHA256 del certificato DER;
-- fingerprint JA3 e JA3S quando i messaggi necessari sono completi;
-- stato parziale quando record o handshake risultano frammentati.
-
-La tab include:
-- tabella connessioni TLS con client, server, SNI, versione, cipher, certificato e fingerprint;
-- filtri per SNI, server IP, versione e presenza anomalie;
-- riepilogo SNI più frequenti, versioni TLS e issuer certificato;
-- pannello limiti parser per distinguere chiaramente cosa è osservabile e cosa non lo è.
-
-### Anomalie TLS
-
-Le anomalie sono euristiche e basate sui soli metadati disponibili:
-- certificato scaduto rispetto al timestamp della cattura;
-- certificato non ancora valido;
-- certificato self-signed;
-- SNI mancante;
-- TLS legacy (`SSL 3.0`, `TLS 1.0`, `TLS 1.1`);
-- mismatch approssimato tra DNS osservato nel PCAP e SNI, quando entrambi sono disponibili.
-
-### Limiti TLS
-
-Il parser TLS è volutamente conservativo:
-- non decifra payload TLS e non recupera URL, header HTTP o contenuti cifrati;
-- non ricostruisce stream TCP completi;
-- record TLS frammentati su più segmenti possono essere marcati come parziali;
-- subject e issuer sono disponibili solo se il certificato è presente nel PCAP e decodificabile dalla libreria standard Python;
-- il mismatch DNS/SNI usa solo risposte DNS viste nella cattura, quindi può produrre falsi positivi se il DNS è assente, cacheato o risolto fuori cattura.
+- it only analyzes TCP payloads that start as textual HTTP;
+- it does not fully reconstruct TCP streams;
+- fragmented headers or bodies may be marked as partial;
+- payload size is estimated from `Content-Length` or from bytes present in the observed segment;
+- encrypted HTTPS/TLS traffic is not interpreted.
 
 ---
 
-## 🖥️ Hosts
+## TLS analysis
 
-La tab **Hosts** mostra una vista dettaglio per ogni IP osservato nel PCAP. Le sezioni sono collapsable, chiuse di default, e possono essere aperte quando serve approfondire un host specifico. Gli IP nella lista pacchetti sono cliccabili: il click apre direttamente la tab **Hosts** filtrata su quell'indirizzo.
+The **TLS analysis** tab analyzes SSL/TLS using only observable metadata from handshake records present in the PCAP.
 
-Per ogni host vengono mostrati:
-- ruolo stimato: `client`, `server`, `misto` o `ignoto`;
-- classificazione privato/pubblico;
-- hostname dedotti da DNS osservato nel PCAP e reverse DNS da tool esterni quando disponibile;
-- ASN, organizzazione e geolocalizzazione se l'arricchimento IP è stato abilitato dall'utente;
-- protocolli usati;
-- porte remote contattate;
-- porte esposte/osservate come lato server;
-- byte e pacchetti inviati/ricevuti;
-- flow collegati;
-- query DNS generate;
-- SNI TLS e host HTTP osservati;
-- finding associati, ad esempio HTTP in chiaro o anomalie TLS;
-- timeline attività con byte inviati/ricevuti per bucket temporale.
+It does not decrypt traffic, does not require private keys, and does not show encrypted application content.
 
-La sezione `hosts` viene calcolata dal backend durante l'analisi standard e non invia dati a servizi esterni. I dati ASN/geo vengono solo visualizzati quando sono già presenti in `external_ip_info`, cioè dopo il consenso dell'utente tramite **Analizza con tool esterni**.
+When available, it extracts:
+
+- SNI from `ClientHello`;
+- offered or negotiated TLS version;
+- cipher suite negotiated in `ServerHello`;
+- advertised or negotiated ALPN;
+- subject and issuer of the leaf certificate;
+- certificate validity period;
+- SHA256 fingerprint of the DER certificate;
+- JA3 and JA3S fingerprints when the required messages are complete;
+- partial state when records or handshakes are fragmented.
+
+The tab includes:
+
+- TLS connections table with client, server, SNI, version, cipher, certificate, and fingerprint;
+- filters by SNI, server IP, version, and anomaly presence;
+- summaries of most frequent SNI values, TLS versions, and certificate issuers;
+- parser limitation panel to clearly separate what is observable from what is not.
+
+### TLS anomalies
+
+Anomalies are heuristic and based only on available metadata:
+
+- certificate expired at the capture timestamp;
+- certificate not yet valid;
+- self-signed certificate;
+- missing SNI;
+- legacy TLS, such as `SSL 3.0`, `TLS 1.0`, or `TLS 1.1`;
+- approximate mismatch between DNS observed in the PCAP and SNI, when both are available.
+
+### TLS limitations
+
+The TLS parser is intentionally conservative:
+
+- it does not decrypt TLS payloads and does not recover URLs, HTTP headers, or encrypted content;
+- it does not fully reconstruct TCP streams;
+- TLS records fragmented across multiple segments may be marked as partial;
+- subject and issuer are available only if the certificate is present in the PCAP and can be decoded by the Python standard library;
+- DNS/SNI mismatch uses only DNS responses seen in the capture, so false positives may occur if DNS is absent, cached, or resolved outside the capture.
 
 ---
 
-## 🕸️ Grafo di rete
+## Hosts
 
-La tab **Grafo** mostra una rappresentazione host-to-host costruita dai flow 5-tuple calcolati dal backend.
+The **Hosts** tab shows a detail view for each IP observed in the PCAP. Sections are collapsible and closed by default. IPs in the packet list are clickable and open the **Hosts** tab filtered on that address.
 
-Caratteristiche principali:
-- ogni nodo rappresenta un IP/host;
-- ogni arco aggrega uno o più flow tra due host;
-- lo spessore dell'arco può essere basato su byte o pacchetti;
-- il colore del nodo evidenzia host interni/esterni e presenza di finding;
-- il grafo è limitato ai flow più pesanti quando la cattura è molto grande, per mantenere la UI reattiva.
+For each host, PCAPCaper shows:
 
-Filtri disponibili:
-- protocollo del flow;
-- comunicazioni interne, esterne o interno ↔ esterno;
-- severità finding dedotta dalle evidenze disponibili;
-- metrica di peso: byte o pacchetti.
+- estimated role: `client`, `server`, `mixed`, or `unknown`;
+- private/public classification;
+- hostnames inferred from DNS observed in the PCAP and reverse DNS from external tools when available;
+- ASN, organization, and geolocation if IP enrichment was enabled by the user;
+- used protocols;
+- contacted remote ports;
+- exposed or observed server-side ports;
+- sent and received bytes and packets;
+- related flows;
+- generated DNS queries;
+- observed TLS SNI values and HTTP hosts;
+- associated findings, such as cleartext HTTP or TLS anomalies;
+- activity timeline with sent and received bytes per time bucket.
 
-Interazioni:
-- click su un nodo: riepilogo host, traffico, protocolli, flow collegati e finding;
-- click su un arco: flow sottostanti, endpoint, traffico, pacchetti e stato del flow.
+The `hosts` section is computed by the backend during standard analysis and does not send data to external services.
 
-La vista è implementata in SVG senza introdurre nuove dipendenze frontend.
+ASN/geo data are only displayed when already present in `external_ip_info`, after user consent through **Analyze with external tools**.
 
 ---
 
-## 📡 API Reference
+## Network graph
+
+The **Graph** tab shows a host-to-host representation built from backend-computed 5-tuple flows.
+
+Main characteristics:
+
+- each node represents an IP/host;
+- each edge aggregates one or more flows between two hosts;
+- edge thickness can be based on bytes or packets;
+- node color highlights internal/external hosts and finding presence;
+- for very large captures, the graph is limited to the heaviest flows to keep the UI responsive.
+
+Available filters:
+
+- flow protocol;
+- internal, external, or internal ↔ external communications;
+- finding severity inferred from available evidence;
+- weight metric: bytes or packets.
+
+Interactions:
+
+- click on a node to show host summary, traffic, protocols, related flows, and findings;
+- click on an edge to show underlying flows, endpoints, traffic, packets, and flow state.
+
+The view is implemented in SVG without adding new frontend dependencies.
+
+---
+
+## API reference
 
 ### `GET /api/health`
 
-Verifica che il backend sia attivo.
+Checks whether the backend is running.
 
-**Risposta:**
+**Response:**
+
 ```json
-{ "status": "ok", "service": "pcap-analyzer" }
+{
+  "status": "ok",
+  "service": "pcap-analyzer"
+}
 ```
 
 ---
 
 ### `POST /api/analyze`
 
-Analizza un file PCAP e restituisce le statistiche.
+Analyzes a PCAP file and returns the report.
 
 **Request:** `Content-Type: multipart/form-data`
 
-| Campo | Tipo | Descrizione |
-|-------|------|-------------|
-| `file` | File | File `.pcap`, `.pcapng` o `.cap`; limite applicativo configurabile con `PCAPCAPER_UPLOAD_MAX_MB` |
+| Field | Type | Description |
+| --- | --- | --- |
+| `file` | File | `.pcap`, `.pcapng`, or `.cap` file. Application-level size limit is configurable through `PCAPCAPER_UPLOAD_MAX_MB`. |
 
-**Risposta (200 OK):**
-```json
-{
-  "filename": "capture.pcap",
-  "summary": {
-    "total_packets": 12543,
-    "total_bytes": 9876543,
-    "capture_start": "2024-03-15T10:23:01+00:00",
-    "capture_end": "2024-03-15T10:28:47+00:00",
-    "duration_seconds": 346.2,
-    "avg_packet_size": 787.5,
-    "packets_per_second": 36.2
-  },
-  "protocols": [
-    { "protocol": "HTTPS", "count": 4521, "bytes": 6234512, "percentage": 36.04 }
-  ],
-  "top_src_ips": [
-    {
-      "ip": "192.168.1.10",
-      "count": 3201,
-      "bytes": 4512000,
-      "protocols": ["TCP", "HTTPS"],
-      "hostnames": [],
-      "peers": ["93.184.216.34"],
-      "services": [
-        {
-          "service": "HTTPS",
-          "port": 443,
-          "protocol": "TCP",
-          "direction": "client",
-          "count": 1200,
-          "peers": ["93.184.216.34"]
-        }
-      ]
-    }
-  ],
-  "top_dst_ips": [ ... ],
-  "top_src_ports": [ { "port": 443, "service": "HTTPS", "count": 4521, "protocol": "TCP" } ],
-  "top_dst_ports": [ ... ],
-  "conversations": [
-    { "src_ip": "10.0.0.1", "dst_ip": "8.8.8.8", "packets": 120, "bytes": 9800, "protocols": ["DNS"] }
-  ],
-  "flows": [
-    {
-      "flow_id": "a1b2c3d4e5f60789",
-      "src_ip": "192.168.1.10",
-      "src_port": 52341,
-      "dst_ip": "8.8.8.8",
-      "dst_port": 53,
-      "protocol": "UDP",
-      "first_seen": "2024-03-15T10:23:01.123000+00:00",
-      "last_seen": "2024-03-15T10:23:01.190000+00:00",
-      "duration_seconds": 0.067,
-      "packets_total": 2,
-      "bytes_total": 148,
-      "packets_client_to_server": 1,
-      "packets_server_to_client": 1,
-      "bytes_client_to_server": 74,
-      "bytes_server_to_client": 74,
-      "tcp_flags": [],
-      "state": "request_response",
-      "packet_numbers": [1, 2]
-    }
-  ],
-  "dns": {
-    "stats": {
-      "total_queries": 1,
-      "total_responses": 1,
-      "unique_domains": 1,
-      "nxdomain_count": 0,
-      "nxdomain_ratio": 0.0,
-      "txt_query_count": 0,
-      "suspicious_txt_count": 0
-    },
-    "queries": [
-      {
-        "packet_number": 1,
-        "timestamp": "2024-03-15T10:23:01.123000+00:00",
-        "client": "192.168.1.10",
-        "resolver": "8.8.8.8",
-        "transaction_id": 4242,
-        "query": "example.com",
-        "record_type": "A",
-        "response_code": 0,
-        "response_code_name": "NOERROR",
-        "response_packet_number": 2,
-        "answers": [
-          { "name": "example.com", "record_type": "A", "value": "93.184.216.34", "ttl": 300 }
-        ],
-        "ttls": [300],
-        "answer_ips": ["93.184.216.34"],
-        "txt_answers": [],
-        "suspicious_txt": false,
-        "indicators": []
-      }
-    ],
-    "top_domains": [{ "value": "example.com", "count": 1 }],
-    "top_clients": [{ "value": "192.168.1.10", "count": 1 }],
-    "top_resolvers": [{ "value": "8.8.8.8", "count": 1 }],
-    "tunneling_indicators": [],
-    "flow_correlations": [
-      { "domain": "example.com", "answer_ip": "93.184.216.34", "flow_ids": ["..."], "dns_packet_numbers": [1] }
-    ]
-  },
-  "http": {
-    "stats": {
-      "total_requests": 1,
-      "total_responses": 1,
-      "correlated_responses": 1,
-      "partial_requests": 0,
-      "partial_responses": 0,
-      "unique_hosts": 1
-    },
-    "requests": [
-      {
-        "packet_number": 10,
-        "timestamp": "2024-03-15T10:23:02.000000+00:00",
-        "client_ip": "192.168.1.10",
-        "client_port": 52344,
-        "server_ip": "93.184.216.34",
-        "server_port": 80,
-        "method": "GET",
-        "host": "example.com",
-        "uri": "/index.html",
-        "user_agent": "curl/8.0",
-        "referer": null,
-        "content_type": null,
-        "payload_size": 0,
-        "partial": false,
-        "response_packet_number": 11,
-        "response_status_code": 200,
-        "response_reason": "OK",
-        "response_server": "nginx",
-        "response_content_type": "text/html",
-        "response_content_length": 1256,
-        "response_file_name": "index.html",
-        "response_partial": false
-      }
-    ],
-    "top_hosts": [{ "value": "example.com", "count": 1 }],
-    "top_user_agents": [{ "value": "curl/8.0", "count": 1 }],
-    "limitations": ["Analizza solo traffico HTTP in chiaro su TCP.", "Non decifra HTTPS/TLS."]
-  },
-  "tls": {
-    "stats": {
-      "total_connections": 1,
-      "with_sni": 1,
-      "with_certificate": 1,
-      "anomalous_connections": 0,
-      "expired_certificates": 0,
-      "legacy_tls": 0
-    },
-    "connections": [
-      {
-        "packet_number": 20,
-        "timestamp": "2024-03-15T10:23:03.000000+00:00",
-        "client_ip": "192.168.1.10",
-        "client_port": 52345,
-        "server_ip": "93.184.216.34",
-        "server_port": 443,
-        "sni": "example.com",
-        "tls_version": "TLS 1.3",
-        "cipher_suite": "TLS_AES_128_GCM_SHA256",
-        "alpn": ["h2", "http/1.1"],
-        "cert_subject": "commonName=example.com",
-        "cert_issuer": "commonName=Example CA",
-        "cert_not_before": "Mar 01 00:00:00 2024 GMT",
-        "cert_not_after": "Mar 01 23:59:59 2025 GMT",
-        "cert_sha256": "012345...",
-        "ja3": "d4f...",
-        "ja3_string": "771,...",
-        "ja3s": "15a...",
-        "ja3s_string": "771,4865,...",
-        "anomalies": [],
-        "partial": false
-      }
-    ],
-    "top_sni": [{ "value": "example.com", "count": 1 }],
-    "top_issuers": [{ "value": "commonName=Example CA", "count": 1 }],
-    "top_versions": [{ "value": "TLS 1.3", "count": 1 }],
-    "limitations": ["Non decifra il traffico TLS e non recupera contenuti applicativi."]
-  },
-  "hosts": {
-    "total_hosts": 2,
-    "hosts": [
-      {
-        "ip": "192.168.1.10",
-        "role": "client",
-        "is_private": true,
-        "hostnames": [],
-        "protocols": ["DNS", "TCP", "TLS"],
-        "contacted_ports": [53, 80, 443],
-        "exposed_ports": [],
-        "bytes_sent": 2450,
-        "bytes_received": 9820,
-        "packets_sent": 22,
-        "packets_received": 24,
-        "flow_ids": ["a1b2c3d4e5f60789"],
-        "dns_queries": ["example.com"],
-        "sni_hosts": ["example.com"],
-        "http_hosts": ["example.com"],
-        "findings": ["HTTP in chiaro verso example.com"],
-        "timeline": [
-          {
-            "timestamp": "10:23:01",
-            "packets_sent": 2,
-            "packets_received": 1,
-            "bytes_sent": 148,
-            "bytes_received": 74
-          }
-        ]
-      }
-    ]
-  },
-  "timeline": [
-    { "timestamp": "10:23:01", "packets": 45, "bytes": 38000 }
-  ],
-  "packets": [
-    {
-      "number": 1, "timestamp": "10:23:01.123", "src_ip": "192.168.1.10",
-      "dst_ip": "8.8.8.8", "protocol": "DNS", "length": 74,
-      "src_port": 52341, "dst_port": 53, "info": "DNS Query: google.com"
-    }
-  ],
-  "external_ip_info": {}
-}
-```
+**Response sections include:**
 
-**Errori:**
+- `filename`;
+- `summary`;
+- `protocols`;
+- `top_src_ips`;
+- `top_dst_ips`;
+- `top_src_ports`;
+- `top_dst_ports`;
+- `conversations`;
+- `flows`;
+- `dns`;
+- `http`;
+- `tls`;
+- `hosts`;
+- `timeline`;
+- `packets`;
+- `external_ip_info`.
 
-| Codice | Causa |
-|--------|-------|
-| 400 | Estensione file non supportata o file vuoto |
-| 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
-| 422 | File PCAP corrotto o senza pacchetti validi |
-| 500 | Errore interno del server |
+**Error responses:**
+
+| Status code | Cause |
+| --- | --- |
+| `400` | Unsupported file extension or empty file. |
+| `413` | File exceeds `PCAPCAPER_UPLOAD_MAX_MB`, when configured. |
+| `422` | Corrupted PCAP file or no valid packets found. |
+| `500` | Internal server error. |
 
 ---
 
 ### `POST /api/enrich-ips`
 
-Arricchisce una lista di IP usando tool esterni. L'endpoint è usato dal pulsante **Analizza con tool esterni**.
+Enriches a list of public IPs using external tools. This endpoint is used by the **Analyze with external tools** button.
 
-**Request:** `Content-Type: application/json`
+**Request:**
 
 ```json
 {
@@ -1194,288 +894,87 @@ Arricchisce una lista di IP usando tool esterni. L'endpoint è usato dal pulsant
 }
 ```
 
-**Risposta (200 OK):**
-
-```json
-{
-  "results": {
-    "8.8.8.8": {
-      "ip": "8.8.8.8",
-      "status": "enriched",
-      "sources": ["Reverse DNS", "Team Cymru", "RDAP/IANA", "ip-api"],
-      "reverse_dns": "dns.google",
-      "asn": "15169",
-      "as_name": "GOOGLE",
-      "bgp_prefix": "8.8.8.0/24",
-      "registry": "arin",
-      "country": "United States",
-      "country_code": "US",
-      "isp": "Google LLC",
-      "org": "Google Public DNS",
-      "proxy": false,
-      "hosting": true,
-      "errors": []
-    },
-    "192.168.1.10": {
-      "ip": "192.168.1.10",
-      "status": "skipped",
-      "reason": "Indirizzo privato, locale, riservato o non valido: non inviato a servizi esterni."
-    }
-  }
-}
-```
-
-**Note privacy:** il backend scarta gli IP non globali prima di qualunque chiamata esterna.
+**Privacy note:** non-global IPs are discarded before any external call.
 
 ---
 
 ### `POST /api/security-analysis`
 
-Esegue l'analisi di sicurezza avanzata del traffico. L'endpoint viene chiamato dalla tab **Security avanzata** solo dopo conferma esplicita dell'utente.
+Runs advanced traffic security analysis. The endpoint is called by the **Advanced security** tab only after explicit user confirmation.
 
-**Request:** `Content-Type: application/json`
-
-```json
-{
-  "packets": [
-    {
-      "number": 1,
-      "timestamp": "10:23:01.123",
-      "src_ip": "192.168.1.10",
-      "dst_ip": "8.8.8.8",
-      "protocol": "DNS",
-      "length": 74,
-      "src_port": 52341,
-      "dst_port": 53,
-      "info": "DNS Query"
-    }
-  ],
-  "external_ip_info": {
-    "8.8.8.8": {
-      "ip": "8.8.8.8",
-      "status": "enriched",
-      "sources": ["Reverse DNS", "Team Cymru", "RDAP/IANA", "ip-api"]
-    }
-  },
-  "max_ips": 80
-}
-```
-
-**Risposta (200 OK):**
-
-```json
-{
-  "summary": {
-    "total_ips": 12,
-    "analyzed_public_ips": 4,
-    "critical": 0,
-    "high": 1,
-    "medium": 2,
-    "low": 3,
-    "info": 0,
-    "total_findings": 6
-  },
-  "findings": [
-    {
-      "id": "vulns-93.184.216.34",
-      "severity": "high",
-      "category": "Exposure",
-      "title": "Servizi esposti con CVE note secondo Shodan InternetDB",
-      "ip": "93.184.216.34",
-      "score": 86,
-      "confidence": 78,
-      "sources": ["Shodan InternetDB", "Traffico PCAP"],
-      "evidence": ["CVE: CVE-..."],
-      "recommendation": "Confermare le CVE con scansione autorizzata..."
-    }
-  ],
-  "ip_assessments": [ ... ],
-  "sources": [
-    { "source": "Shodan InternetDB", "status": "ok", "detail": "4/4 IP con risposta utile o 404 gestito" }
-  ],
-  "errors": []
-}
-```
-
-**Fonti esterne:** Shodan InternetDB, Feodo Tracker e URLhaus opzionale con `URLHAUS_AUTH_KEY`.
+External sources include Shodan InternetDB, Feodo Tracker, and optional URLhaus with `URLHAUS_AUTH_KEY`.
 
 ---
 
 ### `POST /api/dns-reputation`
 
-Confronta i domini DNS osservati con liste esterne aperte. L'endpoint viene chiamato dalla tab **DNS** solo dopo conferma esplicita dell'utente.
+Checks observed DNS domains against open external lists. The endpoint is called by the **DNS** tab only after explicit user confirmation.
 
-**Request:** `Content-Type: application/json`
-
-```json
-{
-  "domains": ["analytics.example.com", "cdn.example.org"],
-  "max_domains": 250
-}
-```
-
-**Risposta (200 OK):**
-
-```json
-{
-  "results": {
-    "analytics.example.com": {
-      "domain": "analytics.example.com",
-      "status": "listed",
-      "categories": ["tracking"],
-      "sources": ["AdGuard DNS filter"],
-      "matched_rules": ["analytics.example.com: ||analytics.example.com^"],
-      "score": 55
-    }
-  },
-  "sources": [
-    { "source": "AdGuard DNS filter", "status": "ok", "detail": "regole dominio caricate" },
-    { "source": "StevenBlack hosts", "status": "ok", "detail": "domini hosts caricati" },
-    { "source": "URLhaus", "status": "skipped", "detail": "Auth-Key non configurata: fonte saltata" }
-  ],
-  "errors": []
-}
-```
-
-**Fonti esterne:** AdGuard DNS filter, StevenBlack hosts e URLhaus opzionale con `URLHAUS_AUTH_KEY`.
+External sources include AdGuard DNS filter, StevenBlack hosts, and optional URLhaus with `URLHAUS_AUTH_KEY`.
 
 ---
 
-## 📁 Struttura del progetto
+## Project structure
 
-```
+```text
 pcapcaper/
 ├── backend/
-│   ├── main.py          # Entry point FastAPI: health, analyze, enrich-ips
-│   ├── analyzer.py      # Motore di analisi PCAP (Scapy + aggregazione statistica)
-│   ├── flow_analysis.py # Ricostruzione flow 5-tuple TCP/UDP
-│   ├── dns_analysis.py  # Analisi DNS locale: query, risposte, rcode, TTL, tunneling
-│   ├── http_analysis.py # Analisi HTTP in chiaro: richieste, risposte e header
-│   ├── tls_analysis.py  # Analisi TLS metadata-only: SNI, certificati, JA3/JA3S
-│   ├── host_analysis.py # Vista aggregata host/IP con flow, DNS, HTTP, TLS e timeline
-│   ├── external_enrichment.py # Arricchimento IP esterno opt-in
-│   ├── security_analysis.py # Motore Security avanzato + threat intelligence
-│   ├── dns_intelligence.py # Reputazione DNS opt-in su liste aperte
-│   ├── models.py        # Modelli Pydantic per request/response
-│   ├── requirements.txt # Dipendenze Python
-│   └── Dockerfile       # Immagine Docker del backend
-│
+│   ├── main.py                  # FastAPI entry point: health, analyze, enrich-ips
+│   ├── analyzer.py              # PCAP analysis engine based on Scapy
+│   ├── flow_analysis.py         # TCP/UDP 5-tuple flow reconstruction
+│   ├── dns_analysis.py          # Local DNS analysis
+│   ├── http_analysis.py         # Cleartext HTTP analysis
+│   ├── tls_analysis.py          # Metadata-only TLS analysis
+│   ├── host_analysis.py         # Aggregated host/IP view
+│   ├── external_enrichment.py   # Opt-in external IP enrichment
+│   ├── security_analysis.py     # Advanced security and threat intelligence engine
+│   ├── dns_intelligence.py      # Opt-in DNS reputation checks
+│   ├── models.py                # Pydantic request/response models
+│   ├── requirements.txt         # Python dependencies
+│   └── Dockerfile               # Backend Docker image
 ├── frontend/
 │   ├── src/
-│   │   ├── main.tsx                    # Entry point React
-│   │   ├── App.tsx                     # Componente radice (routing stati)
-│   │   ├── index.css                   # Stili globali + Tailwind
+│   │   ├── main.tsx             # React entry point
+│   │   ├── App.tsx              # Root component
+│   │   ├── index.css            # Global styles and Tailwind
 │   │   ├── types/
-│   │   │   └── analysis.ts             # Tipi TypeScript (mirror dei modelli Python)
+│   │   │   └── analysis.ts      # TypeScript analysis types
 │   │   ├── utils/
-│   │   │   ├── format.ts               # Formattazione (byte, durata, colori)
-│   │   │   └── packetFilters.ts        # Parser filtri stile Wireshark
-│   │   └── components/
-│   │       ├── FileUpload.tsx          # Area drag & drop per il caricamento
-│   │       ├── Dashboard.tsx           # Layout del dashboard (contenitore)
-│   │       ├── SummaryCards.tsx        # 6 card metriche principali
-│   │       ├── PacketFilters.tsx       # Filtri testuali e GUI stile Wireshark
-│   │       ├── ProtocolChart.tsx       # Donut chart + tabella protocolli
-│   │       ├── TopIPsChart.tsx         # Bar chart IP + popup servizi e dati esterni
-│   │       ├── SecurityPanel.tsx       # Segnalazioni euristiche di rischio
-│   │       ├── SecurityAnalysisView.tsx # Tab Security avanzata con consenso e finding
-│   │       ├── DNSAnalysisView.tsx     # Dashboard DNS stile AdGuard con reputazione opt-in
-│   │       ├── HTTPAnalysisView.tsx    # Dashboard HTTP in chiaro
-│   │       ├── TLSAnalysisView.tsx     # Dashboard TLS metadata-only
-│   │       ├── HostsView.tsx           # Vista host/IP collapsable
-│   │       ├── NetworkGraphView.tsx    # Grafo host-to-host basato sui flow
-│   │       ├── WorldTrafficMap.tsx     # Mappa mondiale traffico IP geolocalizzato
-│   │       ├── TopPortsChart.tsx       # Bar chart porte src/dst
-│   │       ├── TimelineChart.tsx       # Area chart traffico nel tempo
-│   │       ├── ConversationsTable.tsx  # Tabella conversazioni ordinabile
-│   │       ├── PacketTable.tsx         # Lista pacchetti con ricerca e paginazione
-│   │       ├── PacketDetailModal.tsx   # Inspector pacchetto Wireshark-style
-│   │       ├── TracesView.tsx          # Vista tracce/flow
-│   │       └── AdvancedTracesView.tsx  # Alberatura avanzata pacchetti/risposte/ACK
+│   │   │   ├── format.ts        # Formatting helpers
+│   │   │   └── packetFilters.ts # Wireshark-style filter parser
+│   │   └── components/          # UI components and dashboard views
 │   ├── index.html
 │   ├── package.json
-│   ├── vite.config.ts   # Proxy /api → backend (dev locale)
+│   ├── vite.config.ts           # Dev proxy: /api -> backend
 │   ├── tailwind.config.js
-│   ├── nginx.conf       # Configurazione Nginx (Docker): serve SPA + proxy API
-│   └── Dockerfile       # Multi-stage: build Node.js → serve Nginx
-│
-├── docker-compose.yml   # Orchestrazione dei due container
+│   ├── nginx.conf               # Nginx SPA serving and API proxy
+│   └── Dockerfile               # Frontend Docker image
+├── docker-compose.yml           # Two-container orchestration
 └── README.md
 ```
 
 ---
 
-## 🔄 Diagramma dei componenti frontend
+## Contributing
 
-```mermaid
-graph TD
-    App["App.tsx\nstato globale"]
-    FU["FileUpload\nDrag & drop"]
-    DB["Dashboard\nLayout container"]
-    SC["SummaryCards\n6 metriche"]
-    PF["PacketFilters\nFiltro testo + GUI"]
-    PC["ProtocolChart\nDonut + tabella"]
-    TI["TopIPsChart\nBar chart + popup"]
-    SEC["SecurityPanel\nFinding euristici"]
-    SECA["SecurityAnalysisView\nThreat intel opt-in"]
-    DNSA["DNSAnalysisView\nDashboard DNS"]
-    HTTPA["HTTPAnalysisView\nHTTP in chiaro"]
-    TLSA["TLSAnalysisView\nTLS metadata"]
-    HOSTA["HostsView\nDettaglio host/IP"]
-    NETG["NetworkGraphView\nGrafo host-to-host"]
-    MAP["WorldTrafficMap\nMappa paesi"]
-    TL["TimelineChart\nArea chart"]
-    TP["TopPortsChart\nBar chart tab"]
-    CT["ConversationsTable\nOrdinabile"]
-    PT["PacketTable\nRicerca + pagine"]
-    TV["TracesView\nFlow filtrati"]
-    ATV["AdvancedTracesView\nAlberatura flow"]
+1. Fork the repository.
+2. Create a branch: `git checkout -b feature/your-feature-name`.
+3. Commit your changes: `git commit -m "feat: description"`.
+4. Push the branch: `git push origin feature/your-feature-name`.
+5. Open a Pull Request.
 
-    App -->|"nessun risultato"| FU
-    App -->|"risultato disponibile"| DB
-    DB --> SC
-    DB --> PF
-    DB --> PC
-    DB --> TI
-    DB --> SEC
-    DB --> SECA
-    DB --> DNSA
-    DB --> HTTPA
-    DB --> TLSA
-    DB --> HOSTA
-    DB --> NETG
-    DB --> MAP
-    DB --> TL
-    DB --> TP
-    DB --> CT
-    DB --> PT
-    DB --> TV
-    DB --> ATV
+Do not commit real PCAP files, credentials, payloads, or personal data.
 
-    style App fill:#1e293b,stroke:#6366f1,color:#f1f5f9
-    style DB fill:#1e293b,stroke:#334155,color:#f1f5f9
-```
+Features that send data to external services must remain opt-in, visible to the user, and documented.
 
 ---
 
-## 🤝 Contribuire
+## License
 
-1. Fork del repository
-2. Crea un branch: `git checkout -b feature/nome-feature`
-3. Commit delle modifiche: `git commit -m "feat: descrizione"`
-4. Push: `git push origin feature/nome-feature`
-5. Apri una Pull Request
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 📄 Licenza
-
-GNU Affero General Public License v3.0 — vedi [LICENSE](LICENSE) per i dettagli.
-
----
-
-*PCAPCaper - Open Source PCAP Analyzer*
-
-*(C) Antonio Maulucci - 2026*
-
+*PCAPCaper - Open Source PCAP Analyzer*  
+*(C) Antonio Maulucci - 2026*  
 GitHub: [myblacksloth](https://github.com/myblacksloth)
