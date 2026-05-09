@@ -25,6 +25,8 @@
 
 ![](./stuff/i/SCR-20260508-rsrq.png)
 
+![](./stuff/i/SCR-20260509-jpwv.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -115,6 +117,7 @@ Copy `.env.example` to `.env` and adjust values when needed. Important variables
 - `POST /api/enrich-ips`: enriches public IPs after explicit user confirmation.
 - `POST /api/security-analysis`: runs advanced opt-in security analysis.
 - `POST /api/dns-reputation`: checks DNS domains against open reputation sources after explicit user confirmation.
+- `POST /api/ai-chat`: asks the lightweight local AI assistant about selected packets.
 
 ### Contributing
 
@@ -132,6 +135,15 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 ---
 
 - [PCAPCaper 🔍](#pcapcaper-)
+  - [English](#english)
+    - [Main features](#main-features)
+    - [Privacy model](#privacy-model)
+    - [Performance and storage](#performance-and-storage)
+    - [Quick start](#quick-start)
+    - [Configuration](#configuration)
+    - [API overview](#api-overview)
+    - [Contributing](#contributing)
+  - [Italiano](#italiano)
   - [✨ Funzionalità](#-funzionalità)
   - [Screenshot](#screenshot)
     - [Servizio di analisi degli indirizzi IP](#servizio-di-analisi-degli-indirizzi-ip)
@@ -164,6 +176,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Variabili `.env`](#variabili-env)
     - [Storage temporaneo](#storage-temporaneo)
     - [Paginazione e limiti JSON](#paginazione-e-limiti-json)
+  - [🤖 Assistente IA leggero](#-assistente-ia-leggero)
   - [🔎 Filtri pacchetti stile Wireshark](#-filtri-pacchetti-stile-wireshark)
     - [Operatori logici](#operatori-logici)
     - [Operatori di confronto](#operatori-di-confronto)
@@ -191,6 +204,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
   - [📡 API Reference](#-api-reference)
     - [`GET /api/health`](#get-apihealth)
     - [`POST /api/analyze`](#post-apianalyze)
+    - [`POST /api/ai-chat`](#post-apiai-chat)
     - [`POST /api/enrich-ips`](#post-apienrich-ips)
     - [`POST /api/security-analysis`](#post-apisecurity-analysis)
     - [`POST /api/dns-reputation`](#post-apidns-reputation)
@@ -222,6 +236,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
 | **Mappa traffico IP** | Mappa mondiale con stati colorati in base al traffico verso IP geolocalizzati; click sul paese per vedere i flow collegati |
 | **Tracce avanzate** | Alberatura dei flow con pacchetti, risposte e ACK correlati; usa i flow 5-tuple calcolati dal backend |
+| **Assistente IA pacchetti** | Chat flottante in basso a destra con modello Ollama leggero in container separato; al modello arrivano solo pacchetti pertinenti alla domanda |
 | **Timeline** | Area chart del traffico nel tempo con bucket adattivi |
 | **Lista Pacchetti** | Dettaglio pacchetti paginato; il limite JSON è configurabile con `PCAPCAPER_MAX_PACKET_LIST` |
 | **Esporta JSON** | Scarica il risultato dell'analisi in formato JSON |
@@ -304,19 +319,23 @@ graph TB
     EXT["🌐 Tool esterni opzionali\nRDAP/IANA\nTeam Cymru\nReverse DNS\nip-api"]
     SECEXT["🚨 Threat intelligence opt-in\nShodan InternetDB\nFeodo Tracker\nURLhaus opzionale"]
     DNSEXT["🌐 DNS reputation opt-in\nAdGuard DNS filter\nStevenBlack hosts\nURLhaus opzionale"]
+    AI["🤖 IA leggera\nContainer Ollama\nmodello configurabile"]
 
     U -->|"Drag & drop file PCAP"| FE
     FE -->|"POST /api/analyze\nmultipart/form-data"| BE
     FE -->|"POST /api/enrich-ips\nsolo su click utente"| BE
     FE -->|"POST /api/security-analysis\nsolo dopo popup consenso"| BE
     FE -->|"POST /api/dns-reputation\nsolo dopo popup consenso"| BE
+    FE -->|"POST /api/ai-chat\ndomanda + pacchetti"| BE
     BE -->|"PcapReader streaming"| SC
     BE -->|"IP pubblici"| EXT
     BE -->|"IP pubblici + metadati"| SECEXT
     BE -->|"Domini DNS osservati"| DNSEXT
+    BE -->|"Solo pacchetti compatti selezionati"| AI
     EXT -->|"ASN, RDAP, GeoIP, PTR"| BE
     SECEXT -->|"CVE, IOC, C2, host malware"| BE
     DNSEXT -->|"Liste ads/tracking/malware"| BE
+    AI -->|"Risposta"| BE
     SC -->|"Pacchetti decodificati"| BE
     BE -->|"JSON: statistiche complete"| FE
     FE -->|"Dashboard interattivo"| U
@@ -546,6 +565,15 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
 | `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+| `PCAPCAPER_AI_ENABLED` | `1` | Abilita endpoint e widget dell'assistente IA locale |
+| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | URL interno del container Ollama |
+| `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Modello leggero predefinito per Raspberry Pi 5 / 4 GB RAM |
+| `PCAPCAPER_AI_TIMEOUT_SECONDS` | `120` | Tempo massimo per una risposta del modello; al timeout la richiesta viene interrotta |
+| `PCAPCAPER_AI_MAX_PACKETS` | `40` | Numero massimo di pacchetti compatti e pertinenti inviati al modello |
+| `PCAPCAPER_AI_NUM_PREDICT` | `384` | Token massimi generati per risposta |
+| `PCAPCAPER_AI_NUM_CTX` | `2048` | Dimensione contesto modello, da aumentare solo su hardware più potente |
+| `OLLAMA_NUM_PARALLEL` | `1` | Limite richieste parallele Ollama per hardware leggero |
+| `OLLAMA_MAX_LOADED_MODELS` | `1` | Evita che più modelli caricati consumino RAM |
 
 ### Storage temporaneo
 
@@ -556,6 +584,34 @@ Redis è stato valutato ma non introdotto: il flusso corrente non richiede persi
 ### Paginazione e limiti JSON
 
 La lista pacchetti nel frontend è paginata a 50 righe per pagina. Il backend invia per default i primi `PCAPCAPER_MAX_PACKET_LIST=1000` pacchetti dettagliati, mentre riepiloghi, flow, DNS, HTTP, TLS e host restano calcolati sull'intero PCAP. Per PCAP molto grandi, aumentare questo valore rende più pesante il JSON e può rallentare il browser.
+
+---
+
+## 🤖 Assistente IA leggero
+
+PCAPCaper include una chat opzionale in basso a destra nella dashboard. La chat chiama `/api/ai-chat`; il backend seleziona i pacchetti pertinenti alla domanda e invia solo un JSON compatto al container Ollama separato.
+
+Il setup è pensato per hardware leggero:
+
+- modello predefinito: `qwen2.5:0.5b`;
+- container AI limitato a `1` CPU e `3 GB` di RAM in `docker-compose.yml`;
+- Ollama configurato con una richiesta parallela e un solo modello caricato;
+- massimo `PCAPCAPER_AI_MAX_PACKETS` pacchetti inviati al modello;
+- raw bytes e analisi completa non vengono inviati al modello;
+- se la risposta supera `PCAPCAPER_AI_TIMEOUT_SECONDS`, il backend restituisce `504` e la UI mostra l'errore senza cancellare la chat.
+
+Docker Compose include il servizio one-shot `ai-model-pull`, quindi `docker compose up --build` avvia il download automatico del modello tramite API HTTP di Ollama. Il backend può partire mentre il modello viene scaricato; la chat funzionerà appena il pull termina.
+
+Se avvii manualmente solo il servizio AI o vuoi aggiornare il modello, esegui:
+
+```bash
+docker compose up -d ai
+docker compose exec ai ollama pull qwen2.5:0.5b
+```
+
+Per passare a hardware più potente modifica `PCAPCAPER_AI_MODEL`, `PCAPCAPER_AI_NUM_CTX`, `PCAPCAPER_AI_NUM_PREDICT` e i valori `cpus` / `mem_limit` del servizio `ai`.
+
+Chiudere il popup non cancella la conversazione: la cronologia resta in memoria finché la dashboard rimane aperta.
 
 ---
 
@@ -1179,6 +1235,38 @@ Analizza un file PCAP e restituisce le statistiche.
 | 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
+
+---
+
+### `POST /api/ai-chat`
+
+Interroga l'assistente IA locale leggero sui pacchetti del report corrente.
+
+Il frontend invia la domanda e i pacchetti già presenti in memoria, ma il backend seleziona un sottoinsieme limitato e pertinente. Al container Ollama arrivano solo riepiloghi compatti dei pacchetti selezionati, non l'analisi completa e non i raw bytes.
+
+**Request:**
+
+```json
+{
+  "question": "Quali pacchetti coinvolgono 8.8.8.8?",
+  "packets": [
+    {
+      "number": 1,
+      "timestamp": "12:00:00.000",
+      "src_ip": "192.168.1.10",
+      "dst_ip": "8.8.8.8",
+      "protocol": "DNS",
+      "length": 76,
+      "src_port": 53500,
+      "dst_port": 53,
+      "info": "DNS Query example.com"
+    }
+  ],
+  "history": []
+}
+```
+
+**Comportamento timeout:** se il modello supera `PCAPCAPER_AI_TIMEOUT_SECONDS`, il backend restituisce `504` e la chat mostra l'errore senza cancellare la conversazione.
 
 ---
 
