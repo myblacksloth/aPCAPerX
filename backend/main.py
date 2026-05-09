@@ -28,12 +28,15 @@ from models import (
     DNSReputationResponse,
     SecurityAnalysisRequest,
     SecurityAnalysisResponse,
+    AIChatRequest,
+    AIChatResponse,
 )
 from analyzer import analyze_pcap
 from external_enrichment import enrich_ips
 from security_analysis import analyze_security
 from dns_intelligence import analyze_dns_reputation
-from config import TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
+from ai_chat import AIModelError, ask_ai
+from config import AI_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -184,6 +187,45 @@ def dns_reputation_endpoint(payload: DNSReputationRequest):
         raise HTTPException(
             status_code=500,
             detail="Errore durante l'analisi reputazionale DNS.",
+        ) from exc
+
+
+# ─── Endpoint: lightweight technical AI assistant ─────────────────────────
+
+@app.post(
+    "/api/ai-chat",
+    response_model=AIChatResponse,
+    tags=["AI"],
+    summary="Ask the technical AI assistant about the analyzed PCAP",
+    response_description="AI answer plus packet and technical-context metadata",
+)
+async def ai_chat_endpoint(payload: AIChatRequest):
+    """
+    Answers a user question using a small model running in a separate container.
+
+    The backend receives a sanitized analysis snapshot, builds technical
+    evidence from the full report, and sends only that bounded evidence to the
+    model. Raw bytes and full packet layer dumps are never forwarded.
+    """
+    if not AI_ENABLED:
+        raise HTTPException(status_code=503, detail="AI assistant is disabled by configuration.")
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    try:
+        return await run_in_threadpool(ask_ai, payload)
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="The AI model took too long to answer. The request was interrupted; try a narrower question.",
+        ) from exc
+    except AIModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error while querying the AI assistant")
+        raise HTTPException(
+            status_code=502,
+            detail="AI assistant is unavailable or returned an invalid response.",
         ) from exc
 
 

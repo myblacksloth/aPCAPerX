@@ -72,3 +72,14 @@ EXTERNAL_MAX_WORKERS = _int_env("PCAPCAPER_EXTERNAL_MAX_WORKERS", 6, 1)
 MAX_ENRICHMENT_IPS = _int_env("PCAPCAPER_MAX_ENRICHMENT_IPS", 80, 1)
 HTTP_TIMEOUT_SECONDS = _float_env("PCAPCAPER_HTTP_TIMEOUT_SECONDS", 6.0, 1.0)
 SOCKET_TIMEOUT_SECONDS = _float_env("PCAPCAPER_SOCKET_TIMEOUT_SECONDS", 5.0, 1.0)
+
+# Lightweight AI assistant settings. The backend sends only compact technical
+# evidence to the model service, never raw packet bytes or full layer dumps.
+AI_ENABLED = os.getenv("PCAPCAPER_AI_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+AI_BASE_URL = os.getenv("PCAPCAPER_AI_BASE_URL", "http://ai:11434").rstrip("/")
+AI_MODEL = os.getenv("PCAPCAPER_AI_MODEL", "qwen2.5:0.5b")
+AI_TIMEOUT_SECONDS = _float_env("PCAPCAPER_AI_TIMEOUT_SECONDS", 360.0, 2.0)
+AI_MAX_PACKETS = _int_env("PCAPCAPER_AI_MAX_PACKETS", 40, 1)
+AI_MAX_HISTORY_MESSAGES = _int_env("PCAPCAPER_AI_MAX_HISTORY_MESSAGES", 8, 0)
+AI_NUM_PREDICT = _int_env("PCAPCAPER_AI_NUM_PREDICT", 384, 64)
+AI_NUM_CTX = _int_env("PCAPCAPER_AI_NUM_CTX", 2048, 512)
