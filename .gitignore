@@ -88,6 +88,7 @@ web_modules/
 .env
 .env.*
 !.env.example
+!.env.ialocal.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
