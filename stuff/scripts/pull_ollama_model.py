@@ -10,10 +10,25 @@ import os
 import urllib.request
 
 
+def resolve_base_url() -> str:
+    """Resolve the Ollama API URL exactly like the backend runtime config."""
+    explicit_base_url = os.getenv("PCAPCAPER_AI_BASE_URL", "").strip()
+    if explicit_base_url:
+        return explicit_base_url.rstrip("/")
+
+    mode = os.getenv("PCAPCAPER_AI_OLLAMA_MODE", "container").strip().lower()
+    if mode == "host":
+        host = os.getenv("PCAPCAPER_AI_OLLAMA_HOST", "host.docker.internal").strip()
+        port = os.getenv("PCAPCAPER_AI_OLLAMA_PORT", "11434").strip()
+        return f"http://{host}:{port}".rstrip("/")
+
+    return "http://ai:11434"
+
+
 def main() -> None:
     """Pull the model selected by PCAPCAPER_AI_MODEL and stream progress logs."""
     model = os.getenv("PCAPCAPER_AI_MODEL", "qwen2.5:0.5b")
-    base_url = os.getenv("PCAPCAPER_AI_BASE_URL", "http://ai:11434").rstrip("/")
+    base_url = resolve_base_url()
     print(f"Pulling Ollama model {model} from {base_url}", flush=True)
 
     request = urllib.request.Request(

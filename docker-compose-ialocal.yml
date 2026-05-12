@@ -1,0 +1,84 @@
+# ─── PCAPCaper — Docker Compose ───────────────────────────────────────────────
+#
+# Avvia l'intera applicazione con un solo comando:
+#   docker-compose up --build
+#
+# Servizi:
+#   backend   → FastAPI + Scapy, porta 8000
+#   frontend  → React (build Nginx), porta 3000
+#   ai        → Ollama model server, rete interna soltanto
+#
+# Rete interna: i due container comunicano tramite la rete "pcapcaper_net".
+# Nginx risolve l'hostname "backend" automaticamente grazie a Docker DNS.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Servizio Backend (FastAPI) ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend      # usa il Dockerfile in backend/
+      dockerfile: Dockerfile
+    container_name: pcapcaper-backend
+    restart: unless-stopped
+
+    # Espone la porta del backend all'host (utile per test diretti con curl/Postman)
+    ports:
+      - "8000:8000"
+
+    # Variabili d'ambiente lette dal backend (opzionali — usano già i default)
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1   # disabilita il buffering di Python per i log in tempo reale
+
+    # Storage temporaneo per upload PCAP. Docker lo elimina allo stop del container;
+    # l'app cancella comunque ogni file alla fine della richiesta.
+    tmpfs:
+      - /tmp/pcapcaper:size=2g,mode=1777
+
+    # Connette il container alla rete interna
+    networks:
+      - pcapcaper_net
+
+    depends_on:
+      ai:
+        condition: service_healthy
+
+    # Health-check: verifica che il backend risponda prima che il frontend parta
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+
+  # ── Servizio Frontend (React + Nginx) ──────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pcapcaper-frontend
+    restart: unless-stopped
+
+    # Porta dell'interfaccia web — aprire http://localhost:3000 nel browser
+    ports:
+      - "3000:80"
+
+    # Il frontend dipende dal backend: Docker attende che il health-check passi
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - pcapcaper_net
+
+
+# ── Rete interna condivisa tra i due container ──────────────────────────
+networks:
+  pcapcaper_net:
+    driver: bridge
+
+volumes:
+  ollama_models:

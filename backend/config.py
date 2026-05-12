@@ -55,6 +55,21 @@ def _float_env(name: str, default: float, minimum: Optional[float] = None) -> fl
     return value
 
 
+def _ai_base_url() -> str:
+    """Resolve the Ollama API URL from explicit or mode-based configuration."""
+    explicit_base_url = os.getenv("PCAPCAPER_AI_BASE_URL", "").strip()
+    if explicit_base_url:
+        return explicit_base_url.rstrip("/")
+
+    mode = os.getenv("PCAPCAPER_AI_OLLAMA_MODE", "container").strip().lower()
+    if mode == "host":
+        host = os.getenv("PCAPCAPER_AI_OLLAMA_HOST", "host.docker.internal").strip()
+        port = os.getenv("PCAPCAPER_AI_OLLAMA_PORT", "11434").strip()
+        return f"http://{host}:{port}".rstrip("/")
+
+    return "http://ai:11434"
+
+
 # 0 significa nessun limite applicativo; eventuali limiti restano a carico di
 # reverse proxy, filesystem o quote del container.
 UPLOAD_MAX_MB = _int_env("PCAPCAPER_UPLOAD_MAX_MB", 0, 0)
@@ -76,7 +91,7 @@ SOCKET_TIMEOUT_SECONDS = _float_env("PCAPCAPER_SOCKET_TIMEOUT_SECONDS", 5.0, 1.0
 # Lightweight AI assistant settings. The backend sends only compact technical
 # evidence to the model service, never raw packet bytes or full layer dumps.
 AI_ENABLED = os.getenv("PCAPCAPER_AI_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
-AI_BASE_URL = os.getenv("PCAPCAPER_AI_BASE_URL", "http://ai:11434").rstrip("/")
+AI_BASE_URL = _ai_base_url()
 AI_MODEL = os.getenv("PCAPCAPER_AI_MODEL", "qwen2.5:0.5b")
 AI_TIMEOUT_SECONDS = _float_env("PCAPCAPER_AI_TIMEOUT_SECONDS", 360.0, 2.0)
 AI_MAX_PACKETS = _int_env("PCAPCAPER_AI_MAX_PACKETS", 40, 1)
