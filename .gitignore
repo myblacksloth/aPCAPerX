@@ -1,11 +1,17 @@
 
+
+# dotenv environment variable files
+.env
+.env.*
+!.env.example
+!.env.ialocal.example
+!.env.noia.example
+
+
 .pycproject
 .idea/
 *.pyc
 __pycache__/
-
-
-.env
 
 todo.txt
 todo.md
@@ -83,12 +89,6 @@ web_modules/
 
 # Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variable files
-.env
-.env.*
-!.env.example
-!.env.ialocal.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
