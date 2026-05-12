@@ -13,7 +13,8 @@ import { useEffect, useState } from 'react'
 import { Network } from 'lucide-react'
 import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
-import type { AnalysisResult, StoredAnalysisSummary } from './types/analysis'
+import AuthPanel from './components/AuthPanel'
+import type { AnalysisResult, StoredAnalysisSummary, UserProfile } from './types/analysis'
 
 export interface UploadProgress {
   phase: 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete'
@@ -38,12 +39,14 @@ export default function App() {
   const [savedAnalyses, setSavedAnalyses] = useState<StoredAnalysisSummary[]>([])
   const [savedLoading, setSavedLoading] = useState(false)
   const [savedError, setSavedError] = useState<string | null>(null)
+  const [user, setUser] = useState<UserProfile | null>(null)
 
   /** Load saved report metadata for the homepage reload list. */
   const refreshSavedAnalyses = async () => {
     try {
       setSavedError(null)
       const response = await fetch('/api/analyses')
+      if (response.status === 401) return
       if (!response.ok) throw new Error(`Errore ${response.status}: ${response.statusText}`)
       setSavedAnalyses(await response.json() as StoredAnalysisSummary[])
     } catch (err) {
@@ -52,8 +55,24 @@ export default function App() {
   }
 
   useEffect(() => {
-    refreshSavedAnalyses()
+    // Restore an existing HTTP-only cookie session before listing reports.
+    fetch('/api/auth/me')
+      .then((response) => response.ok ? response.json() : null)
+      .then((profile: UserProfile | null) => {
+        setUser(profile)
+        if (profile) refreshSavedAnalyses()
+      })
+      .catch(() => setUser(null))
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setResult(null)
+      setSavedAnalyses([])
+      return
+    }
+    refreshSavedAnalyses()
+  }, [user])
 
   /**
    * Invia il file PCAP al backend e aggiorna lo stato con il risultato.
@@ -214,8 +233,9 @@ export default function App() {
       </header>
 
       {/* ── Contenuto principale ──────────────────────────────────────── */}
+      <AuthPanel user={user} onUserChange={setUser} />
       <main className="flex-1 pb-12">
-        {result ? (
+        {!user ? null : result ? (
           // Vista dashboard: mostra i risultati dell'analisi
           <Dashboard result={result} onReset={handleReset} onResultUpdate={handleResultUpdate} />
         ) : (
