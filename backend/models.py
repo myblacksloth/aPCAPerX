@@ -823,6 +823,28 @@ class AIChatResponse(BaseModel):
     timed_out: bool = False
 
 
+class StoredAnalysisSummary(BaseModel):
+    """Metadata for a persisted analysis report."""
+    # Stable report identifier used by the reload endpoint.
+    analysis_id: str
+    # Original uploaded file name.
+    filename: str
+    # Server-side creation timestamp in UTC ISO 8601 format.
+    created_at: str
+    # Original uploaded file size in bytes.
+    original_size_bytes: int
+    # Packet count from the analysis summary.
+    total_packets: int
+    # Total byte count from the analyzed packets.
+    total_bytes: int
+    # Capture duration in seconds.
+    duration_seconds: float
+    # Number of packet rows persisted in the report JSON.
+    stored_packet_rows: int
+    # Reserved for the future user table relationship.
+    owner_user_id: Optional[str] = None
+
+
 class AnalysisResult(BaseModel):
     """
     Risultato completo dell'analisi di un file PCAP.
@@ -830,6 +852,12 @@ class AnalysisResult(BaseModel):
     Questa struttura è l'oggetto radice restituito dall'endpoint
     POST /api/analyze e consumato dal frontend per costruire il dashboard.
     """
+    # Stable identifier when the report has been persisted server-side.
+    analysis_id: Optional[str] = None
+    # Server-side persistence timestamp in UTC ISO 8601 format.
+    analyzed_at: Optional[str] = None
+    # Original uploaded file size in bytes.
+    original_size_bytes: Optional[int] = None
     # Nome originale del file caricato dall'utente
     filename: str
     # Riepilogo statistico generale

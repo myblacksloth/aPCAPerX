@@ -21,6 +21,7 @@ from config import (
     AI_MODEL,
     AI_NUM_CTX,
     AI_NUM_PREDICT,
+    AI_PROMPT_MAX_CHARS,
     AI_TIMEOUT_SECONDS,
 )
 from models import AIChatMessage, AIChatRequest, AIChatResponse, AISelectedPacket, PacketEntry
@@ -42,6 +43,28 @@ _TECHNICAL_TERMS = {
     "host", "http", "ip", "ja3", "nxdomain", "packet", "packets", "port",
     "rcode", "security", "sni", "tcp", "tls", "ttl", "udp", "uri",
 }
+_PRUNABLE_CONTEXT_PATHS = [
+    ("dns", "queries"),
+    ("http", "requests"),
+    ("http", "responses"),
+    ("tls", "connections"),
+    ("hosts", "items"),
+    ("flows",),
+    ("conversations",),
+    ("selected_packets",),
+    ("dns", "flow_correlations"),
+    ("dns", "tunneling_indicators"),
+    ("dns", "resolutions"),
+    ("tls", "anomalies"),
+    ("dns", "top_domains"),
+    ("http", "top_hosts"),
+    ("http", "top_user_agents"),
+    ("tls", "top_sni"),
+    ("top_src_ips",),
+    ("top_dst_ips",),
+    ("top_src_ports",),
+    ("top_dst_ports",),
+]
 
 
 class AIModelError(RuntimeError):
@@ -50,6 +73,13 @@ class AIModelError(RuntimeError):
     def __init__(self, message: str, status_code: int = 502):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _model_pull_hint() -> str:
+    """Return the safest pull command for the currently configured Ollama endpoint."""
+    if AI_BASE_URL.startswith("http://ai:"):
+        return f"docker compose exec ai ollama pull {AI_MODEL}"
+    return f"ollama pull {AI_MODEL}"
 
 
 def _tokens(question: str) -> Set[str]:
@@ -191,6 +221,160 @@ def _take_relevant(items: Sequence[Any], terms: Set[str], ips: Set[str], ports: 
     return relevant[:limit]
 
 
+def _dns_resolutions(dns: Dict[str, Any], terms: Set[str], ips: Set[str], ports: Set[int], protocols: Set[str], limit: int = 80) -> List[Dict[str, Any]]:
+    """Build a compact domain-to-answer map so the LLM can answer DNS questions directly."""
+    grouped: Dict[str, Dict[str, Any]] = {}
+
+    for query in _safe_list(dns.get("queries")):
+        if not isinstance(query, dict):
+            continue
+        domain = str(query.get("query") or "")
+        if not domain:
+            continue
+
+        entry = grouped.setdefault(domain, {
+            "domain": domain,
+            "record_types": set(),
+            "answer_ips": set(),
+            "cnames": set(),
+            "txt_answers": set(),
+            "clients": set(),
+            "resolvers": set(),
+            "response_codes": set(),
+            "query_packet_numbers": set(),
+            "response_packet_numbers": set(),
+            "query_count": 0,
+        })
+        entry["query_count"] += 1
+        entry["record_types"].add(query.get("record_type"))
+        entry["clients"].add(query.get("client"))
+        entry["resolvers"].add(query.get("resolver"))
+        entry["response_codes"].add(query.get("response_code_name"))
+        entry["query_packet_numbers"].add(query.get("packet_number"))
+        entry["response_packet_numbers"].add(query.get("response_packet_number"))
+
+        for answer_ip in _safe_list(query.get("answer_ips")):
+            entry["answer_ips"].add(answer_ip)
+        for txt_answer in _safe_list(query.get("txt_answers")):
+            entry["txt_answers"].add(txt_answer)
+        for answer in _safe_list(query.get("answers")):
+            if not isinstance(answer, dict):
+                continue
+            record_type = answer.get("record_type")
+            value = answer.get("value")
+            if record_type in {"A", "AAAA"} and value:
+                entry["answer_ips"].add(value)
+            if record_type == "CNAME" and value:
+                entry["cnames"].add(value)
+
+    for correlation in _safe_list(dns.get("flow_correlations")):
+        if not isinstance(correlation, dict):
+            continue
+        domain = str(correlation.get("domain") or "")
+        answer_ip = correlation.get("answer_ip")
+        if not domain or not answer_ip:
+            continue
+        entry = grouped.setdefault(domain, {
+            "domain": domain,
+            "record_types": set(),
+            "answer_ips": set(),
+            "cnames": set(),
+            "txt_answers": set(),
+            "clients": set(),
+            "resolvers": set(),
+            "response_codes": set(),
+            "query_packet_numbers": set(),
+            "response_packet_numbers": set(),
+            "query_count": 0,
+        })
+        entry["answer_ips"].add(answer_ip)
+        for packet_number in _safe_list(correlation.get("dns_packet_numbers")):
+            entry["query_packet_numbers"].add(packet_number)
+
+    rows: List[Dict[str, Any]] = []
+    for entry in grouped.values():
+        row = {
+            "domain": entry["domain"],
+            "answer_ips": sorted(value for value in entry["answer_ips"] if value),
+            "cnames": sorted(value for value in entry["cnames"] if value)[:8],
+            "record_types": sorted(value for value in entry["record_types"] if value),
+            "clients": sorted(value for value in entry["clients"] if value)[:6],
+            "resolvers": sorted(value for value in entry["resolvers"] if value)[:6],
+            "response_codes": sorted(value for value in entry["response_codes"] if value),
+            "query_packet_numbers": sorted(value for value in entry["query_packet_numbers"] if value)[:12],
+            "response_packet_numbers": sorted(value for value in entry["response_packet_numbers"] if value)[:12],
+            "query_count": entry["query_count"],
+        }
+        if entry["txt_answers"]:
+            row["txt_answers"] = sorted(value for value in entry["txt_answers"] if value)[:4]
+        rows.append(row)
+
+    relevant = _take_relevant(rows, terms, ips, ports, protocols, limit)
+    if not relevant and (terms & {"dns", "domain", "domains", "domini", "entries", "resolved", "risoluzioni"}):
+        relevant = sorted(rows, key=lambda item: (-len(item["answer_ips"]), -item["query_count"], item["domain"]))[:limit]
+    return relevant
+
+
+def _truncate_text_values(value: Any, max_length: int = 180) -> Any:
+    """Recursively shorten long strings before sending report evidence to the LLM."""
+    if isinstance(value, str):
+        return value if len(value) <= max_length else f"{value[:max_length]}..."
+    if isinstance(value, list):
+        return [_truncate_text_values(item, max_length) for item in value]
+    if isinstance(value, dict):
+        return {key: _truncate_text_values(item, max_length) for key, item in value.items()}
+    return value
+
+
+def _context_json(context: Dict[str, Any]) -> str:
+    """Serialize technical evidence in the most compact stable form."""
+    return json.dumps(context, ensure_ascii=True, separators=(",", ":"), default=str)
+
+
+def _list_at_path(context: Dict[str, Any], path: Tuple[str, ...]) -> List[Any]:
+    """Return a mutable list at a nested context path, or an empty list."""
+    current: Any = context
+    for key in path:
+        if not isinstance(current, dict):
+            return []
+        current = current.get(key)
+    return current if isinstance(current, list) else []
+
+
+def _shrink_context_once(context: Dict[str, Any]) -> bool:
+    """Remove one slice of the least critical evidence and report if it changed."""
+    for path in _PRUNABLE_CONTEXT_PATHS:
+        items = _list_at_path(context, path)
+        if len(items) > 1:
+            del items[max(1, len(items) // 2):]
+            return True
+        if len(items) == 1:
+            items.clear()
+            return True
+    return False
+
+
+def _prune_context_to_budget(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Reduce context lists until the prompt fits the configured budget."""
+    context = _truncate_text_values(context)
+    context["context_budget"] = {
+        "max_chars": AI_PROMPT_MAX_CHARS,
+        "pruned": False,
+        "note": "Context is pre-pruned by the backend to avoid Ollama prompt truncation.",
+    }
+
+    while len(_context_json(context)) > AI_PROMPT_MAX_CHARS:
+        changed = _shrink_context_once(context)
+        context["context_budget"]["pruned"] = True
+        context["context_budget"]["chars_after_last_prune"] = len(_context_json(context))
+        if not changed:
+            context["context_budget"]["warning"] = "Prompt budget is too small for even the minimal report summary."
+            break
+
+    context["context_budget"]["final_chars"] = len(_context_json(context))
+    return context
+
+
 def build_technical_context(question: str, analysis: Dict[str, Any], selected: Sequence[AISelectedPacket]) -> Dict[str, Any]:
     """Build a technical evidence pack from the sanitized full analysis report."""
     terms = _tokens(question)
@@ -220,10 +404,11 @@ def build_technical_context(question: str, analysis: Dict[str, Any], selected: S
     if dns:
         context["dns"] = {
             "stats": dns.get("stats"),
+            "resolutions": _dns_resolutions(dns, terms, ips, ports, protocols, 80),
             "top_domains": _safe_list(dns.get("top_domains"))[:15],
             "tunneling_indicators": _take_relevant(_safe_list(dns.get("tunneling_indicators")), terms, ips, ports, protocols, 15),
             "queries": _take_relevant(_safe_list(dns.get("queries")), terms, ips, ports, protocols, 30),
-            "correlations": _take_relevant(_safe_list(dns.get("correlations")), terms, ips, ports, protocols, 15),
+            "flow_correlations": _take_relevant(_safe_list(dns.get("flow_correlations")), terms, ips, ports, protocols, 15),
         }
     if http:
         context["http"] = {
@@ -247,7 +432,7 @@ def build_technical_context(question: str, analysis: Dict[str, Any], selected: S
             "items": _take_relevant(_safe_list(hosts.get("hosts")), terms, ips, ports, protocols, 20),
         }
 
-    return context
+    return _prune_context_to_budget(context)
 
 
 def _history_lines(history: Iterable[AIChatMessage]) -> str:
@@ -262,11 +447,12 @@ def _history_lines(history: Iterable[AIChatMessage]) -> str:
 
 def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> str:
     """Create the final prompt from bounded technical evidence."""
-    context_json = json.dumps(technical_context, ensure_ascii=True, separators=(",", ":"), default=str)
+    context_json = _context_json(technical_context)
     return (
         "You are PCAPCaper's technical network-analysis assistant.\n"
         "Use the structured evidence below to produce a precise technical answer.\n"
         "Prioritize flows, DNS, HTTP, TLS, host profiles, and packet numbers when available.\n"
+        "For DNS questions, use dns.resolutions first because it maps domains to answer IPs and packet numbers.\n"
         "Mention concrete IPs, ports, protocols, domains, SNI, rcodes, status codes, flow IDs, and packet numbers.\n"
         "If evidence is insufficient, state what is missing. Do not invent packets, payloads, hosts, or threat intel.\n\n"
         f"Recent chat:\n{_history_lines(payload.history) or '(none)'}\n\n"
@@ -275,11 +461,28 @@ def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> 
     )
 
 
+def _build_budgeted_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> str:
+    """Build the final prompt and keep pruning until the whole prompt fits."""
+    prompt = _build_prompt(payload, technical_context)
+    while len(prompt) > AI_PROMPT_MAX_CHARS:
+        changed = _shrink_context_once(technical_context)
+        budget = _safe_dict(technical_context.get("context_budget"))
+        budget["pruned"] = True
+        budget["final_prompt_chars"] = len(prompt)
+        technical_context["context_budget"] = budget
+        if not changed:
+            budget["warning"] = "Prompt budget is too small for the minimal prompt."
+            break
+        prompt = _build_prompt(payload, technical_context)
+    technical_context["context_budget"]["final_prompt_chars"] = len(prompt)
+    return prompt
+
+
 def ask_ai(payload: AIChatRequest) -> AIChatResponse:
     """Query the configured model service with a bounded packet context."""
     selected = select_relevant_packets(payload.question, payload.packets)
     technical_context = build_technical_context(payload.question, payload.analysis, selected)
-    prompt = _build_prompt(payload, technical_context)
+    prompt = _build_budgeted_prompt(payload, technical_context)
     request_body = json.dumps({
         "model": AI_MODEL,
         "prompt": prompt,
@@ -308,12 +511,15 @@ def ask_ai(payload: AIChatRequest) -> AIChatResponse:
         detail = exc.read().decode("utf-8", errors="replace")[:500]
         if exc.code == 404 and "model" in detail.lower():
             raise AIModelError(
-                f"AI model '{AI_MODEL}' is not installed. Run: docker compose exec ai ollama pull {AI_MODEL}",
+                f"AI model '{AI_MODEL}' is not installed. Run: {_model_pull_hint()}",
                 status_code=503,
             ) from exc
         raise AIModelError(f"AI model service returned HTTP {exc.code}: {detail}", status_code=502) from exc
     except urllib.error.URLError as exc:
-        raise AIModelError("AI model service is unavailable. Check that the 'ai' container is running.", status_code=503) from exc
+        raise AIModelError(
+            f"AI model service is unavailable at {AI_BASE_URL}. Check the configured Ollama host and port.",
+            status_code=503,
+        ) from exc
 
     answer = str(data.get("response") or "").strip()
     if not answer:

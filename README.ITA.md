@@ -557,6 +557,9 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 |-----------|---------|-------------|
 | `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Limite upload in MB. `0` = nessun limite applicativo |
 | `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory dei file PCAP temporanei |
+| `PCAPCAPER_ANALYSIS_STORAGE_ENABLED` | `1` | Salva sul backend i report JSON delle analisi completate |
+| `PCAPCAPER_ANALYSIS_STORAGE_DIR` | `/data/pcapcaper/analyses` | Directory usata per i report persistenti. Docker Compose monta questo path su un volume nominato |
+| `PCAPCAPER_ANALYSIS_STORAGE_MAX_ITEMS` | `50` | Numero massimo di report salvati nel backend filesystem. I più vecchi vengono rimossi |
 | `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
 | `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
 | `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
@@ -566,12 +569,16 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
 | `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
 | `PCAPCAPER_AI_ENABLED` | `1` | Abilita l'assistente IA tecnico locale |
-| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | URL API interno di Ollama |
+| `PCAPCAPER_AI_OLLAMA_MODE` | `container` | Modalità endpoint Ollama. Usa `container` per il servizio Compose oppure `host` per un server Ollama esterno/locale |
+| `PCAPCAPER_AI_OLLAMA_HOST` | `host.docker.internal` | Host Ollama usato con `PCAPCAPER_AI_OLLAMA_MODE=host`. Può essere un IP o un nome DNS remoto |
+| `PCAPCAPER_AI_OLLAMA_PORT` | `11434` | Porta API Ollama usata con `PCAPCAPER_AI_OLLAMA_MODE=host` |
+| `PCAPCAPER_AI_BASE_URL` | vuoto | Override completo dell'URL API Ollama. Se impostato, bypassa modalità, host e porta |
 | `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Modello leggero predefinito |
 | `PCAPCAPER_AI_TIMEOUT_SECONDS` | `360` | Tempo massimo per una risposta del modello |
 | `PCAPCAPER_AI_MAX_PACKETS` | `40` | Pacchetti selezionati massimi inclusi nelle evidenze IA |
 | `PCAPCAPER_AI_NUM_CTX` | `2048` | Dimensione contesto Ollama usata dall'assistente |
 | `PCAPCAPER_AI_NUM_PREDICT` | `384` | Token massimi generati per risposta |
+| `PCAPCAPER_AI_PROMPT_MAX_CHARS` | `3072` | Budget approssimativo del prompt backend prima del pruning del contesto IA |
 | `OLLAMA_NUM_PARALLEL` | `1` | Limite richieste parallele Ollama per hardware leggero |
 | `OLLAMA_MAX_LOADED_MODELS` | `1` | Evita che più modelli caricati consumino RAM |
 
@@ -590,7 +597,15 @@ L'endpoint `/api/ai-chat` restituisce risposta, pacchetti selezionati e metadati
 
 Durante `/api/analyze`, il backend salva il PCAP in `PCAPCAPER_TEMP_DIR` con `tempfile.NamedTemporaryFile(delete=False)`. Il file viene cancellato nel blocco `finally` dell'endpoint, anche in caso di errore. In Docker la directory `/tmp/pcapcaper` è montata come `tmpfs`, quindi viene eliminata anche allo stop del container.
 
-Redis è stato valutato ma non introdotto: il flusso corrente non richiede persistenza dei risultati tra richieste e Redis aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache risultati.
+### Report analisi salvati
+
+I report delle analisi completate vengono salvati lato backend come file JSON quando `PCAPCAPER_ANALYSIS_STORAGE_ENABLED=1`. La homepage del frontend chiama `GET /api/analyses` e, se esistono report salvati, mostra una lista per ricaricarli. La selezione di un report chiama `GET /api/analyses/{analysis_id}` e ripristina la dashboard senza ricaricare il PCAP.
+
+Il file PCAP originale viene comunque eliminato dopo l'analisi. Rimane solo il JSON derivato. Docker Compose monta `/data/pcapcaper/analyses` sul volume nominato `analysis_reports`, quindi i report sopravvivono a restart e rebuild dei container.
+
+La persistenza non usa cookie o browser localStorage perché i report completi possono essere grandi. Il codice è isolato in un modulo repository-style, così in futuro potrà essere sostituito da una tabella database collegata a `user_id` quando verranno introdotti gli utenti.
+
+Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
 ### Paginazione e limiti JSON
 
@@ -621,6 +636,61 @@ docker compose exec ai ollama pull qwen2.5:0.5b
 ```
 
 Per passare a hardware più potente modifica `PCAPCAPER_AI_MODEL`, `PCAPCAPER_AI_NUM_CTX`, `PCAPCAPER_AI_NUM_PREDICT` e i valori `cpus` / `mem_limit` del servizio `ai`.
+
+### Servizio Ollama esterno
+
+Puoi disattivare il container AI incluso e puntare il backend a un servizio Ollama su un altro host, per esempio un Mac nella stessa LAN.
+
+Configura `.env`:
+
+```dotenv
+PCAPCAPER_AI_ENABLED=1
+PCAPCAPER_AI_OLLAMA_MODE=host
+PCAPCAPER_AI_OLLAMA_HOST=192.168.1.20
+PCAPCAPER_AI_OLLAMA_PORT=11434
+PCAPCAPER_AI_MODEL=qwen3:8b
+PCAPCAPER_AI_NUM_CTX=8192
+PCAPCAPER_AI_NUM_PREDICT=768
+```
+
+Se il container backend deve raggiungere Ollama in esecuzione sullo stesso host macOS di Docker Desktop, usa:
+
+```dotenv
+PCAPCAPER_AI_OLLAMA_HOST=host.docker.internal
+```
+
+Se preferisci indicare direttamente l'URL completo:
+
+```dotenv
+PCAPCAPER_AI_BASE_URL=http://192.168.1.20:11434
+```
+
+Per non avviare `ai` e `ai-model-pull`, crea un override Compose locale, per esempio `docker-compose.external-ai.yml`:
+
+```yaml
+services:
+  ai:
+    profiles: ["internal-ai"]
+  ai-model-pull:
+    profiles: ["internal-ai"]
+  backend:
+    depends_on: !reset []
+```
+
+`!reset` richiede Docker Compose v2. Se la tua versione di Compose non lo supporta, aggiorna Docker Compose oppure usa una copia locale del file Compose rimuovendo dal backend il `depends_on` verso `ai`.
+
+Poi avvia solo i servizi applicativi:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.external-ai.yml up --build backend frontend
+```
+
+Il server Ollama esterno deve essere già acceso e deve avere installato il modello configurato:
+
+```bash
+ollama pull qwen3:8b
+curl http://192.168.1.20:11434/api/tags
+```
 
 Chiudere il popup non cancella la conversazione: la cronologia resta in memoria finché la dashboard rimane aperta.
 
@@ -1238,6 +1308,8 @@ Analizza un file PCAP e restituisce le statistiche.
 }
 ```
 
+Quando lo storage dei report è abilitato, la risposta include anche `analysis_id`, `analyzed_at` e `original_size_bytes`.
+
 **Errori:**
 
 | Codice | Causa |
@@ -1246,6 +1318,20 @@ Analizza un file PCAP e restituisce le statistiche.
 | 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
+
+---
+
+### `GET /api/analyses`
+
+Elenca i report salvati. La risposta contiene solo metadati leggeri; le righe pacchetto complete vengono caricate tramite `GET /api/analyses/{analysis_id}`.
+
+### `GET /api/analyses/{analysis_id}`
+
+Carica un report salvato e restituisce la stessa struttura JSON di `POST /api/analyze`.
+
+### `PUT /api/analyses/{analysis_id}`
+
+Aggiorna un report salvato. Il frontend lo usa dopo l'arricchimento manuale, così i report ricaricati mantengono i dati IP esterni.
 
 ---
 
