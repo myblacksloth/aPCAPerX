@@ -9,8 +9,9 @@
  *   - Messaggio di errore in caso di problema
  */
 import { useState, useCallback, useRef } from 'react'
-import { Upload, FileSearch, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, FileSearch, AlertCircle, Loader2, RotateCw, Database, Clock3 } from 'lucide-react'
 import type { UploadProgress } from '../App'
+import type { StoredAnalysisSummary } from '../types/analysis'
 
 interface FileUploadProps {
   /** Callback invocata quando l'utente seleziona un file valido */
@@ -21,12 +22,52 @@ interface FileUploadProps {
   error: string | null
   /** Stato di avanzamento upload/elaborazione */
   progress: UploadProgress
+  /** Reports persisted by the backend and available for reload */
+  savedAnalyses: StoredAnalysisSummary[]
+  /** true while a saved report is being loaded */
+  savedLoading: boolean
+  /** Error raised while listing saved reports */
+  savedError: string | null
+  /** Callback used to reload a persisted report */
+  onLoadSaved: (analysisId: string) => void
+  /** Callback used to refresh the persisted report list */
+  onRefreshSaved: () => void
 }
 
 /** Estensioni file accettate — deve corrispondere al backend */
 const ACCEPTED_EXTENSIONS = ['.pcap', '.pcapng', '.cap']
 
-export default function FileUpload({ onUpload, loading, error, progress }: FileUploadProps) {
+function formatBytes(value: number): string {
+  // Keep persisted report metadata readable without pulling extra dependencies.
+  if (!Number.isFinite(value) || value <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = value
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function formatDate(value: string): string {
+  // Browser locale formatting is enough for the homepage report list.
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+export default function FileUpload({
+  onUpload,
+  loading,
+  error,
+  progress,
+  savedAnalyses,
+  savedLoading,
+  savedError,
+  onLoadSaved,
+  onRefreshSaved,
+}: FileUploadProps) {
   // true quando l'utente trascina un file sopra l'area
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -165,6 +206,54 @@ export default function FileUpload({ onUpload, loading, error, progress }: FileU
         )}
       </div>
 
+      {savedAnalyses.length > 0 && (
+        <section className="mt-8 w-full max-w-4xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-slate-200">
+              <Database className="h-4 w-4 text-brand-300" />
+              <h2 className="text-sm font-semibold">Analisi salvate</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onRefreshSaved}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              Aggiorna
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
+            <div className="divide-y divide-slate-700">
+              {savedAnalyses.slice(0, 8).map((analysis) => (
+                <button
+                  key={analysis.analysis_id}
+                  type="button"
+                  onClick={() => onLoadSaved(analysis.analysis_id)}
+                  disabled={loading || savedLoading}
+                  className="grid w-full grid-cols-1 gap-2 px-4 py-3 text-left transition-colors hover:bg-slate-700/60 disabled:cursor-not-allowed disabled:opacity-60 md:grid-cols-[1fr_auto]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-white">{analysis.filename}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        {formatDate(analysis.created_at)}
+                      </span>
+                      <span>{analysis.total_packets.toLocaleString()} packets</span>
+                      <span>{formatBytes(analysis.original_size_bytes)}</span>
+                      <span>{analysis.stored_packet_rows.toLocaleString()} rows saved</span>
+                    </div>
+                  </div>
+                  <div className="self-center text-xs font-medium text-brand-300">
+                    {savedLoading ? 'Caricamento...' : 'Ricarica'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── Dettagli sui formati supportati ────────────────────────────── */}
       <p className="mt-4 text-slate-500 text-sm">
         Formati supportati: <code className="text-slate-400">.pcap</code>,{' '}
@@ -181,6 +270,13 @@ export default function FileUpload({ onUpload, loading, error, progress }: FileU
             <p className="text-red-300 font-semibold text-sm">Errore</p>
             <p className="text-red-400 text-sm mt-0.5">{error}</p>
           </div>
+        </div>
+      )}
+
+      {savedError && (
+        <div className="mt-4 w-full max-w-xl flex items-start gap-3 rounded-lg border border-amber-700 bg-amber-900/20 p-3">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
+          <p className="text-sm text-amber-300">{savedError}</p>
         </div>
       )}
 

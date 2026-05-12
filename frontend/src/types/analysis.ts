@@ -208,6 +208,19 @@ export interface AIChatResponse {
   timed_out: boolean
 }
 
+/** Lightweight metadata for a report persisted by the backend */
+export interface StoredAnalysisSummary {
+  analysis_id: string
+  filename: string
+  created_at: string
+  original_size_bytes: number
+  total_packets: number
+  total_bytes: number
+  duration_seconds: number
+  stored_packet_rows: number
+  owner_user_id: string | null
+}
+
 /** Reputazione esterna per un dominio DNS */
 export interface DNSDomainIntel {
   domain: string
@@ -584,6 +597,12 @@ export interface PacketEntry {
 
 /** Risultato completo dell'analisi di un file PCAP — oggetto radice */
 export interface AnalysisResult {
+  /** Stable backend identifier when the report was persisted */
+  analysis_id?: string | null
+  /** Server-side persistence timestamp */
+  analyzed_at?: string | null
+  /** Original uploaded file size in bytes */
+  original_size_bytes?: number | null
   /** Nome originale del file caricato */
   filename: string
   /** Statistiche generali della cattura */

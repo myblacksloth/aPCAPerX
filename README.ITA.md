@@ -557,6 +557,9 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 |-----------|---------|-------------|
 | `PCAPCAPER_UPLOAD_MAX_MB` | `0` | Limite upload in MB. `0` = nessun limite applicativo |
 | `PCAPCAPER_TEMP_DIR` | `/tmp/pcapcaper` | Directory dei file PCAP temporanei |
+| `PCAPCAPER_ANALYSIS_STORAGE_ENABLED` | `1` | Salva sul backend i report JSON delle analisi completate |
+| `PCAPCAPER_ANALYSIS_STORAGE_DIR` | `/data/pcapcaper/analyses` | Directory usata per i report persistenti. Docker Compose monta questo path su un volume nominato |
+| `PCAPCAPER_ANALYSIS_STORAGE_MAX_ITEMS` | `50` | Numero massimo di report salvati nel backend filesystem. I più vecchi vengono rimossi |
 | `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
 | `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
 | `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
@@ -575,6 +578,7 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_AI_MAX_PACKETS` | `40` | Pacchetti selezionati massimi inclusi nelle evidenze IA |
 | `PCAPCAPER_AI_NUM_CTX` | `2048` | Dimensione contesto Ollama usata dall'assistente |
 | `PCAPCAPER_AI_NUM_PREDICT` | `384` | Token massimi generati per risposta |
+| `PCAPCAPER_AI_PROMPT_MAX_CHARS` | `3072` | Budget approssimativo del prompt backend prima del pruning del contesto IA |
 | `OLLAMA_NUM_PARALLEL` | `1` | Limite richieste parallele Ollama per hardware leggero |
 | `OLLAMA_MAX_LOADED_MODELS` | `1` | Evita che più modelli caricati consumino RAM |
 
@@ -593,7 +597,15 @@ L'endpoint `/api/ai-chat` restituisce risposta, pacchetti selezionati e metadati
 
 Durante `/api/analyze`, il backend salva il PCAP in `PCAPCAPER_TEMP_DIR` con `tempfile.NamedTemporaryFile(delete=False)`. Il file viene cancellato nel blocco `finally` dell'endpoint, anche in caso di errore. In Docker la directory `/tmp/pcapcaper` è montata come `tmpfs`, quindi viene eliminata anche allo stop del container.
 
-Redis è stato valutato ma non introdotto: il flusso corrente non richiede persistenza dei risultati tra richieste e Redis aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache risultati.
+### Report analisi salvati
+
+I report delle analisi completate vengono salvati lato backend come file JSON quando `PCAPCAPER_ANALYSIS_STORAGE_ENABLED=1`. La homepage del frontend chiama `GET /api/analyses` e, se esistono report salvati, mostra una lista per ricaricarli. La selezione di un report chiama `GET /api/analyses/{analysis_id}` e ripristina la dashboard senza ricaricare il PCAP.
+
+Il file PCAP originale viene comunque eliminato dopo l'analisi. Rimane solo il JSON derivato. Docker Compose monta `/data/pcapcaper/analyses` sul volume nominato `analysis_reports`, quindi i report sopravvivono a restart e rebuild dei container.
+
+La persistenza non usa cookie o browser localStorage perché i report completi possono essere grandi. Il codice è isolato in un modulo repository-style, così in futuro potrà essere sostituito da una tabella database collegata a `user_id` quando verranno introdotti gli utenti.
+
+Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
 ### Paginazione e limiti JSON
 
@@ -1296,6 +1308,8 @@ Analizza un file PCAP e restituisce le statistiche.
 }
 ```
 
+Quando lo storage dei report è abilitato, la risposta include anche `analysis_id`, `analyzed_at` e `original_size_bytes`.
+
 **Errori:**
 
 | Codice | Causa |
@@ -1304,6 +1318,20 @@ Analizza un file PCAP e restituisce le statistiche.
 | 413 | File troppo grande rispetto a `PCAPCAPER_UPLOAD_MAX_MB`, se configurato |
 | 422 | File PCAP corrotto o senza pacchetti validi |
 | 500 | Errore interno del server |
+
+---
+
+### `GET /api/analyses`
+
+Elenca i report salvati. La risposta contiene solo metadati leggeri; le righe pacchetto complete vengono caricate tramite `GET /api/analyses/{analysis_id}`.
+
+### `GET /api/analyses/{analysis_id}`
+
+Carica un report salvato e restituisce la stessa struttura JSON di `POST /api/analyze`.
+
+### `PUT /api/analyses/{analysis_id}`
+
+Aggiorna un report salvato. Il frontend lo usa dopo l'arricchimento manuale, così i report ricaricati mantengono i dati IP esterni.
 
 ---
 
