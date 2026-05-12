@@ -9,11 +9,11 @@
  * La navigazione tra le tre viste avviene senza React Router:
  * basta cambiare lo stato locale.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Network } from 'lucide-react'
 import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
-import type { AnalysisResult } from './types/analysis'
+import type { AnalysisResult, StoredAnalysisSummary } from './types/analysis'
 
 export interface UploadProgress {
   phase: 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete'
@@ -35,6 +35,25 @@ export default function App() {
 
   // Messaggio di errore dell'ultima operazione (null = nessun errore)
   const [error, setError] = useState<string | null>(null)
+  const [savedAnalyses, setSavedAnalyses] = useState<StoredAnalysisSummary[]>([])
+  const [savedLoading, setSavedLoading] = useState(false)
+  const [savedError, setSavedError] = useState<string | null>(null)
+
+  /** Load saved report metadata for the homepage reload list. */
+  const refreshSavedAnalyses = async () => {
+    try {
+      setSavedError(null)
+      const response = await fetch('/api/analyses')
+      if (!response.ok) throw new Error(`Errore ${response.status}: ${response.statusText}`)
+      setSavedAnalyses(await response.json() as StoredAnalysisSummary[])
+    } catch (err) {
+      setSavedError(err instanceof Error ? err.message : 'Impossibile caricare le analisi salvate')
+    }
+  }
+
+  useEffect(() => {
+    refreshSavedAnalyses()
+  }, [])
 
   /**
    * Invia il file PCAP al backend e aggiorna lo stato con il risultato.
@@ -110,6 +129,7 @@ export default function App() {
 
       // Analisi completata: deserializza il JSON e aggiorna il dashboard
       setResult(analysisResult)
+      refreshSavedAnalyses()
 
     } catch (err) {
       // Errori di rete (backend non raggiungibile) o errori HTTP
@@ -117,6 +137,42 @@ export default function App() {
       setProgress({ phase: 'idle', percent: 0, message: 'Analisi non completata' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  /** Reload a persisted report from the backend storage. */
+  const handleLoadSaved = async (analysisId: string) => {
+    setSavedLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/analyses/${encodeURIComponent(analysisId)}`)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail ?? `Errore ${response.status}: ${response.statusText}`)
+      }
+      setResult(await response.json() as AnalysisResult)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Impossibile ricaricare l analisi')
+    } finally {
+      setSavedLoading(false)
+    }
+  }
+
+  /** Keep dashboard edits in memory and persist them when the report has an id. */
+  const handleResultUpdate = async (nextResult: AnalysisResult) => {
+    setResult(nextResult)
+    if (!nextResult.analysis_id) return
+    try {
+      const response = await fetch(`/api/analyses/${encodeURIComponent(nextResult.analysis_id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextResult),
+      })
+      if (!response.ok) throw new Error(`Errore ${response.status}: ${response.statusText}`)
+      setResult(await response.json() as AnalysisResult)
+      refreshSavedAnalyses()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Impossibile salvare gli aggiornamenti dell analisi')
     }
   }
 
@@ -161,7 +217,7 @@ export default function App() {
       <main className="flex-1 pb-12">
         {result ? (
           // Vista dashboard: mostra i risultati dell'analisi
-          <Dashboard result={result} onReset={handleReset} onResultUpdate={setResult} />
+          <Dashboard result={result} onReset={handleReset} onResultUpdate={handleResultUpdate} />
         ) : (
           // Vista upload: mostra il form di caricamento file
           <FileUpload
@@ -169,6 +225,11 @@ export default function App() {
             loading={loading}
             error={error}
             progress={progress}
+            savedAnalyses={savedAnalyses}
+            savedLoading={savedLoading}
+            savedError={savedError}
+            onLoadSaved={handleLoadSaved}
+            onRefreshSaved={refreshSavedAnalyses}
           />
         )}
       </main>

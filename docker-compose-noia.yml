@@ -35,6 +35,8 @@ services:
     # l'app cancella comunque ogni file alla fine della richiesta.
     tmpfs:
       - /tmp/pcapcaper:size=2g,mode=1777
+    volumes:
+      - analysis_reports:/data/pcapcaper/analyses
 
     # Connette il container alla rete interna
     networks:
@@ -75,3 +77,6 @@ services:
 networks:
   pcapcaper_net:
     driver: bridge
+
+volumes:
+  analysis_reports:

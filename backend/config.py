@@ -76,6 +76,12 @@ UPLOAD_MAX_MB = _int_env("PCAPCAPER_UPLOAD_MAX_MB", 0, 0)
 UPLOAD_CHUNK_SIZE = _int_env("PCAPCAPER_UPLOAD_CHUNK_SIZE", 1024 * 1024, 64 * 1024)
 TEMP_DIR = os.getenv("PCAPCAPER_TEMP_DIR", tempfile.gettempdir())
 
+# Stored analysis reports are kept server-side because full reports are too
+# large for cookies/localStorage and will map cleanly to a user-owned DB later.
+ANALYSIS_STORAGE_ENABLED = os.getenv("PCAPCAPER_ANALYSIS_STORAGE_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+ANALYSIS_STORAGE_DIR = os.getenv("PCAPCAPER_ANALYSIS_STORAGE_DIR", "/data/pcapcaper/analyses")
+ANALYSIS_STORAGE_MAX_ITEMS = _int_env("PCAPCAPER_ANALYSIS_STORAGE_MAX_ITEMS", 50, 1)
+
 # Limiti di output per evitare JSON enormi e consumo eccessivo di memoria lato
 # browser. Il backend continua ad analizzare tutto il PCAP in streaming.
 MAX_PACKET_LIST = _int_env("PCAPCAPER_MAX_PACKET_LIST", 1000, 0)

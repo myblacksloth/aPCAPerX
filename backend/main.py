@@ -3,13 +3,16 @@ Entry point dell'API REST — PCAPCaper Backend.
 
 Espone cinque endpoint:
   GET  /api/health   → verifica che il servizio sia attivo
-  POST /api/analyze  → riceve un file PCAP e restituisce l'analisi completa
+  POST /api/analyze  → riceve un file PCAP, salva e restituisce l'analisi completa
+  GET  /api/analyses → elenca analisi salvate
+  GET  /api/analyses/{analysis_id} → ricarica un'analisi salvata
   POST /api/enrich-ips → arricchisce IP pubblici tramite servizi esterni
   POST /api/security-analysis → esegue threat intelligence opt-in sul traffico
   POST /api/dns-reputation → confronta domini DNS con liste esterne opt-in
 
 Il file ricevuto viene scritto in una directory temporanea del sistema operativo,
-analizzato, e poi cancellato. Nessun dato persiste sul server tra una richiesta e l'altra.
+analizzato, e poi cancellato. Il report JSON risultante può persistere sul server
+in una directory configurabile.
 """
 
 import os
@@ -30,13 +33,15 @@ from models import (
     SecurityAnalysisResponse,
     AIChatRequest,
     AIChatResponse,
+    StoredAnalysisSummary,
 )
 from analyzer import analyze_pcap
 from external_enrichment import enrich_ips
 from security_analysis import analyze_security
 from dns_intelligence import analyze_dns_reputation
 from ai_chat import AIModelError, ask_ai
-from config import AI_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
+from analysis_storage import list_analyses, load_analysis, save_analysis, update_analysis
+from config import AI_ENABLED, ANALYSIS_STORAGE_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -66,7 +71,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_methods=["POST", "GET", "PUT", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -229,6 +234,50 @@ async def ai_chat_endpoint(payload: AIChatRequest):
         ) from exc
 
 
+# ─── Endpoint: stored analysis reports ─────────────────────────────────────
+
+@app.get(
+    "/api/analyses",
+    response_model=list[StoredAnalysisSummary],
+    tags=["Analisi"],
+    summary="List saved analysis reports",
+    response_description="Saved report metadata ordered from newest to oldest",
+)
+def list_saved_analyses_endpoint():
+    """Return lightweight metadata for reports persisted on the backend."""
+    return list_analyses()
+
+
+@app.get(
+    "/api/analyses/{analysis_id}",
+    response_model=AnalysisResult,
+    tags=["Analisi"],
+    summary="Load a saved analysis report",
+    response_description="Full persisted analysis report",
+)
+def load_saved_analysis_endpoint(analysis_id: str):
+    """Load one persisted analysis report by its server-side identifier."""
+    result = load_analysis(analysis_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Analysis report not found.")
+    return result
+
+
+@app.put(
+    "/api/analyses/{analysis_id}",
+    response_model=AnalysisResult,
+    tags=["Analisi"],
+    summary="Update a saved analysis report",
+    response_description="Updated persisted analysis report",
+)
+def update_saved_analysis_endpoint(analysis_id: str, payload: AnalysisResult):
+    """Persist frontend-side report enrichments, such as external IP data."""
+    result = update_analysis(analysis_id, payload)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Analysis report not found.")
+    return result
+
+
 # ─── Endpoint: analisi PCAP ───────────────────────────────────────────────────
 
 @app.post(
@@ -305,11 +354,13 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
         # Delega l'analisi CPU-bound a un thread per non bloccare l'event loop
         # FastAPI mentre altri endpoint servono richieste leggere o progress UI.
         result = await run_in_threadpool(analyze_pcap, tmp_file.name, filename)
+        result = await run_in_threadpool(save_analysis, result, total_bytes)
 
         logger.info(
-            "Analisi completata: %d pacchetti, %.3f s di cattura",
+            "Analisi completata: %d pacchetti, %.3f s di cattura, storage=%s",
             result.summary.total_packets,
             result.summary.duration_seconds,
+            "enabled" if ANALYSIS_STORAGE_ENABLED else "disabled",
         )
         return result
 
