@@ -845,6 +845,51 @@ class StoredAnalysisSummary(BaseModel):
     owner_user_id: Optional[str] = None
 
 
+class LoginRequest(BaseModel):
+    """Password login payload."""
+    username: str
+    password: str
+    mfa_code: Optional[str] = None
+    recovery_code: Optional[str] = None
+
+
+class UserProfile(BaseModel):
+    """Current user profile returned to the frontend."""
+    id: str
+    username: str
+    display_name: str
+    totp_enabled: bool
+    recovery_codes: List[Dict[str, Any]] = Field(default_factory=list)
+    passkeys: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class TOTPSetupResponse(BaseModel):
+    """TOTP setup secret and authenticator-app URI."""
+    secret: str
+    otpauth_url: str
+
+
+class TOTPVerifyRequest(BaseModel):
+    """TOTP verification payload."""
+    code: str
+
+
+class PasskeyLabelRequest(BaseModel):
+    """Passkey registration label."""
+    label: str = "Default passkey"
+
+
+class PasskeyLoginOptionsRequest(BaseModel):
+    """Passkey login options request."""
+    username: str
+
+
+class PasskeyVerifyRequest(BaseModel):
+    """Raw WebAuthn credential payload posted by the browser."""
+    credential: Dict[str, Any]
+    label: Optional[str] = None
+
+
 class AnalysisResult(BaseModel):
     """
     Risultato completo dell'analisi di un file PCAP.
@@ -858,6 +903,8 @@ class AnalysisResult(BaseModel):
     analyzed_at: Optional[str] = None
     # Original uploaded file size in bytes.
     original_size_bytes: Optional[int] = None
+    # User that owns this report when authentication is enabled.
+    owner_user_id: Optional[str] = None
     # Nome originale del file caricato dall'utente
     filename: str
     # Riepilogo statistico generale

@@ -33,6 +33,10 @@
 
 ![](./stuff/i/SCR-20260509-jpwv.png)
 
+![](./stuff/i/SCR-20260512-rzsg.png)
+
+![](./stuff/i/SCR-20260512-rzun.png)
+
 <!--
 ![](./stuff/i/.png)
 -->
@@ -428,6 +432,16 @@ The repository includes `.env.example`. Local `.env` files are ignored by git an
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | HTTP timeout for external services. |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Socket timeout for WHOIS and reverse lookup operations. |
 | `URLHAUS_AUTH_KEY` | empty | Optional URLhaus Auth-Key. |
+| `PCAPCAPER_AUTH_ENABLED` | `1` | Enables login, sessions, user-owned reports, TOTP, recovery codes, and passkeys. |
+| `PCAPCAPER_DATABASE_URL` | `postgresql://pcapcaper:pcapcaper@db:5432/pcapcaper` | PostgreSQL connection URL used by the backend. |
+| `PCAPCAPER_POSTGRES_DB` | `pcapcaper` | Database created by the Compose PostgreSQL service. |
+| `PCAPCAPER_POSTGRES_USER` | `pcapcaper` | PostgreSQL application user. |
+| `PCAPCAPER_POSTGRES_PASSWORD` | `pcapcaper` | PostgreSQL application password. Change it outside local demos. |
+| `PCAPCAPER_SESSION_SECRET` | `change-me-in-production` | HMAC secret for session-token hashes. Must be stable and random in production. |
+| `PCAPCAPER_DEFAULT_DEMO_USERNAME` | `demo` | Seeded demo username. |
+| `PCAPCAPER_DEFAULT_DEMO_PASSWORD` | `demo` | Seeded demo password, stored as a Unix-style hash. |
+| `PCAPCAPER_WEBAUTHN_RP_ID` | `localhost` | WebAuthn relying-party id for passkeys. Must match the browser hostname. |
+| `PCAPCAPER_WEBAUTHN_ORIGIN` | `http://localhost:3000` | Expected WebAuthn browser origin. |
 | `PCAPCAPER_AI_ENABLED` | `1` | Enables the local technical AI assistant. |
 | `PCAPCAPER_AI_OLLAMA_MODE` | `container` | Ollama endpoint mode. Use `container` for the Compose service or `host` for an external/local Ollama server. |
 | `PCAPCAPER_AI_OLLAMA_HOST` | `host.docker.internal` | Ollama host used when `PCAPCAPER_AI_OLLAMA_MODE=host`. Use an IP or DNS name for a remote host. |
@@ -465,7 +479,11 @@ Completed analysis reports are persisted server-side as JSON files when `PCAPCAP
 
 The uploaded PCAP file is still deleted after analysis. Only the derived JSON report is stored. Docker Compose mounts `/data/pcapcaper/analyses` on the `analysis_reports` named volume so reports survive container restarts and rebuilds.
 
-This is intentionally not stored in cookies or browser localStorage because full reports can be large. The storage code is isolated behind a small repository-style module so it can be replaced later by a database table keyed by `user_id` when user accounts are introduced.
+This is intentionally not stored in cookies or browser localStorage because full reports can be large. Reports are now tagged with `owner_user_id`, and the list/load/update endpoints only return reports owned by the authenticated user. The storage code remains isolated behind a small repository-style module so it can later move from JSON files to a PostgreSQL `analysis_reports` table.
+
+### Users and authentication
+
+Authentication is backed by PostgreSQL. On first startup the backend creates the auth tables and seeds `demo` / `demo` when `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Passwords and recovery codes are verified with Unix-style SHA-512 `crypt` hashes; plaintext passwords are not stored. Each user can enable TOTP MFA and register browser passkeys from the user area. See [users.md](users.md) for schema, configuration, and operational notes.
 
 Redis was evaluated but is not required for the current synchronous request model or filesystem report storage. It remains a natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and distributed caches.
 
@@ -1026,6 +1044,19 @@ Loads one saved analysis report and returns the same JSON shape as `POST /api/an
 ### `PUT /api/analyses/{analysis_id}`
 
 Updates one saved report. The frontend uses this after manual enrichment so reloaded reports keep external IP data.
+
+---
+
+### Auth Endpoints
+
+Authentication endpoints live under `/api/auth`:
+
+- `POST /api/auth/login`: username/password login with optional TOTP or recovery code.
+- `POST /api/auth/logout`: clears the HTTP-only session cookie.
+- `GET /api/auth/me`: returns the current user profile.
+- `POST /api/auth/totp/setup`, `/totp/enable`, `/totp/disable`: configure TOTP MFA.
+- `POST /api/auth/passkeys/register/options` and `/register/verify`: register a passkey.
+- `POST /api/auth/passkeys/login/options` and `/login/verify`: login with a passkey.
 
 ---
 

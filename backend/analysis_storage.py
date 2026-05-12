@@ -52,7 +52,7 @@ def _summary_from_result(result: AnalysisResult) -> StoredAnalysisSummary:
         total_bytes=result.summary.total_bytes,
         duration_seconds=result.summary.duration_seconds,
         stored_packet_rows=len(result.packets),
-        owner_user_id=None,
+        owner_user_id=result.owner_user_id,
     )
 
 
@@ -66,7 +66,7 @@ def _prune_old_reports() -> None:
             continue
 
 
-def save_analysis(result: AnalysisResult, original_size_bytes: int) -> AnalysisResult:
+def save_analysis(result: AnalysisResult, original_size_bytes: int, owner_user_id: Optional[str] = None) -> AnalysisResult:
     """Persist an analysis report and return the same report with storage metadata."""
     if not ANALYSIS_STORAGE_ENABLED:
         return result
@@ -74,6 +74,7 @@ def save_analysis(result: AnalysisResult, original_size_bytes: int) -> AnalysisR
     result.analysis_id = result.analysis_id or str(uuid.uuid4())
     result.analyzed_at = result.analyzed_at or _utc_now()
     result.original_size_bytes = original_size_bytes
+    result.owner_user_id = owner_user_id or result.owner_user_id
 
     path = _report_path(result.analysis_id)
     tmp_path = path.with_suffix(".json.tmp")
@@ -101,7 +102,19 @@ def update_analysis(analysis_id: str, result: AnalysisResult) -> Optional[Analys
     return save_analysis(result, result.original_size_bytes or 0)
 
 
-def list_analyses() -> List[StoredAnalysisSummary]:
+def update_user_analysis(analysis_id: str, result: AnalysisResult, owner_user_id: str) -> Optional[AnalysisResult]:
+    """Replace a persisted report only when it belongs to the current user."""
+    existing = load_analysis(analysis_id, owner_user_id=owner_user_id)
+    if existing is None:
+        return None
+    result.analysis_id = analysis_id
+    result.analyzed_at = existing.analyzed_at
+    result.original_size_bytes = result.original_size_bytes or existing.original_size_bytes or 0
+    result.owner_user_id = owner_user_id
+    return save_analysis(result, result.original_size_bytes or 0, owner_user_id=owner_user_id)
+
+
+def list_analyses(owner_user_id: Optional[str] = None) -> List[StoredAnalysisSummary]:
     """Return saved report metadata ordered from newest to oldest."""
     if not ANALYSIS_STORAGE_ENABLED:
         return []
@@ -113,16 +126,20 @@ def list_analyses() -> List[StoredAnalysisSummary]:
                 payload = json.load(handle)
             summary = payload.get("_storage_summary")
             if summary:
-                summaries.append(StoredAnalysisSummary(**summary))
+                item = StoredAnalysisSummary(**summary)
+                if owner_user_id is None or item.owner_user_id == owner_user_id:
+                    summaries.append(item)
                 continue
             result = AnalysisResult(**payload)
-            summaries.append(_summary_from_result(result))
+            item = _summary_from_result(result)
+            if owner_user_id is None or item.owner_user_id == owner_user_id:
+                summaries.append(item)
         except Exception:
             continue
     return summaries
 
 
-def load_analysis(analysis_id: str) -> Optional[AnalysisResult]:
+def load_analysis(analysis_id: str, owner_user_id: Optional[str] = None) -> Optional[AnalysisResult]:
     """Load one persisted report by id."""
     if not ANALYSIS_STORAGE_ENABLED:
         return None
@@ -133,4 +150,7 @@ def load_analysis(analysis_id: str) -> Optional[AnalysisResult]:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     payload.pop("_storage_summary", None)
-    return AnalysisResult(**payload)
+    result = AnalysisResult(**payload)
+    if owner_user_id is not None and result.owner_user_id != owner_user_id:
+        return None
+    return result

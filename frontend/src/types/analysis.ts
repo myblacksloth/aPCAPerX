@@ -221,6 +221,16 @@ export interface StoredAnalysisSummary {
   owner_user_id: string | null
 }
 
+/** Authenticated user profile */
+export interface UserProfile {
+  id: string
+  username: string
+  display_name: string
+  totp_enabled: boolean
+  recovery_codes: Array<{ code: string; used_at: string | null }>
+  passkeys: Array<{ id: string; label: string; created_at: string; last_used_at: string | null }>
+}
+
 /** Reputazione esterna per un dominio DNS */
 export interface DNSDomainIntel {
   domain: string
@@ -603,6 +613,8 @@ export interface AnalysisResult {
   analyzed_at?: string | null
   /** Original uploaded file size in bytes */
   original_size_bytes?: number | null
+  /** User that owns this persisted report */
+  owner_user_id?: string | null
   /** Nome originale del file caricato */
   filename: string
   /** Statistiche generali della cattura */

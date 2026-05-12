@@ -568,6 +568,16 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
 | `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
+| `PCAPCAPER_AUTH_ENABLED` | `1` | Abilita login, sessioni, report per utente, TOTP, recovery code e passkeys |
+| `PCAPCAPER_DATABASE_URL` | `postgresql://pcapcaper:pcapcaper@db:5432/pcapcaper` | URL PostgreSQL usato dal backend |
+| `PCAPCAPER_POSTGRES_DB` | `pcapcaper` | Database creato dal servizio PostgreSQL Compose |
+| `PCAPCAPER_POSTGRES_USER` | `pcapcaper` | Utente PostgreSQL applicativo |
+| `PCAPCAPER_POSTGRES_PASSWORD` | `pcapcaper` | Password PostgreSQL applicativa. Cambiarla fuori dai demo locali |
+| `PCAPCAPER_SESSION_SECRET` | `change-me-in-production` | Segreto HMAC per gli hash dei token sessione. Deve essere stabile e randomico in produzione |
+| `PCAPCAPER_DEFAULT_DEMO_USERNAME` | `demo` | Username demo iniziale |
+| `PCAPCAPER_DEFAULT_DEMO_PASSWORD` | `demo` | Password demo iniziale, salvata come hash stile Unix |
+| `PCAPCAPER_WEBAUTHN_RP_ID` | `localhost` | Relying-party id WebAuthn per passkeys. Deve combaciare con hostname browser |
+| `PCAPCAPER_WEBAUTHN_ORIGIN` | `http://localhost:3000` | Origin browser attesa per WebAuthn |
 | `PCAPCAPER_AI_ENABLED` | `1` | Abilita l'assistente IA tecnico locale |
 | `PCAPCAPER_AI_OLLAMA_MODE` | `container` | Modalità endpoint Ollama. Usa `container` per il servizio Compose oppure `host` per un server Ollama esterno/locale |
 | `PCAPCAPER_AI_OLLAMA_HOST` | `host.docker.internal` | Host Ollama usato con `PCAPCAPER_AI_OLLAMA_MODE=host`. Può essere un IP o un nome DNS remoto |
@@ -603,7 +613,11 @@ I report delle analisi completate vengono salvati lato backend come file JSON qu
 
 Il file PCAP originale viene comunque eliminato dopo l'analisi. Rimane solo il JSON derivato. Docker Compose monta `/data/pcapcaper/analyses` sul volume nominato `analysis_reports`, quindi i report sopravvivono a restart e rebuild dei container.
 
-La persistenza non usa cookie o browser localStorage perché i report completi possono essere grandi. Il codice è isolato in un modulo repository-style, così in futuro potrà essere sostituito da una tabella database collegata a `user_id` quando verranno introdotti gli utenti.
+La persistenza non usa cookie o browser localStorage perché i report completi possono essere grandi. I report ora sono marcati con `owner_user_id` e gli endpoint di lista/caricamento/aggiornamento restituiscono solo report appartenenti all'utente autenticato. Il codice resta isolato in un modulo repository-style, così in futuro potrà essere spostato da JSON file a una tabella PostgreSQL `analysis_reports`.
+
+### Utenti e autenticazione
+
+L'autenticazione usa PostgreSQL. Al primo avvio il backend crea le tabelle auth e inizializza `demo` / `demo` quando `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente può abilitare TOTP MFA e registrare passkeys browser dall'area utente. Vedi [users.md](users.md) per schema, configurazione e note operative.
 
 Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
@@ -1332,6 +1346,19 @@ Carica un report salvato e restituisce la stessa struttura JSON di `POST /api/an
 ### `PUT /api/analyses/{analysis_id}`
 
 Aggiorna un report salvato. Il frontend lo usa dopo l'arricchimento manuale, così i report ricaricati mantengono i dati IP esterni.
+
+---
+
+### Endpoint Auth
+
+Gli endpoint di autenticazione sono sotto `/api/auth`:
+
+- `POST /api/auth/login`: login username/password con TOTP o recovery code opzionale.
+- `POST /api/auth/logout`: elimina il cookie sessione HTTP-only.
+- `GET /api/auth/me`: restituisce il profilo utente corrente.
+- `POST /api/auth/totp/setup`, `/totp/enable`, `/totp/disable`: configurazione TOTP MFA.
+- `POST /api/auth/passkeys/register/options` e `/register/verify`: registrazione passkey.
+- `POST /api/auth/passkeys/login/options` e `/login/verify`: login con passkey.
 
 ---
 
