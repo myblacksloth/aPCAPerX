@@ -21,6 +21,7 @@ from config import (
     AI_MODEL,
     AI_NUM_CTX,
     AI_NUM_PREDICT,
+    AI_PROMPT_MAX_CHARS,
     AI_TIMEOUT_SECONDS,
 )
 from models import AIChatMessage, AIChatRequest, AIChatResponse, AISelectedPacket, PacketEntry
@@ -42,6 +43,27 @@ _TECHNICAL_TERMS = {
     "host", "http", "ip", "ja3", "nxdomain", "packet", "packets", "port",
     "rcode", "security", "sni", "tcp", "tls", "ttl", "udp", "uri",
 }
+_PRUNABLE_CONTEXT_PATHS = [
+    ("dns", "queries"),
+    ("http", "requests"),
+    ("http", "responses"),
+    ("tls", "connections"),
+    ("hosts", "items"),
+    ("flows",),
+    ("conversations",),
+    ("selected_packets",),
+    ("dns", "correlations"),
+    ("dns", "tunneling_indicators"),
+    ("tls", "anomalies"),
+    ("dns", "top_domains"),
+    ("http", "top_hosts"),
+    ("http", "top_user_agents"),
+    ("tls", "top_sni"),
+    ("top_src_ips",),
+    ("top_dst_ips",),
+    ("top_src_ports",),
+    ("top_dst_ports",),
+]
 
 
 class AIModelError(RuntimeError):
@@ -198,6 +220,66 @@ def _take_relevant(items: Sequence[Any], terms: Set[str], ips: Set[str], ports: 
     return relevant[:limit]
 
 
+def _truncate_text_values(value: Any, max_length: int = 180) -> Any:
+    """Recursively shorten long strings before sending report evidence to the LLM."""
+    if isinstance(value, str):
+        return value if len(value) <= max_length else f"{value[:max_length]}..."
+    if isinstance(value, list):
+        return [_truncate_text_values(item, max_length) for item in value]
+    if isinstance(value, dict):
+        return {key: _truncate_text_values(item, max_length) for key, item in value.items()}
+    return value
+
+
+def _context_json(context: Dict[str, Any]) -> str:
+    """Serialize technical evidence in the most compact stable form."""
+    return json.dumps(context, ensure_ascii=True, separators=(",", ":"), default=str)
+
+
+def _list_at_path(context: Dict[str, Any], path: Tuple[str, ...]) -> List[Any]:
+    """Return a mutable list at a nested context path, or an empty list."""
+    current: Any = context
+    for key in path:
+        if not isinstance(current, dict):
+            return []
+        current = current.get(key)
+    return current if isinstance(current, list) else []
+
+
+def _shrink_context_once(context: Dict[str, Any]) -> bool:
+    """Remove one slice of the least critical evidence and report if it changed."""
+    for path in _PRUNABLE_CONTEXT_PATHS:
+        items = _list_at_path(context, path)
+        if len(items) > 1:
+            del items[max(1, len(items) // 2):]
+            return True
+        if len(items) == 1:
+            items.clear()
+            return True
+    return False
+
+
+def _prune_context_to_budget(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Reduce context lists until the prompt fits the configured budget."""
+    context = _truncate_text_values(context)
+    context["context_budget"] = {
+        "max_chars": AI_PROMPT_MAX_CHARS,
+        "pruned": False,
+        "note": "Context is pre-pruned by the backend to avoid Ollama prompt truncation.",
+    }
+
+    while len(_context_json(context)) > AI_PROMPT_MAX_CHARS:
+        changed = _shrink_context_once(context)
+        context["context_budget"]["pruned"] = True
+        context["context_budget"]["chars_after_last_prune"] = len(_context_json(context))
+        if not changed:
+            context["context_budget"]["warning"] = "Prompt budget is too small for even the minimal report summary."
+            break
+
+    context["context_budget"]["final_chars"] = len(_context_json(context))
+    return context
+
+
 def build_technical_context(question: str, analysis: Dict[str, Any], selected: Sequence[AISelectedPacket]) -> Dict[str, Any]:
     """Build a technical evidence pack from the sanitized full analysis report."""
     terms = _tokens(question)
@@ -254,7 +336,7 @@ def build_technical_context(question: str, analysis: Dict[str, Any], selected: S
             "items": _take_relevant(_safe_list(hosts.get("hosts")), terms, ips, ports, protocols, 20),
         }
 
-    return context
+    return _prune_context_to_budget(context)
 
 
 def _history_lines(history: Iterable[AIChatMessage]) -> str:
@@ -269,7 +351,7 @@ def _history_lines(history: Iterable[AIChatMessage]) -> str:
 
 def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> str:
     """Create the final prompt from bounded technical evidence."""
-    context_json = json.dumps(technical_context, ensure_ascii=True, separators=(",", ":"), default=str)
+    context_json = _context_json(technical_context)
     return (
         "You are PCAPCaper's technical network-analysis assistant.\n"
         "Use the structured evidence below to produce a precise technical answer.\n"
@@ -282,11 +364,28 @@ def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> 
     )
 
 
+def _build_budgeted_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> str:
+    """Build the final prompt and keep pruning until the whole prompt fits."""
+    prompt = _build_prompt(payload, technical_context)
+    while len(prompt) > AI_PROMPT_MAX_CHARS:
+        changed = _shrink_context_once(technical_context)
+        budget = _safe_dict(technical_context.get("context_budget"))
+        budget["pruned"] = True
+        budget["final_prompt_chars"] = len(prompt)
+        technical_context["context_budget"] = budget
+        if not changed:
+            budget["warning"] = "Prompt budget is too small for the minimal prompt."
+            break
+        prompt = _build_prompt(payload, technical_context)
+    technical_context["context_budget"]["final_prompt_chars"] = len(prompt)
+    return prompt
+
+
 def ask_ai(payload: AIChatRequest) -> AIChatResponse:
     """Query the configured model service with a bounded packet context."""
     selected = select_relevant_packets(payload.question, payload.packets)
     technical_context = build_technical_context(payload.question, payload.analysis, selected)
-    prompt = _build_prompt(payload, technical_context)
+    prompt = _build_budgeted_prompt(payload, technical_context)
     request_body = json.dumps({
         "model": AI_MODEL,
         "prompt": prompt,

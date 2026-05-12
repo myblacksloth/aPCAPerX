@@ -98,3 +98,6 @@ AI_MAX_PACKETS = _int_env("PCAPCAPER_AI_MAX_PACKETS", 40, 1)
 AI_MAX_HISTORY_MESSAGES = _int_env("PCAPCAPER_AI_MAX_HISTORY_MESSAGES", 8, 0)
 AI_NUM_PREDICT = _int_env("PCAPCAPER_AI_NUM_PREDICT", 384, 64)
 AI_NUM_CTX = _int_env("PCAPCAPER_AI_NUM_CTX", 2048, 512)
+# Approximate prompt budget in characters. JSON evidence tokenizes densely, so
+# the default is deliberately below the model token window.
+AI_PROMPT_MAX_CHARS = _int_env("PCAPCAPER_AI_PROMPT_MAX_CHARS", max(2048, int(AI_NUM_CTX * 1.5)), 2048)
