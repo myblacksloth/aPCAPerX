@@ -40,10 +40,6 @@ services:
     networks:
       - pcapcaper_net
 
-    depends_on:
-      ai:
-        condition: service_healthy
-
     # Health-check: verifica che il backend risponda prima che il frontend parta
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -62,9 +58,9 @@ services:
     container_name: pcapcaper-frontend
     restart: unless-stopped
 
-    # Porta dell'interfaccia web — aprire http://localhost:3000 nel browser
+    # Porta dell'interfaccia web — aprire http://localhost:7000 nel browser
     ports:
-      - "3000:80"
+      - "7000:80"
 
     # Il frontend dipende dal backend: Docker attende che il health-check passi
     depends_on:
