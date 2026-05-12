@@ -52,6 +52,13 @@ class AIModelError(RuntimeError):
         self.status_code = status_code
 
 
+def _model_pull_hint() -> str:
+    """Return the safest pull command for the currently configured Ollama endpoint."""
+    if AI_BASE_URL.startswith("http://ai:"):
+        return f"docker compose exec ai ollama pull {AI_MODEL}"
+    return f"ollama pull {AI_MODEL}"
+
+
 def _tokens(question: str) -> Set[str]:
     """Extract searchable terms while dropping very common words."""
     return {
@@ -308,12 +315,15 @@ def ask_ai(payload: AIChatRequest) -> AIChatResponse:
         detail = exc.read().decode("utf-8", errors="replace")[:500]
         if exc.code == 404 and "model" in detail.lower():
             raise AIModelError(
-                f"AI model '{AI_MODEL}' is not installed. Run: docker compose exec ai ollama pull {AI_MODEL}",
+                f"AI model '{AI_MODEL}' is not installed. Run: {_model_pull_hint()}",
                 status_code=503,
             ) from exc
         raise AIModelError(f"AI model service returned HTTP {exc.code}: {detail}", status_code=502) from exc
     except urllib.error.URLError as exc:
-        raise AIModelError("AI model service is unavailable. Check that the 'ai' container is running.", status_code=503) from exc
+        raise AIModelError(
+            f"AI model service is unavailable at {AI_BASE_URL}. Check the configured Ollama host and port.",
+            status_code=503,
+        ) from exc
 
     answer = str(data.get("response") or "").strip()
     if not answer:

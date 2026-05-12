@@ -566,7 +566,10 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_SOCKET_TIMEOUT_SECONDS` | `5` | Timeout socket per WHOIS/reverse lookup |
 | `URLHAUS_AUTH_KEY` | vuoto | Auth-Key opzionale per URLhaus |
 | `PCAPCAPER_AI_ENABLED` | `1` | Abilita l'assistente IA tecnico locale |
-| `PCAPCAPER_AI_BASE_URL` | `http://ai:11434` | URL API interno di Ollama |
+| `PCAPCAPER_AI_OLLAMA_MODE` | `container` | Modalità endpoint Ollama. Usa `container` per il servizio Compose oppure `host` per un server Ollama esterno/locale |
+| `PCAPCAPER_AI_OLLAMA_HOST` | `host.docker.internal` | Host Ollama usato con `PCAPCAPER_AI_OLLAMA_MODE=host`. Può essere un IP o un nome DNS remoto |
+| `PCAPCAPER_AI_OLLAMA_PORT` | `11434` | Porta API Ollama usata con `PCAPCAPER_AI_OLLAMA_MODE=host` |
+| `PCAPCAPER_AI_BASE_URL` | vuoto | Override completo dell'URL API Ollama. Se impostato, bypassa modalità, host e porta |
 | `PCAPCAPER_AI_MODEL` | `qwen2.5:0.5b` | Modello leggero predefinito |
 | `PCAPCAPER_AI_TIMEOUT_SECONDS` | `360` | Tempo massimo per una risposta del modello |
 | `PCAPCAPER_AI_MAX_PACKETS` | `40` | Pacchetti selezionati massimi inclusi nelle evidenze IA |
@@ -621,6 +624,61 @@ docker compose exec ai ollama pull qwen2.5:0.5b
 ```
 
 Per passare a hardware più potente modifica `PCAPCAPER_AI_MODEL`, `PCAPCAPER_AI_NUM_CTX`, `PCAPCAPER_AI_NUM_PREDICT` e i valori `cpus` / `mem_limit` del servizio `ai`.
+
+### Servizio Ollama esterno
+
+Puoi disattivare il container AI incluso e puntare il backend a un servizio Ollama su un altro host, per esempio un Mac nella stessa LAN.
+
+Configura `.env`:
+
+```dotenv
+PCAPCAPER_AI_ENABLED=1
+PCAPCAPER_AI_OLLAMA_MODE=host
+PCAPCAPER_AI_OLLAMA_HOST=192.168.1.20
+PCAPCAPER_AI_OLLAMA_PORT=11434
+PCAPCAPER_AI_MODEL=qwen3:8b
+PCAPCAPER_AI_NUM_CTX=8192
+PCAPCAPER_AI_NUM_PREDICT=768
+```
+
+Se il container backend deve raggiungere Ollama in esecuzione sullo stesso host macOS di Docker Desktop, usa:
+
+```dotenv
+PCAPCAPER_AI_OLLAMA_HOST=host.docker.internal
+```
+
+Se preferisci indicare direttamente l'URL completo:
+
+```dotenv
+PCAPCAPER_AI_BASE_URL=http://192.168.1.20:11434
+```
+
+Per non avviare `ai` e `ai-model-pull`, crea un override Compose locale, per esempio `docker-compose.external-ai.yml`:
+
+```yaml
+services:
+  ai:
+    profiles: ["internal-ai"]
+  ai-model-pull:
+    profiles: ["internal-ai"]
+  backend:
+    depends_on: !reset []
+```
+
+`!reset` richiede Docker Compose v2. Se la tua versione di Compose non lo supporta, aggiorna Docker Compose oppure usa una copia locale del file Compose rimuovendo dal backend il `depends_on` verso `ai`.
+
+Poi avvia solo i servizi applicativi:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.external-ai.yml up --build backend frontend
+```
+
+Il server Ollama esterno deve essere già acceso e deve avere installato il modello configurato:
+
+```bash
+ollama pull qwen3:8b
+curl http://192.168.1.20:11434/api/tags
+```
 
 Chiudere il popup non cancella la conversazione: la cronologia resta in memoria finché la dashboard rimane aperta.
 
