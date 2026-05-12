@@ -52,8 +52,9 @@ _PRUNABLE_CONTEXT_PATHS = [
     ("flows",),
     ("conversations",),
     ("selected_packets",),
-    ("dns", "correlations"),
+    ("dns", "flow_correlations"),
     ("dns", "tunneling_indicators"),
+    ("dns", "resolutions"),
     ("tls", "anomalies"),
     ("dns", "top_domains"),
     ("http", "top_hosts"),
@@ -220,6 +221,100 @@ def _take_relevant(items: Sequence[Any], terms: Set[str], ips: Set[str], ports: 
     return relevant[:limit]
 
 
+def _dns_resolutions(dns: Dict[str, Any], terms: Set[str], ips: Set[str], ports: Set[int], protocols: Set[str], limit: int = 80) -> List[Dict[str, Any]]:
+    """Build a compact domain-to-answer map so the LLM can answer DNS questions directly."""
+    grouped: Dict[str, Dict[str, Any]] = {}
+
+    for query in _safe_list(dns.get("queries")):
+        if not isinstance(query, dict):
+            continue
+        domain = str(query.get("query") or "")
+        if not domain:
+            continue
+
+        entry = grouped.setdefault(domain, {
+            "domain": domain,
+            "record_types": set(),
+            "answer_ips": set(),
+            "cnames": set(),
+            "txt_answers": set(),
+            "clients": set(),
+            "resolvers": set(),
+            "response_codes": set(),
+            "query_packet_numbers": set(),
+            "response_packet_numbers": set(),
+            "query_count": 0,
+        })
+        entry["query_count"] += 1
+        entry["record_types"].add(query.get("record_type"))
+        entry["clients"].add(query.get("client"))
+        entry["resolvers"].add(query.get("resolver"))
+        entry["response_codes"].add(query.get("response_code_name"))
+        entry["query_packet_numbers"].add(query.get("packet_number"))
+        entry["response_packet_numbers"].add(query.get("response_packet_number"))
+
+        for answer_ip in _safe_list(query.get("answer_ips")):
+            entry["answer_ips"].add(answer_ip)
+        for txt_answer in _safe_list(query.get("txt_answers")):
+            entry["txt_answers"].add(txt_answer)
+        for answer in _safe_list(query.get("answers")):
+            if not isinstance(answer, dict):
+                continue
+            record_type = answer.get("record_type")
+            value = answer.get("value")
+            if record_type in {"A", "AAAA"} and value:
+                entry["answer_ips"].add(value)
+            if record_type == "CNAME" and value:
+                entry["cnames"].add(value)
+
+    for correlation in _safe_list(dns.get("flow_correlations")):
+        if not isinstance(correlation, dict):
+            continue
+        domain = str(correlation.get("domain") or "")
+        answer_ip = correlation.get("answer_ip")
+        if not domain or not answer_ip:
+            continue
+        entry = grouped.setdefault(domain, {
+            "domain": domain,
+            "record_types": set(),
+            "answer_ips": set(),
+            "cnames": set(),
+            "txt_answers": set(),
+            "clients": set(),
+            "resolvers": set(),
+            "response_codes": set(),
+            "query_packet_numbers": set(),
+            "response_packet_numbers": set(),
+            "query_count": 0,
+        })
+        entry["answer_ips"].add(answer_ip)
+        for packet_number in _safe_list(correlation.get("dns_packet_numbers")):
+            entry["query_packet_numbers"].add(packet_number)
+
+    rows: List[Dict[str, Any]] = []
+    for entry in grouped.values():
+        row = {
+            "domain": entry["domain"],
+            "answer_ips": sorted(value for value in entry["answer_ips"] if value),
+            "cnames": sorted(value for value in entry["cnames"] if value)[:8],
+            "record_types": sorted(value for value in entry["record_types"] if value),
+            "clients": sorted(value for value in entry["clients"] if value)[:6],
+            "resolvers": sorted(value for value in entry["resolvers"] if value)[:6],
+            "response_codes": sorted(value for value in entry["response_codes"] if value),
+            "query_packet_numbers": sorted(value for value in entry["query_packet_numbers"] if value)[:12],
+            "response_packet_numbers": sorted(value for value in entry["response_packet_numbers"] if value)[:12],
+            "query_count": entry["query_count"],
+        }
+        if entry["txt_answers"]:
+            row["txt_answers"] = sorted(value for value in entry["txt_answers"] if value)[:4]
+        rows.append(row)
+
+    relevant = _take_relevant(rows, terms, ips, ports, protocols, limit)
+    if not relevant and (terms & {"dns", "domain", "domains", "domini", "entries", "resolved", "risoluzioni"}):
+        relevant = sorted(rows, key=lambda item: (-len(item["answer_ips"]), -item["query_count"], item["domain"]))[:limit]
+    return relevant
+
+
 def _truncate_text_values(value: Any, max_length: int = 180) -> Any:
     """Recursively shorten long strings before sending report evidence to the LLM."""
     if isinstance(value, str):
@@ -309,10 +404,11 @@ def build_technical_context(question: str, analysis: Dict[str, Any], selected: S
     if dns:
         context["dns"] = {
             "stats": dns.get("stats"),
+            "resolutions": _dns_resolutions(dns, terms, ips, ports, protocols, 80),
             "top_domains": _safe_list(dns.get("top_domains"))[:15],
             "tunneling_indicators": _take_relevant(_safe_list(dns.get("tunneling_indicators")), terms, ips, ports, protocols, 15),
             "queries": _take_relevant(_safe_list(dns.get("queries")), terms, ips, ports, protocols, 30),
-            "correlations": _take_relevant(_safe_list(dns.get("correlations")), terms, ips, ports, protocols, 15),
+            "flow_correlations": _take_relevant(_safe_list(dns.get("flow_correlations")), terms, ips, ports, protocols, 15),
         }
     if http:
         context["http"] = {
@@ -356,6 +452,7 @@ def _build_prompt(payload: AIChatRequest, technical_context: Dict[str, Any]) -> 
         "You are PCAPCaper's technical network-analysis assistant.\n"
         "Use the structured evidence below to produce a precise technical answer.\n"
         "Prioritize flows, DNS, HTTP, TLS, host profiles, and packet numbers when available.\n"
+        "For DNS questions, use dns.resolutions first because it maps domains to answer IPs and packet numbers.\n"
         "Mention concrete IPs, ports, protocols, domains, SNI, rcodes, status codes, flow IDs, and packet numbers.\n"
         "If evidence is insufficient, state what is missing. Do not invent packets, payloads, hosts, or threat intel.\n\n"
         f"Recent chat:\n{_history_lines(payload.history) or '(none)'}\n\n"
