@@ -34,7 +34,6 @@ from auth_store import (
     get_user_by_id,
     get_user_by_session,
     get_user_by_username,
-    init_auth_db,
     list_user_passkeys,
     pop_latest_challenge,
     save_challenge,
@@ -124,13 +123,6 @@ def require_user(request: Request) -> Dict[str, Any]:
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
     return user
-
-
-@router.on_event("startup")
-def startup_auth() -> None:
-    """Initialize the user database on backend startup."""
-    if AUTH_ENABLED:
-        init_auth_db()
 
 
 @router.post("/login", response_model=UserProfile)

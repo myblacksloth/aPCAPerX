@@ -9,7 +9,7 @@ username: demo
 password: demo
 ```
 
-The demo password is inserted as a Unix-style SHA-512 `crypt` hash. The plaintext password is never stored in the `users` table.
+The demo account is inserted by `stuff/db/init/001-pcapcaper.sql`. The demo password is inserted as a Unix-style SHA-512 `crypt` hash. The plaintext password is never stored in the `users` table.
 
 ## Database Model
 
@@ -147,7 +147,7 @@ PCAPCAPER_POSTGRES_PASSWORD=pcapcaper
 PCAPCAPER_DATABASE_URL=postgresql://pcapcaper:pcapcaper@db:5432/pcapcaper
 ```
 
-The backend creates and migrates auth tables on startup. The Compose service also mounts:
+The official PostgreSQL image creates the database named by `PCAPCAPER_POSTGRES_DB`/`POSTGRES_DB` when the `postgres_data` volume is empty. The Compose service also mounts:
 
 ```text
 stuff/db/init -> /docker-entrypoint-initdb.d
@@ -159,7 +159,7 @@ The current init file is:
 stuff/db/init/001-pcapcaper.sql
 ```
 
-It creates `pgcrypto` and leaves the rest to the backend migration code.
+It creates the auth schema, indexes, and baseline `demo` account. The backend does not create or migrate database objects; it only reads and writes rows. If the schema is missing, startup or requests should fail so deployment problems are visible.
 
 ## Production Notes
 
@@ -168,9 +168,10 @@ Change these values before exposing the app:
 ```dotenv
 PCAPCAPER_POSTGRES_PASSWORD=<strong-password>
 PCAPCAPER_SESSION_SECRET=<stable-random-secret>
-PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=0
 PCAPCAPER_WEBAUTHN_RP_ID=<real-hostname>
 PCAPCAPER_WEBAUTHN_ORIGIN=https://<real-hostname>
 ```
 
-If you change PostgreSQL credentials after the volume has already been created, recreate or migrate the `postgres_data` volume; Docker's official Postgres image only applies initial credentials when the data directory is empty.
+If you do not want the demo user in production, remove or edit the demo `INSERT` statements in `stuff/db/init/001-pcapcaper.sql` before creating the `postgres_data` volume.
+
+If you change PostgreSQL credentials or the init SQL after the volume has already been created, recreate or migrate the `postgres_data` volume; Docker's official Postgres image only applies initialization files when the data directory is empty.

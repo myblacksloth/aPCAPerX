@@ -20,9 +20,6 @@ from psycopg.rows import dict_row
 
 from config import (
     DATABASE_URL,
-    DEFAULT_DEMO_PASSWORD,
-    DEFAULT_DEMO_USER_ENABLED,
-    DEFAULT_DEMO_USERNAME,
     SESSION_SECRET,
     SESSION_TTL_HOURS,
 )
@@ -43,14 +40,6 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _unix_hash(secret: str) -> str:
-    """Hash secrets with a Unix-style SHA-512 crypt hash."""
-    if crypt is None:
-        raise RuntimeError("Unix crypt hashing is unavailable on this platform.")
-    salt = "$6$" + secrets.token_urlsafe(16)[:16]
-    return crypt.crypt(secret, salt)
-
-
 def _verify_unix_hash(secret: str, secret_hash: str) -> bool:
     """Verify a plaintext secret against a stored Unix crypt hash."""
     if crypt is None or not secret_hash:
@@ -61,11 +50,6 @@ def _verify_unix_hash(secret: str, secret_hash: str) -> bool:
 def _session_hash(token: str) -> str:
     """Store only a keyed hash of session tokens in the database."""
     return hmac.new(SESSION_SECRET.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
-def generate_recovery_codes(count: int = 10) -> List[str]:
-    """Create human-typable recovery codes."""
-    return [f"{secrets.token_hex(4)}-{secrets.token_hex(4)}" for _ in range(count)]
 
 
 def _totp_code(secret: str, step: int) -> str:
@@ -93,95 +77,6 @@ def verify_totp(secret: str, code: str, window: int = 1) -> bool:
 def generate_totp_secret() -> str:
     """Create a base32 TOTP secret compatible with authenticator apps."""
     return base64.b32encode(os.urandom(20)).decode("ascii").rstrip("=")
-
-
-def init_auth_db() -> None:
-    """Create auth tables and seed the demo user if configured."""
-    with _conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id UUID PRIMARY KEY,
-                    username TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL,
-                    display_name TEXT NOT NULL,
-                    totp_secret TEXT,
-                    totp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS user_recovery_codes (
-                    id UUID PRIMARY KEY,
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    code TEXT NOT NULL,
-                    code_hash TEXT NOT NULL,
-                    used_at TIMESTAMPTZ
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS user_sessions (
-                    id UUID PRIMARY KEY,
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    token_hash TEXT NOT NULL UNIQUE,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    expires_at TIMESTAMPTZ NOT NULL
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS webauthn_challenges (
-                    id UUID PRIMARY KEY,
-                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    username TEXT,
-                    challenge TEXT NOT NULL,
-                    purpose TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS user_passkeys (
-                    id UUID PRIMARY KEY,
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    credential_id TEXT NOT NULL UNIQUE,
-                    public_key TEXT NOT NULL,
-                    sign_count BIGINT NOT NULL DEFAULT 0,
-                    label TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    last_used_at TIMESTAMPTZ
-                )
-            """)
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT")
-            cur.execute("UPDATE users SET display_name = username WHERE display_name IS NULL")
-            cur.execute("ALTER TABLE users ALTER COLUMN display_name SET NOT NULL")
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT")
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE")
-        # Commit schema changes before opening the separate seed-user connection.
-        conn.commit()
-
-        if DEFAULT_DEMO_USER_ENABLED:
-            ensure_user(DEFAULT_DEMO_USERNAME, DEFAULT_DEMO_PASSWORD, "Demo")
-
-
-def ensure_user(username: str, password: str, display_name: Optional[str] = None) -> Dict[str, Any]:
-    """Create a user with recovery codes if it does not already exist."""
-    with _conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
-            existing = cur.fetchone()
-            if existing:
-                return existing
-            user_id = uuid.uuid4()
-            cur.execute(
-                "INSERT INTO users (id, username, password_hash, display_name) VALUES (%s, %s, %s, %s) RETURNING *",
-                (user_id, username, _unix_hash(password), display_name or username),
-            )
-            user = cur.fetchone()
-            for code in generate_recovery_codes():
-                cur.execute(
-                    "INSERT INTO user_recovery_codes (id, user_id, code, code_hash) VALUES (%s, %s, %s, %s)",
-                    (uuid.uuid4(), user_id, code, _unix_hash(code)),
-                )
-            return user
 
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
