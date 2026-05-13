@@ -574,8 +574,6 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_POSTGRES_USER` | `pcapcaper` | Utente PostgreSQL applicativo |
 | `PCAPCAPER_POSTGRES_PASSWORD` | `pcapcaper` | Password PostgreSQL applicativa. Cambiarla fuori dai demo locali |
 | `PCAPCAPER_SESSION_SECRET` | `change-me-in-production` | Segreto HMAC per gli hash dei token sessione. Deve essere stabile e randomico in produzione |
-| `PCAPCAPER_DEFAULT_DEMO_USERNAME` | `demo` | Username demo iniziale |
-| `PCAPCAPER_DEFAULT_DEMO_PASSWORD` | `demo` | Password demo iniziale, salvata come hash stile Unix |
 | `PCAPCAPER_WEBAUTHN_RP_ID` | `localhost` | Relying-party id WebAuthn per passkeys. Deve combaciare con hostname browser |
 | `PCAPCAPER_WEBAUTHN_ORIGIN` | `http://localhost:3000` | Origin browser attesa per WebAuthn |
 | `PCAPCAPER_AI_ENABLED` | `1` | Abilita l'assistente IA tecnico locale |
@@ -617,7 +615,7 @@ La persistenza non usa cookie o browser localStorage perché i report completi p
 
 ### Utenti e autenticazione
 
-L'autenticazione usa PostgreSQL. Al primo avvio il backend crea le tabelle auth e inizializza `demo` / `demo` quando `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente ha una pagina profilo per recovery code, TOTP MFA con QR code locale e registrazione passkey browser. Le passkey richiedono HTTPS o `localhost`; HTTP semplice su IP LAN viene rifiutato dai browser. Vedi [users.md](users.md) per schema, configurazione e note operative.
+L'autenticazione usa PostgreSQL. Lo schema del database e l'account iniziale `demo` / `demo` vengono creati dal file SQL di init di PostgreSQL, non dal backend applicativo. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente ha una pagina profilo per recovery code, TOTP MFA con QR code locale e registrazione passkey browser. Le passkey richiedono HTTPS o `localhost`; HTTP semplice su IP LAN viene rifiutato dai browser. Vedi [users.md](users.md) per schema, configurazione e note operative.
 
 Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
