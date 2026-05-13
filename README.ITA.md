@@ -617,7 +617,7 @@ La persistenza non usa cookie o browser localStorage perché i report completi p
 
 ### Utenti e autenticazione
 
-L'autenticazione usa PostgreSQL. Al primo avvio il backend crea le tabelle auth e inizializza `demo` / `demo` quando `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente può abilitare TOTP MFA e registrare passkeys browser dall'area utente. Vedi [users.md](users.md) per schema, configurazione e note operative.
+L'autenticazione usa PostgreSQL. Al primo avvio il backend crea le tabelle auth e inizializza `demo` / `demo` quando `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente ha una pagina profilo per recovery code, TOTP MFA con QR code locale e registrazione passkey browser. Le passkey richiedono HTTPS o `localhost`; HTTP semplice su IP LAN viene rifiutato dai browser. Vedi [users.md](users.md) per schema, configurazione e note operative.
 
 Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
