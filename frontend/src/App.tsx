@@ -240,7 +240,18 @@ export default function App() {
       <AuthPanel user={user} onUserChange={setUser} onOpenProfile={() => setView('profile')} />
       <main className="flex-1 pb-12">
         {!user ? null : view === 'profile' ? (
-          <UserProfilePage user={user} onUserChange={setUser} onBack={() => setView('home')} />
+          <UserProfilePage
+            user={user}
+            savedAnalyses={savedAnalyses}
+            savedLoading={savedLoading}
+            onUserChange={setUser}
+            onBack={() => setView('home')}
+            onLoadSaved={(analysisId) => {
+              // Return to the dashboard before loading the selected report.
+              setView('home')
+              handleLoadSaved(analysisId)
+            }}
+          />
         ) : result ? (
           // Vista dashboard: mostra i risultati dell'analisi
           <Dashboard result={result} onReset={handleReset} onResultUpdate={handleResultUpdate} />

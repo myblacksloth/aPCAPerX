@@ -77,11 +77,13 @@ sequenceDiagram
     participant Backend
     participant Postgres
 
-    Browser->>Backend: POST /api/auth/login
+    Browser->>Backend: POST /api/auth/login with username/password
     Backend->>Postgres: load user by username
     Backend->>Backend: verify Unix crypt password hash
     alt TOTP enabled
-        Backend->>Backend: verify TOTP or recovery code
+        Backend-->>Browser: 401 MFA code required
+        Browser->>Backend: POST /api/auth/login with username/password/TOTP
+        Backend->>Backend: verify TOTP
     end
     Backend->>Postgres: store session token hash
     Backend-->>Browser: HTTP-only session cookie
@@ -89,9 +91,15 @@ sequenceDiagram
 
 Session cookies are HTTP-only. The database stores only an HMAC hash of the session token.
 
+New users are created through `POST /api/auth/register`. The backend writes the user row and a first set of recovery-code rows, but it does not create or migrate tables. Database objects remain owned by `stuff/db/init/001-pcapcaper.sql`.
+
+Account recovery is intentionally separated from the login page. The dedicated recovery page posts `username` plus one unused recovery code to `POST /api/auth/recover`; on success the backend consumes that code and creates a normal session.
+
 ## Recovery Codes
 
 Each user receives recovery codes at creation time. They are visible in the user area because they are intended to be saved by the user. For verification, the backend checks `code_hash` with Unix `crypt` and marks the code as used.
+
+The profile page can download the visible recovery codes as a local `.txt` file. The file is built in the browser from the already loaded profile data, so no third-party service is involved.
 
 The current implementation also stores the displayable code value to satisfy the "visible in the user page" requirement. If this becomes a production multi-user deployment, prefer showing recovery codes only once and storing only hashes.
 
@@ -109,7 +117,7 @@ TOTP is implemented with standard RFC 6238 HMAC-SHA1 codes:
 The profile page renders a QR code locally in the browser from the `otpauth://`
 URI. No external QR-code service is called.
 
-When TOTP is enabled, password login requires either a valid TOTP code or an unused recovery code.
+When TOTP is enabled, password login becomes a two-step flow: username/password first, then the OTP code. Recovery codes are not entered on the homepage; they are accepted only by the dedicated account-recovery flow.
 
 ## Passkeys
 

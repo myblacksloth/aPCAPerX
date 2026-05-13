@@ -17,9 +17,11 @@ from config import (
     WEBAUTHN_RP_NAME,
 )
 from models import (
+    AccountRecoveryRequest,
     LoginRequest,
     PasskeyLoginOptionsRequest,
     PasskeyVerifyRequest,
+    RegisterRequest,
     TOTPSetupResponse,
     TOTPVerifyRequest,
     UserProfile,
@@ -27,6 +29,7 @@ from models import (
 from auth_store import (
     add_passkey,
     create_session,
+    create_user,
     delete_session,
     disable_totp,
     enable_totp,
@@ -127,17 +130,37 @@ def require_user(request: Request) -> Dict[str, Any]:
 
 @router.post("/login", response_model=UserProfile)
 def login(payload: LoginRequest, response: Response):
-    """Authenticate with username/password plus optional MFA or recovery code."""
+    """Authenticate with username/password plus TOTP when MFA is enabled."""
     user = get_user_by_username(payload.username)
     if not user or not verify_password(user, payload.password):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     if user.get("totp_enabled"):
         valid_totp = payload.mfa_code and verify_totp(user["totp_secret"], payload.mfa_code)
-        valid_recovery = payload.recovery_code and verify_recovery_code(str(user["id"]), payload.recovery_code)
-        if not valid_totp and not valid_recovery:
-            raise HTTPException(status_code=401, detail="MFA code or recovery code required.")
+        if not valid_totp:
+            raise HTTPException(status_code=401, detail="MFA code required.")
 
+    _set_session_cookie(response, create_session(str(user["id"])))
+    return user_profile(user)
+
+
+@router.post("/register", response_model=UserProfile)
+def register(payload: RegisterRequest, response: Response):
+    """Create a new user account and start an authenticated session."""
+    try:
+        user = create_user(payload.username, payload.password, payload.display_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _set_session_cookie(response, create_session(str(user["id"])))
+    return user_profile(user)
+
+
+@router.post("/recover", response_model=UserProfile)
+def recover_account(payload: AccountRecoveryRequest, response: Response):
+    """Authenticate with a username and one unused recovery code."""
+    user = get_user_by_username(payload.username)
+    if not user or not verify_recovery_code(str(user["id"]), payload.recovery_code):
+        raise HTTPException(status_code=401, detail="Invalid username or recovery code.")
     _set_session_cookie(response, create_session(str(user["id"])))
     return user_profile(user)
 

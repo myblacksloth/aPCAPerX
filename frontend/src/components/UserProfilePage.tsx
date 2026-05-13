@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { ArrowLeft, KeyRound, QrCode, ShieldCheck, Smartphone, UserRound } from 'lucide-react'
-import type { UserProfile } from '../types/analysis'
+import { ArrowLeft, Download, FileText, KeyRound, QrCode, ShieldCheck, Smartphone, UserRound } from 'lucide-react'
+import type { StoredAnalysisSummary, UserProfile } from '../types/analysis'
 import { assertWebAuthnAvailable, extractPublicKeyOptions, normalizePublicKeyOptions, serializeCredential } from '../utils/webauthn'
 
 interface UserProfilePageProps {
   user: UserProfile
+  savedAnalyses: StoredAnalysisSummary[]
+  savedLoading: boolean
   onBack: () => void
+  onLoadSaved: (analysisId: string) => void
   onUserChange: (user: UserProfile) => void
 }
 
-export default function UserProfilePage({ user, onBack, onUserChange }: UserProfilePageProps) {
+export default function UserProfilePage({ user, savedAnalyses, savedLoading, onBack, onLoadSaved, onUserChange }: UserProfilePageProps) {
   const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauth_url: string } | null>(null)
   const [totpQr, setTotpQr] = useState<string | null>(null)
   const [totpCode, setTotpCode] = useState('')
@@ -64,6 +67,25 @@ export default function UserProfilePage({ user, onBack, onUserChange }: UserProf
   const disableTotp = async () => {
     const response = await fetch('/api/auth/totp/disable', { method: 'POST' })
     if (response.ok) onUserChange(await response.json() as UserProfile)
+  }
+
+  const downloadRecoveryCodes = () => {
+    // Build a local text file so recovery codes never pass through a third-party service.
+    const lines = [
+      `PCAPCaper recovery codes for ${user.username}`,
+      `Generated download: ${new Date().toISOString()}`,
+      '',
+      ...user.recovery_codes.map((item) => `${item.code}${item.used_at ? ' (used)' : ''}`),
+      '',
+      'Store these codes in a safe place. Each unused code can recover the account once.',
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pcapcaper-recovery-codes-${user.username}.txt`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const registerPasskey = async () => {
@@ -163,7 +185,13 @@ export default function UserProfilePage({ user, onBack, onUserChange }: UserProf
       </div>
 
       <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-white">Recovery codes</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-white">Recovery codes</h2>
+          <button onClick={downloadRecoveryCodes} className="inline-flex items-center gap-2 rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-slate-400">
+            <Download className="h-4 w-4" />
+            Scarica .txt
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2">
           {user.recovery_codes.map((item) => (
             <code key={item.code} className={item.used_at ? 'rounded bg-slate-900 px-2 py-1 text-slate-600 line-through' : 'rounded bg-slate-900 px-2 py-1 text-slate-200'}>
@@ -171,6 +199,33 @@ export default function UserProfilePage({ user, onBack, onUserChange }: UserProf
             </code>
           ))}
         </div>
+      </section>
+
+      <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4">
+        <div className="mb-3 flex items-center gap-2 text-white">
+          <FileText className="h-5 w-5 text-brand-300" />
+          <h2 className="text-sm font-semibold">Analisi salvate</h2>
+        </div>
+        {savedAnalyses.length === 0 ? (
+          <p className="text-sm text-slate-500">Nessuna analisi salvata per questo utente.</p>
+        ) : (
+          <div className="grid gap-2">
+            {savedAnalyses.map((analysis) => (
+              <button
+                key={analysis.analysis_id}
+                onClick={() => onLoadSaved(analysis.analysis_id)}
+                disabled={savedLoading}
+                className="flex items-center justify-between gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-left text-sm hover:border-slate-500 disabled:opacity-60"
+              >
+                <span>
+                  <span className="block font-medium text-slate-100">{analysis.filename}</span>
+                  <span className="text-xs text-slate-500">{new Date(analysis.created_at).toLocaleString()} - {analysis.total_packets.toLocaleString()} pacchetti</span>
+                </span>
+                <ArrowLeft className="h-4 w-4 rotate-180 text-slate-500" />
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   )

@@ -615,7 +615,7 @@ La persistenza non usa cookie o browser localStorage perché i report completi p
 
 ### Utenti e autenticazione
 
-L'autenticazione usa PostgreSQL. Lo schema del database e l'account iniziale `demo` / `demo` vengono creati dal file SQL di init di PostgreSQL, non dal backend applicativo. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. Ogni utente ha una pagina profilo per recovery code, TOTP MFA con QR code locale e registrazione passkey browser. Le passkey richiedono HTTPS o `localhost`; HTTP semplice su IP LAN viene rifiutato dai browser. Vedi [users.md](users.md) per schema, configurazione e note operative.
+L'autenticazione usa PostgreSQL. Lo schema del database e l'account iniziale `demo` / `demo` vengono creati dal file SQL di init di PostgreSQL, non dal backend applicativo. Password e recovery code vengono verificati con hash SHA-512 `crypt` in stile Unix; le password in chiaro non vengono salvate. La pagina di accesso supporta login con password, richiesta TOTP in un secondo step quando MFA è abilitata, login con passkey, registrazione nuovo utente e recupero account dedicato tramite recovery code. Ogni utente ha una pagina profilo per recovery code, download `.txt` dei recovery code, analisi salvate, TOTP MFA con QR code locale e registrazione passkey browser. Le passkey richiedono HTTPS o `localhost`; HTTP semplice su IP LAN viene rifiutato dai browser. Vedi [users.md](users.md) per schema, configurazione e note operative.
 
 Redis è stato valutato ma non introdotto: il flusso corrente e lo storage filesystem dei report non richiedono Redis e introdurlo aumenterebbe complessità operativa. Se in futuro verranno aggiunti job asincroni con polling o resume dell'analisi, Redis sarà il candidato naturale per stato job, progress e cache distribuita.
 
@@ -1351,7 +1351,9 @@ Aggiorna un report salvato. Il frontend lo usa dopo l'arricchimento manuale, cos
 
 Gli endpoint di autenticazione sono sotto `/api/auth`:
 
-- `POST /api/auth/login`: login username/password con TOTP o recovery code opzionale.
+- `POST /api/auth/login`: login username/password; quando TOTP è abilitata la seconda richiesta include il codice OTP.
+- `POST /api/auth/register`: crea un nuovo utente, i recovery code e una sessione autenticata.
+- `POST /api/auth/recover`: accede con username e un recovery code non ancora usato.
 - `POST /api/auth/logout`: elimina il cookie sessione HTTP-only.
 - `GET /api/auth/me`: restituisce il profilo utente corrente.
 - `POST /api/auth/totp/setup`, `/totp/enable`, `/totp/disable`: configurazione TOTP MFA.

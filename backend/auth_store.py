@@ -47,6 +47,14 @@ def _verify_unix_hash(secret: str, secret_hash: str) -> bool:
     return hmac.compare_digest(crypt.crypt(secret, secret_hash), secret_hash)
 
 
+def _unix_hash(secret: str) -> str:
+    """Hash a new password or recovery code with Unix SHA-512 crypt."""
+    if crypt is None:
+        raise RuntimeError("Unix crypt support is not available on this platform.")
+    salt = "$6$" + secrets.token_urlsafe(12)
+    return crypt.crypt(secret, salt)
+
+
 def _session_hash(token: str) -> str:
     """Store only a keyed hash of session tokens in the database."""
     return hmac.new(SESSION_SECRET.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -79,10 +87,16 @@ def generate_totp_secret() -> str:
     return base64.b32encode(os.urandom(20)).decode("ascii").rstrip("=")
 
 
+def generate_recovery_codes(count: int = 10) -> List[str]:
+    """Create human-copyable recovery codes for a newly registered user."""
+    return [f"{secrets.token_urlsafe(4)}-{secrets.token_urlsafe(4)}".lower() for _ in range(count)]
+
+
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Return one user by username."""
+    normalized_username = username.strip().lower()
     with _conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        cur.execute("SELECT * FROM users WHERE username = %s", (normalized_username,))
         return cur.fetchone()
 
 
@@ -96,6 +110,41 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
 def verify_password(user: Dict[str, Any], password: str) -> bool:
     """Verify a user password."""
     return _verify_unix_hash(password, user["password_hash"])
+
+
+def create_user(username: str, password: str, display_name: Optional[str] = None) -> Dict[str, Any]:
+    """Create one application user and seed its first recovery-code set."""
+    normalized_username = username.strip().lower()
+    if not normalized_username:
+        raise ValueError("Username is required.")
+    if len(password) < 4:
+        raise ValueError("Password must be at least 4 characters.")
+
+    recovery_codes = generate_recovery_codes()
+    user_id = uuid.uuid4()
+    with _conn() as conn, conn.cursor() as cur:
+        # The application only writes rows here; schema creation stays in the PostgreSQL init SQL.
+        cur.execute("SELECT id FROM users WHERE username = %s", (normalized_username,))
+        if cur.fetchone():
+            raise ValueError("Username already exists.")
+        cur.execute(
+            """
+            INSERT INTO users (id, username, display_name, password_hash)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+            """,
+            (user_id, normalized_username, display_name or normalized_username, _unix_hash(password)),
+        )
+        user = cur.fetchone()
+        for code in recovery_codes:
+            cur.execute(
+                """
+                INSERT INTO user_recovery_codes (id, user_id, code, code_hash)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (uuid.uuid4(), user_id, code, _unix_hash(code)),
+            )
+        return user
 
 
 def verify_recovery_code(user_id: str, code: str) -> bool:
