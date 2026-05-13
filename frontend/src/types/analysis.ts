@@ -221,6 +221,16 @@ export interface StoredAnalysisSummary {
   owner_user_id: string | null
 }
 
+/** Authenticated user profile */
+export interface UserProfile {
+  id: string
+  username: string
+  display_name: string
+  totp_enabled: boolean
+  recovery_codes: Array<{ code: string; used_at: string | null }>
+  passkeys: Array<{ id: string; label: string; created_at: string; last_used_at: string | null }>
+}
+
 /** Reputazione esterna per un dominio DNS */
 export interface DNSDomainIntel {
   domain: string
@@ -553,6 +563,36 @@ export interface FlowEntry {
   packet_numbers: number[]
 }
 
+/** Payload segment used by the Follow stream view */
+export interface FollowStreamSegment {
+  packet_number: number
+  timestamp: string
+  direction: 'client_to_server' | 'server_to_client' | string
+  sequence: number | null
+  length: number
+  text: string
+  hex_preview: string
+  truncated: boolean
+}
+
+/** Reconstructed bounded TCP/UDP payload stream */
+export interface FollowStreamEntry {
+  stream_id: string
+  src_ip: string
+  src_port: number | null
+  dst_ip: string
+  dst_port: number | null
+  transport_protocol: string
+  application_protocol: string | null
+  packets: number
+  bytes: number
+  truncated: boolean
+  client_text: string
+  server_text: string
+  combined_text: string
+  segments: FollowStreamSegment[]
+}
+
 /** Un punto della timeline di traffico */
 export interface TimelinePoint {
   /** Orario nel formato HH:MM:SS (UTC) */
@@ -603,6 +643,10 @@ export interface AnalysisResult {
   analyzed_at?: string | null
   /** Original uploaded file size in bytes */
   original_size_bytes?: number | null
+  /** User that owns this persisted report */
+  owner_user_id?: string | null
+  /** User-defined IP -> hostname display overrides persisted with the report */
+  host_aliases?: Record<string, string>
   /** Nome originale del file caricato */
   filename: string
   /** Statistiche generali della cattura */
@@ -621,6 +665,8 @@ export interface AnalysisResult {
   conversations: Conversation[]
   /** Flow 5-tuple ricostruiti dal backend */
   flows: FlowEntry[]
+  /** Payload TCP/UDP ricostruiti per Follow stream */
+  follow_streams?: FollowStreamEntry[]
   /** Analisi DNS locale privacy-by-default */
   dns?: DNSAnalysisResult | null
   /** Analisi HTTP in chiaro privacy-by-default */

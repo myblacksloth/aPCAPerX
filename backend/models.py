@@ -746,6 +746,56 @@ class FlowEntry(BaseModel):
     packet_numbers: List[int] = Field(default_factory=list)
 
 
+class FollowStreamSegment(BaseModel):
+    """One bounded payload segment used by the follow-stream view."""
+    # Packet number that carried this payload fragment.
+    packet_number: int
+    # Timestamp string shown in the packet table.
+    timestamp: str
+    # Direction relative to the first observed endpoint pair.
+    direction: str
+    # TCP sequence number when available; UDP segments keep this null.
+    sequence: Optional[int] = None
+    # Number of payload bytes stored for this segment.
+    length: int
+    # Text rendering of the payload fragment with non-printable bytes replaced.
+    text: str
+    # Hex preview of the same bounded payload fragment.
+    hex_preview: str
+    # True when this segment was longer than the configured per-segment preview.
+    truncated: bool = False
+
+
+class FollowStreamEntry(BaseModel):
+    """Reconstructed TCP/UDP application payload for one bidirectional stream."""
+    # Matches the backend flow id when both records refer to the same 5-tuple.
+    stream_id: str
+    # First observed endpoint, treated as client side for display purposes.
+    src_ip: str
+    src_port: Optional[int] = None
+    # Opposite endpoint, treated as server side for display purposes.
+    dst_ip: str
+    dst_port: Optional[int] = None
+    # Transport protocol: TCP or UDP.
+    transport_protocol: str
+    # Best-effort visible application protocol inferred from ports/plaintext.
+    application_protocol: Optional[str] = None
+    # Number of payload-bearing packets included in this stream.
+    packets: int
+    # Total payload bytes stored for this stream after configured limits.
+    bytes: int
+    # True when configured byte limits truncated this stream.
+    truncated: bool = False
+    # Reassembled client-to-server text view.
+    client_text: str
+    # Reassembled server-to-client text view.
+    server_text: str
+    # Capture-order transcript with packet and direction markers.
+    combined_text: str
+    # Individual bounded payload segments for detailed inspection.
+    segments: List[FollowStreamSegment] = Field(default_factory=list)
+
+
 class TimelinePoint(BaseModel):
     """Un punto della timeline di traffico, aggregato per intervallo temporale."""
     # Orario del bucket nel formato HH:MM:SS (UTC)
@@ -845,6 +895,63 @@ class StoredAnalysisSummary(BaseModel):
     owner_user_id: Optional[str] = None
 
 
+class LoginRequest(BaseModel):
+    """Password login payload."""
+    username: str
+    password: str
+    mfa_code: Optional[str] = None
+
+
+class RegisterRequest(BaseModel):
+    """New user registration payload."""
+    username: str
+    password: str
+    display_name: Optional[str] = None
+
+
+class AccountRecoveryRequest(BaseModel):
+    """Account recovery payload using one unused recovery code."""
+    username: str
+    recovery_code: str
+
+
+class UserProfile(BaseModel):
+    """Current user profile returned to the frontend."""
+    id: str
+    username: str
+    display_name: str
+    totp_enabled: bool
+    recovery_codes: List[Dict[str, Any]] = Field(default_factory=list)
+    passkeys: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class TOTPSetupResponse(BaseModel):
+    """TOTP setup secret and authenticator-app URI."""
+    secret: str
+    otpauth_url: str
+
+
+class TOTPVerifyRequest(BaseModel):
+    """TOTP verification payload."""
+    code: str
+
+
+class PasskeyLabelRequest(BaseModel):
+    """Passkey registration label."""
+    label: str = "Default passkey"
+
+
+class PasskeyLoginOptionsRequest(BaseModel):
+    """Passkey login options request."""
+    username: str
+
+
+class PasskeyVerifyRequest(BaseModel):
+    """Raw WebAuthn credential payload posted by the browser."""
+    credential: Dict[str, Any]
+    label: Optional[str] = None
+
+
 class AnalysisResult(BaseModel):
     """
     Risultato completo dell'analisi di un file PCAP.
@@ -858,6 +965,10 @@ class AnalysisResult(BaseModel):
     analyzed_at: Optional[str] = None
     # Original uploaded file size in bytes.
     original_size_bytes: Optional[int] = None
+    # User that owns this report when authentication is enabled.
+    owner_user_id: Optional[str] = None
+    # User-defined IP -> hostname display overrides persisted with this report.
+    host_aliases: Dict[str, str] = Field(default_factory=dict)
     # Nome originale del file caricato dall'utente
     filename: str
     # Riepilogo statistico generale
@@ -876,6 +987,8 @@ class AnalysisResult(BaseModel):
     conversations: List[Conversation]
     # Flow 5-tuple ricostruiti in backend
     flows: List[FlowEntry] = Field(default_factory=list)
+    # Payload TCP/UDP ricostruiti per la vista Follow stream
+    follow_streams: List[FollowStreamEntry] = Field(default_factory=list)
     # Analisi DNS locale privacy-by-default
     dns: Optional[DNSAnalysisResult] = None
     # Analisi HTTP in chiaro privacy-by-default

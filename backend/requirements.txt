@@ -11,3 +11,9 @@ python-multipart==0.0.20
 # Libreria principale per la lettura e l'analisi dei file PCAP/PCAPNG
 # Include decoder per tutti i principali protocolli di rete
 scapy==2.6.1
+
+# PostgreSQL driver for user/session/passkey persistence
+psycopg[binary]==3.2.9
+
+# WebAuthn/FIDO2 helpers for passkey registration and login verification
+webauthn==2.5.2

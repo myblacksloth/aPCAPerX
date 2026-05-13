@@ -18,8 +18,8 @@
  * Ogni sezione è incapsulata nel suo componente dedicato per
  * mantenere il codice organizzato e facile da manutenere.
  */
-import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network, ArrowDownUp, Tags } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -40,9 +40,12 @@ import TLSAnalysisView from './TLSAnalysisView'
 import HostsView from './HostsView'
 import NetworkGraphView from './NetworkGraphView'
 import AIChatWidget from './AIChatWidget'
+import FollowStreamView from './FollowStreamView'
+import HostAliasesModal from './HostAliasesModal'
 import { parsePacketFilter } from '../utils/packetFilters'
+import { applyHostAliases, collectAliasableIps } from '../utils/hostAliases'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'follow-stream' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -64,6 +67,10 @@ function collectIPs(result: AnalysisResult): string[] {
     if (packet.src_ip) ips.add(packet.src_ip)
     if (packet.dst_ip) ips.add(packet.dst_ip)
   })
+  result.flows?.forEach((flow) => {
+    ips.add(flow.src_ip)
+    ips.add(flow.dst_ip)
+  })
 
   return [...ips]
 }
@@ -82,12 +89,15 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
   const [externalError, setExternalError] = useState<string | null>(null)
   const [externalSummary, setExternalSummary] = useState<string | null>(null)
   const [externalConfirmOpen, setExternalConfirmOpen] = useState(false)
+  const [hostAliasesOpen, setHostAliasesOpen] = useState(false)
   const [packetFilter, setPacketFilter] = useState('')
   const [selectedHostIp, setSelectedHostIp] = useState<string | null>(null)
+  const displayResult = useMemo(() => applyHostAliases(result), [result])
+  const aliasableIps = useMemo(() => collectAliasableIps(result), [result])
   const parsedPacketFilter = parsePacketFilter(packetFilter)
   const filteredPackets = parsedPacketFilter.error
-    ? result.packets
-    : result.packets.filter(parsedPacketFilter.predicate)
+    ? displayResult.packets
+    : displayResult.packets.filter(parsedPacketFilter.predicate)
   const externalResultsCount = Object.keys(result.external_ip_info ?? {}).length
   const externalFeatureActive = externalResultsCount > 0 || Boolean(externalSummary && !externalError)
 
@@ -108,6 +118,13 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
     a.download = result.filename.replace(/\.[^.]+$/, '') + '_analysis.json'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleHostAliasesSave = (aliases: Record<string, string>) => {
+    // Persist aliases inside the report so reloaded analyses keep the same hostnames.
+    onResultUpdate({ ...result, host_aliases: aliases })
+    setSelectedHostIp(null)
+    setHostAliasesOpen(false)
   }
 
   /**
@@ -211,6 +228,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
               Tracce avanzate
             </button>
             <button
+              onClick={() => setActiveTab('follow-stream')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'follow-stream'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <ArrowDownUp className="w-3.5 h-3.5" />
+              Follow stream
+            </button>
+            <button
               onClick={() => setActiveTab('hosts')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
                 ${activeTab === 'hosts'
@@ -288,6 +315,15 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             </button>
           </div>
 
+          <button
+            onClick={() => setHostAliasesOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600
+                       text-slate-200 text-xs rounded-lg transition-colors"
+          >
+            <Tags className="w-3.5 h-3.5" />
+            Hostname
+          </button>
+
           {/* Export JSON */}
           <button
             onClick={handleExportJSON}
@@ -315,36 +351,36 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       {activeTab === 'overview' && (
         <>
           {/* Riga 1: 6 card di riepilogo */}
-          <SummaryCards result={result} />
+          <SummaryCards result={displayResult} />
 
           {/* Riga 2: filtri stile Wireshark applicati alle viste pacchetto */}
           <PacketFilters
             filter={packetFilter}
             filteredCount={filteredPackets.length}
-            totalCount={result.packets.length}
+            totalCount={displayResult.packets.length}
             error={parsedPacketFilter.error}
             onFilterChange={setPacketFilter}
           />
 
           {/* Riga 3: distribuzione protocolli + top IP */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ProtocolChart result={result} />
-            <TopIPsChart   result={result} />
+            <ProtocolChart result={displayResult} />
+            <TopIPsChart   result={displayResult} />
           </div>
 
           {/* Riga 4: segnalazioni Security basate sulle informazioni IP raccolte */}
-          <SecurityPanel result={result} />
+          <SecurityPanel result={displayResult} />
 
           {/* Riga 5: mappa mondiale del traffico verso IP pubblici */}
-          <WorldTrafficMap result={result} />
+          <WorldTrafficMap result={displayResult} />
 
           {/* Riga 6: timeline del traffico */}
-          <TimelineChart result={result} />
+          <TimelineChart result={displayResult} />
 
           {/* Riga 7: top porte + conversazioni */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <TopPortsChart      result={result} />
-            <ConversationsTable conversations={result.conversations} />
+            <TopPortsChart      result={displayResult} />
+            <ConversationsTable conversations={displayResult.conversations} />
           </div>
 
           {/* Riga 8: lista pacchetti filtrata */}
@@ -358,7 +394,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           <PacketFilters
             filter={packetFilter}
             filteredCount={filteredPackets.length}
-            totalCount={result.packets.length}
+            totalCount={displayResult.packets.length}
             error={parsedPacketFilter.error}
             onFilterChange={setPacketFilter}
           />
@@ -372,42 +408,56 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           <PacketFilters
             filter={packetFilter}
             filteredCount={filteredPackets.length}
-            totalCount={result.packets.length}
+            totalCount={displayResult.packets.length}
             error={parsedPacketFilter.error}
             onFilterChange={setPacketFilter}
           />
-          <AdvancedTracesView packets={filteredPackets} flows={result.flows ?? []} />
+          <AdvancedTracesView packets={filteredPackets} flows={displayResult.flows ?? []} />
         </>
+      )}
+
+      {/* ── Tab: Follow stream ───────────────────────────────────────── */}
+      {activeTab === 'follow-stream' && (
+        <FollowStreamView streams={displayResult.follow_streams ?? []} />
       )}
 
       {/* ── Tab: Hosts ────────────────────────────────────────────────── */}
       {activeTab === 'hosts' && (
-        <HostsView result={result} selectedHostIp={selectedHostIp} />
+        <HostsView result={displayResult} selectedHostIp={selectedHostIp} />
       )}
 
       {/* ── Tab: Grafo di rete ────────────────────────────────────────── */}
       {activeTab === 'network-graph' && (
-        <NetworkGraphView result={result} />
+        <NetworkGraphView result={displayResult} />
       )}
 
       {/* ── Tab: Security avanzata ────────────────────────────────────── */}
       {activeTab === 'security-analysis' && (
-        <SecurityAnalysisView result={result} />
+        <SecurityAnalysisView result={displayResult} />
       )}
 
       {/* ── Tab: DNS ──────────────────────────────────────────────────── */}
       {activeTab === 'dns-analysis' && (
-        <DNSAnalysisView result={result} />
+        <DNSAnalysisView result={displayResult} />
       )}
 
       {/* ── Tab: HTTP analysis ────────────────────────────────────────── */}
       {activeTab === 'http-analysis' && (
-        <HTTPAnalysisView result={result} />
+        <HTTPAnalysisView result={displayResult} />
       )}
 
       {/* ── Tab: TLS analysis ─────────────────────────────────────────── */}
       {activeTab === 'tls-analysis' && (
-        <TLSAnalysisView result={result} />
+        <TLSAnalysisView result={displayResult} />
+      )}
+
+      {hostAliasesOpen && (
+        <HostAliasesModal
+          ips={aliasableIps}
+          aliases={result.host_aliases ?? {}}
+          onClose={() => setHostAliasesOpen(false)}
+          onSave={handleHostAliasesSave}
+        />
       )}
 
       {/* Popup privacy per l'arricchimento IP esterno generale */}
@@ -446,7 +496,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         </div>
       )}
 
-      <AIChatWidget result={result} />
+      <AIChatWidget result={displayResult} />
     </div>
   )
 }

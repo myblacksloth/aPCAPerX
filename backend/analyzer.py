@@ -32,6 +32,7 @@ from models import (
     LayerField, LayerInfo, IPServiceEntry,
 )
 from flow_analysis import FlowAnalyzer
+from stream_follow import FollowStreamAnalyzer
 from dns_analysis import DNSAnalyzer
 from http_analysis import HTTPAnalyzer
 from tls_analysis import TLSAnalyzer
@@ -571,6 +572,9 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     # Analizzatore dedicato dei flow 5-tuple, aggiornato pacchetto per pacchetto.
     flow_analyzer = FlowAnalyzer()
 
+    # Follow-stream accumulator for bounded TCP/UDP application payload views.
+    stream_analyzer = FollowStreamAnalyzer()
+
     # Analizzatore DNS locale: non invia dati all'esterno e lavora solo sul PCAP.
     dns_analyzer = DNSAnalyzer()
 
@@ -702,7 +706,28 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     dst_ip=dst_ip,
                 )
 
-                raw_tcp_payload = _raw_payload_bytes(pkt) if pkt.haslayer(TCP) else None
+                raw_payload = _raw_payload_bytes(pkt) if (pkt.haslayer(TCP) or pkt.haslayer(UDP)) else None
+                raw_tcp_payload = raw_payload if pkt.haslayer(TCP) else None
+
+                try:
+                    ts_display = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S.%f")[:-3]
+                except Exception:
+                    ts_display = "00:00:00.000"
+
+                # ── Follow stream payload collection ─────────────────────
+                # The stream analyzer stores only bounded Raw payload bytes and
+                # reconstructs text views later; encrypted TLS stays encrypted.
+                stream_analyzer.add_packet(
+                    packet_number=total_packets,
+                    timestamp=ts_display,
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    dst_ip=dst_ip,
+                    dst_port=dst_port,
+                    protocol="TCP" if pkt.haslayer(TCP) else "UDP" if pkt.haslayer(UDP) else protocol,
+                    payload=raw_payload,
+                    sequence=int(pkt[TCP].seq) if pkt.haslayer(TCP) else None,
+                )
 
                 # ── Aggiornamento analisi HTTP in chiaro ──────────────────
                 # Parsing prudente: solo payload TCP Raw che sembrano HTTP testuale.
@@ -748,19 +773,13 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     # Decodifica layer e raw hex sono costosi: li facciamo solo
                     # per i pacchetti che finiranno realmente nella risposta.
                     try:
-                        ts_dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
-                        ts_str = ts_dt.strftime("%H:%M:%S.%f")[:-3]
-                    except Exception:
-                        ts_str = "00:00:00.000"
-
-                    try:
                         raw_hex = bytes(pkt).hex()
                     except Exception:
                         raw_hex = None
 
                     packet_list.append(PacketEntry(
                         number   = total_packets,
-                        timestamp= ts_str,
+                        timestamp= ts_display,
                         src_ip   = src_ip,
                         dst_ip   = dst_ip,
                         protocol = protocol,
@@ -875,6 +894,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
 
     # ── Flow e DNS derivati dagli accumulatori modulari ───────────────────
     flows = flow_analyzer.to_entries()
+    follow_streams = stream_analyzer.to_entries()
     dns_result = dns_analyzer.to_result(flows)
     http_result = http_analyzer.to_result()
     tls_result = tls_analyzer.to_result(dns_hostnames)
@@ -898,6 +918,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         top_dst_ports = top_dst_ports,
         conversations = conversations,
         flows         = flows,
+        follow_streams= follow_streams,
         dns           = dns_result,
         http          = http_result,
         tls           = tls_result,

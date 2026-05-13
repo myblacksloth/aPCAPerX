@@ -7,6 +7,7 @@ permettere tuning in Docker/produzione senza modificare il codice.
 
 import os
 import tempfile
+import secrets
 from pathlib import Path
 from typing import Optional
 
@@ -82,10 +83,31 @@ ANALYSIS_STORAGE_ENABLED = os.getenv("PCAPCAPER_ANALYSIS_STORAGE_ENABLED", "1").
 ANALYSIS_STORAGE_DIR = os.getenv("PCAPCAPER_ANALYSIS_STORAGE_DIR", "/data/pcapcaper/analyses")
 ANALYSIS_STORAGE_MAX_ITEMS = _int_env("PCAPCAPER_ANALYSIS_STORAGE_MAX_ITEMS", 50, 1)
 
+# Authentication and user database settings.
+AUTH_ENABLED = os.getenv("PCAPCAPER_AUTH_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+DATABASE_URL = os.getenv(
+    "PCAPCAPER_DATABASE_URL",
+    "postgresql://pcapcaper:pcapcaper@db:5432/pcapcaper",
+)
+SESSION_COOKIE_NAME = os.getenv("PCAPCAPER_SESSION_COOKIE_NAME", "pcapcaper_session")
+SESSION_SECRET = os.getenv("PCAPCAPER_SESSION_SECRET", "change-me-in-production")
+SESSION_TTL_HOURS = _int_env("PCAPCAPER_SESSION_TTL_HOURS", 168, 1)
+WEBAUTHN_RP_ID = os.getenv("PCAPCAPER_WEBAUTHN_RP_ID", "localhost")
+WEBAUTHN_RP_NAME = os.getenv("PCAPCAPER_WEBAUTHN_RP_NAME", "PCAPCaper")
+WEBAUTHN_ORIGIN = os.getenv("PCAPCAPER_WEBAUTHN_ORIGIN", "http://localhost:3000")
+
+if AUTH_ENABLED and SESSION_SECRET == "change-me-in-production":
+    # This fallback keeps local development working, but production deployments
+    # must set a stable random secret or existing sessions will be invalidated.
+    SESSION_SECRET = secrets.token_urlsafe(32)
+
 # Limiti di output per evitare JSON enormi e consumo eccessivo di memoria lato
 # browser. Il backend continua ad analizzare tutto il PCAP in streaming.
 MAX_PACKET_LIST = _int_env("PCAPCAPER_MAX_PACKET_LIST", 1000, 0)
 MAX_FLOW_PACKET_NUMBERS = _int_env("PCAPCAPER_MAX_FLOW_PACKET_NUMBERS", 200, 0)
+FOLLOW_STREAM_MAX_STREAMS = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS", 100, 1)
+FOLLOW_STREAM_MAX_BYTES_PER_STREAM = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM", 65536, 1024)
+FOLLOW_STREAM_MAX_SEGMENT_BYTES = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES", 4096, 256)
 
 # Concorrenza prudente per servizi esterni gratuiti: parallelizza senza aprire
 # decine di connessioni simultanee.

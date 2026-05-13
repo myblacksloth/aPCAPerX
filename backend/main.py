@@ -19,7 +19,7 @@ import os
 import tempfile
 import logging
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
@@ -40,7 +40,8 @@ from external_enrichment import enrich_ips
 from security_analysis import analyze_security
 from dns_intelligence import analyze_dns_reputation
 from ai_chat import AIModelError, ask_ai
-from analysis_storage import list_analyses, load_analysis, save_analysis, update_analysis
+from analysis_storage import list_analyses, load_analysis, save_analysis, update_user_analysis
+from auth_api import require_user, router as auth_router
 from config import AI_ENABLED, ANALYSIS_STORAGE_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
@@ -74,6 +75,7 @@ app.add_middleware(
     allow_methods=["POST", "GET", "PUT", "OPTIONS"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 
 # ── Estensioni file accettate ──────────────────────────────────────────────────
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
@@ -103,7 +105,7 @@ def health_check():
     summary="Arricchisce indirizzi IP usando servizi esterni",
     response_description="Mappa IP -> dati esterni recuperati",
 )
-def enrich_ips_endpoint(payload: IPEnrichmentRequest):
+def enrich_ips_endpoint(payload: IPEnrichmentRequest, user=Depends(require_user)):
     """
     Riceve una lista di indirizzi IP già estratti dal PCAP e interroga servizi
     esterni per recuperare ASN, prefissi BGP, RDAP, reverse DNS e dati GeoIP.
@@ -135,7 +137,7 @@ def enrich_ips_endpoint(payload: IPEnrichmentRequest):
     summary="Analizza il traffico con motore Security e threat intelligence",
     response_description="Finding, score e raccomandazioni di sicurezza",
 )
-def security_analysis_endpoint(payload: SecurityAnalysisRequest):
+def security_analysis_endpoint(payload: SecurityAnalysisRequest, user=Depends(require_user)):
     """
     Riceve i pacchetti gia estratti dal PCAP e le informazioni IP arricchite.
 
@@ -173,7 +175,7 @@ def security_analysis_endpoint(payload: SecurityAnalysisRequest):
     summary="Controlla domini DNS osservati su liste esterne",
     response_description="Reputazione dominio -> fonti e categorie",
 )
-def dns_reputation_endpoint(payload: DNSReputationRequest):
+def dns_reputation_endpoint(payload: DNSReputationRequest, user=Depends(require_user)):
     """
     Confronta i domini richiesti via DNS con liste esterne aperte.
 
@@ -204,7 +206,7 @@ def dns_reputation_endpoint(payload: DNSReputationRequest):
     summary="Ask the technical AI assistant about the analyzed PCAP",
     response_description="AI answer plus packet and technical-context metadata",
 )
-async def ai_chat_endpoint(payload: AIChatRequest):
+async def ai_chat_endpoint(payload: AIChatRequest, user=Depends(require_user)):
     """
     Answers a user question using a small model running in a separate container.
 
@@ -243,9 +245,9 @@ async def ai_chat_endpoint(payload: AIChatRequest):
     summary="List saved analysis reports",
     response_description="Saved report metadata ordered from newest to oldest",
 )
-def list_saved_analyses_endpoint():
+def list_saved_analyses_endpoint(user=Depends(require_user)):
     """Return lightweight metadata for reports persisted on the backend."""
-    return list_analyses()
+    return list_analyses(owner_user_id=str(user["id"]))
 
 
 @app.get(
@@ -255,9 +257,9 @@ def list_saved_analyses_endpoint():
     summary="Load a saved analysis report",
     response_description="Full persisted analysis report",
 )
-def load_saved_analysis_endpoint(analysis_id: str):
+def load_saved_analysis_endpoint(analysis_id: str, user=Depends(require_user)):
     """Load one persisted analysis report by its server-side identifier."""
-    result = load_analysis(analysis_id)
+    result = load_analysis(analysis_id, owner_user_id=str(user["id"]))
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis report not found.")
     return result
@@ -270,9 +272,9 @@ def load_saved_analysis_endpoint(analysis_id: str):
     summary="Update a saved analysis report",
     response_description="Updated persisted analysis report",
 )
-def update_saved_analysis_endpoint(analysis_id: str, payload: AnalysisResult):
+def update_saved_analysis_endpoint(analysis_id: str, payload: AnalysisResult, user=Depends(require_user)):
     """Persist frontend-side report enrichments, such as external IP data."""
-    result = update_analysis(analysis_id, payload)
+    result = update_user_analysis(analysis_id, payload, owner_user_id=str(user["id"]))
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis report not found.")
     return result
@@ -287,7 +289,7 @@ def update_saved_analysis_endpoint(analysis_id: str, payload: AnalysisResult):
     summary="Analizza un file PCAP/PCAPNG",
     response_description="Report completo con statistiche di rete",
 )
-async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o CAP da analizzare")):
+async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o CAP da analizzare"), user=Depends(require_user)):
     """
     Riceve un file di cattura di rete e restituisce:
 
@@ -354,7 +356,7 @@ async def analyze(file: UploadFile = File(..., description="File PCAP, PCAPNG o 
         # Delega l'analisi CPU-bound a un thread per non bloccare l'event loop
         # FastAPI mentre altri endpoint servono richieste leggere o progress UI.
         result = await run_in_threadpool(analyze_pcap, tmp_file.name, filename)
-        result = await run_in_threadpool(save_analysis, result, total_bytes)
+        result = await run_in_threadpool(save_analysis, result, total_bytes, str(user["id"]))
 
         logger.info(
             "Analisi completata: %d pacchetti, %.3f s di cattura, storage=%s",
