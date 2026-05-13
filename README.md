@@ -44,7 +44,7 @@
 
 **PCAPCaper** is an open source PCAP/PCAPNG/CAP analyzer with a modern web interface.
 
-Upload a network capture and quickly inspect protocols, IP addresses, ports, conversations, DNS, HTTP, TLS, traffic timelines, packet filters, external IP enrichment, geolocation maps, advanced packet correlation, host profiles, network graphs, and security findings.
+Upload a network capture and quickly inspect protocols, IP addresses, ports, conversations, DNS, HTTP, TLS, traffic timelines, packet filters, follow-stream payloads, external IP enrichment, geolocation maps, advanced packet correlation, host profiles, network graphs, and security findings.
 
 > Inspired by [apackets.com](https://apackets.com/), but fully open source and self-hostable.
 
@@ -68,6 +68,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 - [DNS analysis](#dns-analysis)
 - [HTTP analysis](#http-analysis)
 - [TLS analysis](#tls-analysis)
+- [Follow stream](#follow-stream)
 - [Hosts](#hosts)
 - [Network graph](#network-graph)
 - [API reference](#api-reference)
@@ -92,6 +93,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 | **DNS** | AdGuard-style DNS dashboard with queries, answers, rcodes, TTLs, suspicious TXT records, tunneling indicators, and optional reputation checks. |
 | **HTTP analysis** | Cleartext HTTP metadata extraction: requests, correlated responses, hosts, user agents, and status codes. |
 | **TLS analysis** | Observable TLS metadata: SNI, version, cipher, ALPN, certificates, fingerprints, JA3/JA3S, and anomalies. |
+| **Follow stream** | Bounded TCP/UDP payload reconstruction with client/server transcript and per-segment text/hex previews. |
 | **External IP enrichment** | RDAP/IANA, Team Cymru ASN, reverse DNS, and GeoIP, only after explicit user confirmation. |
 | **Security** | Heuristic findings for proxy/VPN, hosting, sensitive ports, cleartext services, and abnormal traffic volumes. |
 | **Advanced security** | Dedicated opt-in tab with threat intelligence, CVEs, IOCs, scoring, evidence, and recommendations. |
@@ -435,6 +437,9 @@ The repository includes `.env.example`. Local `.env` files are ignored by git an
 | `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Upload chunk size in bytes. |
 | `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Maximum detailed packet rows included in the JSON response. `0` means unlimited. |
 | `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Maximum packet numbers stored per flow. `0` means unlimited. |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS` | `100` | Maximum payload-bearing TCP/UDP streams stored for Follow stream. |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM` | `65536` | Maximum reconstructed payload bytes stored for each stream. |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES` | `4096` | Maximum bytes shown per individual payload segment preview. |
 | `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Maximum parallel workers for external enrichment. |
 | `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | Maximum public IPs enriched per request. |
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | HTTP timeout for external services. |
@@ -871,10 +876,25 @@ The tab includes:
 The parser is conservative:
 
 - it only analyzes TCP payloads that start as textual HTTP;
-- it does not fully reconstruct TCP streams;
+- full payload reconstruction is available in the separate **Follow stream** tab, but HTTP metadata extraction remains conservative;
 - fragmented headers or bodies may be marked as partial;
 - payload size is estimated from `Content-Length` or from bytes present in the observed segment;
 - encrypted HTTPS/TLS traffic is not interpreted.
+
+---
+
+## Follow stream
+
+The **Follow stream** tab reconstructs bounded TCP/UDP application payloads during backend analysis. It groups packets by the same bidirectional 5-tuple used by the flow engine, stores payload-bearing packets only, and shows:
+
+- stream list with endpoints, protocol, bytes, packet count, and truncation state;
+- combined capture-order transcript with `C -> S` and `S -> C` markers;
+- client-only and server-only reconstructed text views;
+- per-packet segment previews with text and hex.
+
+TCP payloads are ordered per direction by sequence number for the directional views. UDP payloads remain in capture order. TLS is not decrypted, so encrypted streams remain binary/encrypted evidence. The stored payload size is controlled by `PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS`, `PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM`, and `PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES`.
+
+The implementation is intentionally bounded: it does not attempt full file extraction, TLS decryption, or advanced duplicate/retransmission repair. It is designed for fast triage and readable payload inspection from the web UI.
 
 ---
 

@@ -105,6 +105,9 @@ if AUTH_ENABLED and SESSION_SECRET == "change-me-in-production":
 # browser. Il backend continua ad analizzare tutto il PCAP in streaming.
 MAX_PACKET_LIST = _int_env("PCAPCAPER_MAX_PACKET_LIST", 1000, 0)
 MAX_FLOW_PACKET_NUMBERS = _int_env("PCAPCAPER_MAX_FLOW_PACKET_NUMBERS", 200, 0)
+FOLLOW_STREAM_MAX_STREAMS = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS", 100, 1)
+FOLLOW_STREAM_MAX_BYTES_PER_STREAM = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM", 65536, 1024)
+FOLLOW_STREAM_MAX_SEGMENT_BYTES = _int_env("PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES", 4096, 256)
 
 # Concorrenza prudente per servizi esterni gratuiti: parallelizza senza aprire
 # decine di connessioni simultanee.
