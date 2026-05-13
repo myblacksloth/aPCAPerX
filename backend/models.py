@@ -850,7 +850,19 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     mfa_code: Optional[str] = None
-    recovery_code: Optional[str] = None
+
+
+class RegisterRequest(BaseModel):
+    """New user registration payload."""
+    username: str
+    password: str
+    display_name: Optional[str] = None
+
+
+class AccountRecoveryRequest(BaseModel):
+    """Account recovery payload using one unused recovery code."""
+    username: str
+    recovery_code: str
 
 
 class UserProfile(BaseModel):

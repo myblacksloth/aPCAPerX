@@ -184,7 +184,7 @@ Clicking a colored country opens a popup with:
 
 ![](./stuff/i/SCR-20260512-sscd.png)
 
-<!-- 
+<!--
 ![](./stuff/i/.png)
 -->
 
@@ -489,7 +489,7 @@ This is intentionally not stored in cookies or browser localStorage because full
 
 ### Users and authentication
 
-Authentication is backed by PostgreSQL. The database schema and baseline `demo` / `demo` account are created by the PostgreSQL init SQL file, not by the backend application. Passwords and recovery codes are verified with Unix-style SHA-512 `crypt` hashes; plaintext passwords are not stored. Each user has a profile page for recovery codes, TOTP MFA with a local QR code, and browser passkey registration. Passkeys require HTTPS or `localhost`; plain HTTP on a LAN IP is rejected by browsers. See [users.md](users.md) for schema, configuration, and operational notes.
+Authentication is backed by PostgreSQL. The database schema and baseline `demo` / `demo` account are created by the PostgreSQL init SQL file, not by the backend application. Passwords and recovery codes are verified with Unix-style SHA-512 `crypt` hashes; plaintext passwords are not stored. The login page supports password login, staged TOTP when MFA is enabled, passkey login, new-user registration, and a dedicated account-recovery flow using recovery codes. Each user has a profile page for recovery codes, recovery-code `.txt` download, saved analyses, TOTP MFA with a local QR code, and browser passkey registration. Passkeys require HTTPS or `localhost`; plain HTTP on a LAN IP is rejected by browsers. See [users.md](users.md) for schema, configuration, and operational notes.
 
 Redis was evaluated but is not required for the current synchronous request model or filesystem report storage. It remains a natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and distributed caches.
 
@@ -1057,7 +1057,9 @@ Updates one saved report. The frontend uses this after manual enrichment so relo
 
 Authentication endpoints live under `/api/auth`:
 
-- `POST /api/auth/login`: username/password login with optional TOTP or recovery code.
+- `POST /api/auth/login`: username/password login; when TOTP is enabled the second request includes the OTP code.
+- `POST /api/auth/register`: creates a new user, recovery codes, and an authenticated session.
+- `POST /api/auth/recover`: logs in with username and one unused recovery code.
 - `POST /api/auth/logout`: clears the HTTP-only session cookie.
 - `GET /api/auth/me`: returns the current user profile.
 - `POST /api/auth/totp/setup`, `/totp/enable`, `/totp/disable`: configure TOTP MFA.
