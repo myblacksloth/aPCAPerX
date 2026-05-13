@@ -967,6 +967,8 @@ class AnalysisResult(BaseModel):
     original_size_bytes: Optional[int] = None
     # User that owns this report when authentication is enabled.
     owner_user_id: Optional[str] = None
+    # User-defined IP -> hostname display overrides persisted with this report.
+    host_aliases: Dict[str, str] = Field(default_factory=dict)
     # Nome originale del file caricato dall'utente
     filename: str
     # Riepilogo statistico generale

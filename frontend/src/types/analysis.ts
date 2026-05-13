@@ -645,6 +645,8 @@ export interface AnalysisResult {
   original_size_bytes?: number | null
   /** User that owns this persisted report */
   owner_user_id?: string | null
+  /** User-defined IP -> hostname display overrides persisted with the report */
+  host_aliases?: Record<string, string>
   /** Nome originale del file caricato */
   filename: string
   /** Statistiche generali della cattura */
