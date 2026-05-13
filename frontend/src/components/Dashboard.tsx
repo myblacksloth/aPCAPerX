@@ -19,7 +19,7 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network } from 'lucide-react'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network, ArrowDownUp } from 'lucide-react'
 import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
@@ -40,9 +40,10 @@ import TLSAnalysisView from './TLSAnalysisView'
 import HostsView from './HostsView'
 import NetworkGraphView from './NetworkGraphView'
 import AIChatWidget from './AIChatWidget'
+import FollowStreamView from './FollowStreamView'
 import { parsePacketFilter } from '../utils/packetFilters'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'follow-stream' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -209,6 +210,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             >
               <GitBranch className="w-3.5 h-3.5" />
               Tracce avanzate
+            </button>
+            <button
+              onClick={() => setActiveTab('follow-stream')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'follow-stream'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <ArrowDownUp className="w-3.5 h-3.5" />
+              Follow stream
             </button>
             <button
               onClick={() => setActiveTab('hosts')}
@@ -378,6 +389,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
           />
           <AdvancedTracesView packets={filteredPackets} flows={result.flows ?? []} />
         </>
+      )}
+
+      {/* ── Tab: Follow stream ───────────────────────────────────────── */}
+      {activeTab === 'follow-stream' && (
+        <FollowStreamView streams={result.follow_streams ?? []} />
       )}
 
       {/* ── Tab: Hosts ────────────────────────────────────────────────── */}

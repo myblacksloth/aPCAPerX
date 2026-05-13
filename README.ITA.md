@@ -196,6 +196,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Privacy DNS](#privacy-dns)
   - [🌍 HTTP analysis](#-http-analysis)
     - [Limiti HTTP](#limiti-http)
+  - [Follow stream](#follow-stream)
   - [🔐 TLS analysis](#-tls-analysis)
     - [Anomalie TLS](#anomalie-tls)
     - [Limiti TLS](#limiti-tls)
@@ -231,6 +232,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
 | **HTTP analysis** | Estrazione metadati HTTP in chiaro: richieste, risposte correlate, host, user-agent e status code |
 | **TLS analysis** | Metadati handshake SSL/TLS: SNI, versione, cipher, ALPN, certificato, fingerprint, JA3/JA3S e anomalie |
+| **Follow stream** | Ricostruzione limitata dei payload TCP/UDP con transcript client/server e anteprime testo/hex per segmento |
 | **Arricchimento IP esterno** | RDAP/IANA, Team Cymru ASN, reverse DNS e GeoIP su richiesta esplicita |
 | **Security** | Segnalazioni euristiche su proxy/VPN, hosting, porte sensibili, servizi non cifrati e volumi anomali |
 | **Security avanzata** | Tab dedicata con consenso esplicito, threat intelligence, CVE, IOC, scoring, evidenze e raccomandazioni |
@@ -563,6 +565,9 @@ Il repository include `.env.example`. Il file `.env` locale è ignorato da git e
 | `PCAPCAPER_UPLOAD_CHUNK_SIZE` | `1048576` | Dimensione chunk upload in byte |
 | `PCAPCAPER_MAX_PACKET_LIST` | `1000` | Numero massimo di pacchetti dettagliati nel JSON. `0` = nessun limite |
 | `PCAPCAPER_MAX_FLOW_PACKET_NUMBERS` | `200` | Numeri pacchetto conservati per flow. `0` = nessun limite |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS` | `100` | Numero massimo di stream TCP/UDP con payload conservati per Follow stream |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM` | `65536` | Byte massimi di payload ricostruito conservati per ogni stream |
+| `PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES` | `4096` | Byte massimi mostrati per l'anteprima di ogni segmento payload |
 | `PCAPCAPER_EXTERNAL_MAX_WORKERS` | `6` | Worker paralleli massimi per arricchimento esterno |
 | `PCAPCAPER_MAX_ENRICHMENT_IPS` | `80` | IP pubblici massimi arricchiti per richiesta |
 | `PCAPCAPER_HTTP_TIMEOUT_SECONDS` | `6` | Timeout HTTP per servizi esterni |
@@ -972,10 +977,25 @@ La tab include:
 
 Il parser è prudente:
 - analizza solo payload TCP che iniziano come HTTP testuale;
-- non ricostruisce stream TCP completi;
+- la ricostruzione completa e limitata dei payload è disponibile nella tab separata **Follow stream**, mentre l'estrazione metadati HTTP resta prudente;
 - header o body frammentati possono essere marcati come parziali;
 - la dimensione payload è stimata da `Content-Length` o dai byte presenti nel segmento osservato;
 - il traffico cifrato HTTPS/TLS non viene interpretato.
+
+---
+
+## Follow stream
+
+La tab **Follow stream** ricostruisce payload applicativi TCP/UDP in modo limitato durante l'analisi backend. Raggruppa i pacchetti con lo stesso 5-tuple bidirezionale usato dal motore flow, conserva solo pacchetti con payload e mostra:
+
+- lista stream con endpoint, protocollo, byte, numero pacchetti e stato di troncamento;
+- transcript combinato in ordine di cattura con marker `C -> S` e `S -> C`;
+- vista solo client e solo server;
+- anteprime per segmento con testo e hex.
+
+I payload TCP sono ordinati per direzione usando il sequence number. I payload UDP restano in ordine di cattura. TLS non viene decifrato: gli stream cifrati restano evidenza binaria/cifrata. I limiti sono configurabili con `PCAPCAPER_FOLLOW_STREAM_MAX_STREAMS`, `PCAPCAPER_FOLLOW_STREAM_MAX_BYTES_PER_STREAM` e `PCAPCAPER_FOLLOW_STREAM_MAX_SEGMENT_BYTES`.
+
+L'implementazione è volutamente limitata: non fa estrazione completa di file, non decifra TLS e non esegue riparazione avanzata di duplicati o ritrasmissioni. Serve per triage rapido e ispezione leggibile dei payload dalla UI web.
 
 ---
 
