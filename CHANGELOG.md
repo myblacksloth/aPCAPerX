@@ -2,6 +2,10 @@
 
 ## current
 
+doc: doc refactor
+
+## 375cd9ff89a059cb62fe285e0073ea1a488c2533
+
 feat: ip-hostname association for better uman-readable data
 
 ![](./stuff/i/SCR-20260513-oumz.png)
