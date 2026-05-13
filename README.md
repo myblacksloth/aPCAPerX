@@ -180,6 +180,14 @@ Clicking a colored country opens a popup with:
 
 ![](./stuff/i/SCR-20260512-rqsf.png)
 
+### User management page
+
+![](./stuff/i/SCR-20260512-sscd.png)
+
+<!-- 
+![](./stuff/i/.png)
+-->
+
 ---
 
 ## Architecture
@@ -483,7 +491,7 @@ This is intentionally not stored in cookies or browser localStorage because full
 
 ### Users and authentication
 
-Authentication is backed by PostgreSQL. On first startup the backend creates the auth tables and seeds `demo` / `demo` when `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Passwords and recovery codes are verified with Unix-style SHA-512 `crypt` hashes; plaintext passwords are not stored. Each user can enable TOTP MFA and register browser passkeys from the user area. See [users.md](users.md) for schema, configuration, and operational notes.
+Authentication is backed by PostgreSQL. On first startup the backend creates the auth tables and seeds `demo` / `demo` when `PCAPCAPER_DEFAULT_DEMO_USER_ENABLED=1`. Passwords and recovery codes are verified with Unix-style SHA-512 `crypt` hashes; plaintext passwords are not stored. Each user has a profile page for recovery codes, TOTP MFA with a local QR code, and browser passkey registration. Passkeys require HTTPS or `localhost`; plain HTTP on a LAN IP is rejected by browsers. See [users.md](users.md) for schema, configuration, and operational notes.
 
 Redis was evaluated but is not required for the current synchronous request model or filesystem report storage. It remains a natural candidate for future asynchronous jobs, resumable analysis, shared progress state, and distributed caches.
 

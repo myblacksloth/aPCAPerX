@@ -106,6 +106,9 @@ TOTP is implemented with standard RFC 6238 HMAC-SHA1 codes:
 5. User enters a 6-digit code.
 6. Backend enables `totp_enabled`.
 
+The profile page renders a QR code locally in the browser from the `otpauth://`
+URI. No external QR-code service is called.
+
 When TOTP is enabled, password login requires either a valid TOTP code or an unused recovery code.
 
 ## Passkeys
@@ -131,7 +134,7 @@ PCAPCAPER_WEBAUTHN_RP_ID=pcapcaper.example.com
 PCAPCAPER_WEBAUTHN_ORIGIN=https://pcapcaper.example.com
 ```
 
-Passkeys require a secure browser context. `localhost` is allowed by browsers for development; remote hosts should use HTTPS.
+Passkeys require a secure browser context. `localhost` is allowed by browsers for development; remote hosts should use HTTPS. If the app is opened as `http://192.168.x.x:7000`, browsers usually block `navigator.credentials.create()`, and the profile page shows an explicit error.
 
 ## PostgreSQL Configuration
 

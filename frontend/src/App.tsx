@@ -14,6 +14,7 @@ import { Network } from 'lucide-react'
 import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
 import AuthPanel from './components/AuthPanel'
+import UserProfilePage from './components/UserProfilePage'
 import type { AnalysisResult, StoredAnalysisSummary, UserProfile } from './types/analysis'
 
 export interface UploadProgress {
@@ -40,6 +41,7 @@ export default function App() {
   const [savedLoading, setSavedLoading] = useState(false)
   const [savedError, setSavedError] = useState<string | null>(null)
   const [user, setUser] = useState<UserProfile | null>(null)
+  const [view, setView] = useState<'home' | 'profile'>('home')
 
   /** Load saved report metadata for the homepage reload list. */
   const refreshSavedAnalyses = async () => {
@@ -69,6 +71,7 @@ export default function App() {
     if (!user) {
       setResult(null)
       setSavedAnalyses([])
+      setView('home')
       return
     }
     refreshSavedAnalyses()
@@ -199,6 +202,7 @@ export default function App() {
   const handleReset = () => {
     setResult(null)
     setError(null)
+    setView('home')
     setProgress({ phase: 'idle', percent: 0, message: 'In attesa del file' })
   }
 
@@ -233,9 +237,11 @@ export default function App() {
       </header>
 
       {/* ── Contenuto principale ──────────────────────────────────────── */}
-      <AuthPanel user={user} onUserChange={setUser} />
+      <AuthPanel user={user} onUserChange={setUser} onOpenProfile={() => setView('profile')} />
       <main className="flex-1 pb-12">
-        {!user ? null : result ? (
+        {!user ? null : view === 'profile' ? (
+          <UserProfilePage user={user} onUserChange={setUser} onBack={() => setView('home')} />
+        ) : result ? (
           // Vista dashboard: mostra i risultati dell'analisi
           <Dashboard result={result} onReset={handleReset} onResultUpdate={handleResultUpdate} />
         ) : (
