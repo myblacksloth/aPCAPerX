@@ -183,6 +183,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
     - [Campi supportati](#campi-supportati)
     - [Filtri protocollo rapidi](#filtri-protocollo-rapidi)
     - [Esempi utili](#esempi-utili)
+  - [Hostname personalizzati](#hostname-personalizzati)
   - [🛰️ Arricchimento IP esterno](#️-arricchimento-ip-esterno)
   - [🌳 Flow 5-tuple e Tracce avanzate](#-flow-5-tuple-e-tracce-avanzate)
   - [🛡️ Security](#️-security)
@@ -227,6 +228,7 @@ Carica un file di cattura di rete e ottieni in secondi statistiche complete su p
 | **Top Porte** | Porte TCP/UDP più usate con nome servizio (top 15 src + dst) |
 | **Conversazioni** | Flussi bidirezionali IP↔IP ordinabili per pacchetti o byte (top 20) |
 | **Filtri pacchetti** | Filtri stile Wireshark con input testuale e builder GUI |
+| **Hostname personalizzati** | Override IP→hostname salvati nel report. Selezioni un IP osservato nel PCAP e la UI mostra sempre il nome scelto |
 | **Hosts** | Vista dettaglio IP collapsable con ruolo, flow, DNS, HTTP/SNI, ASN/geo e timeline attività |
 | **Grafo di rete** | Network graph host-to-host basato sui flow, con filtri per protocollo, scope e finding |
 | **DNS** | Dashboard stile AdGuard per richieste DNS, domini frequenti, tracking, ads, malware e reputazione opt-in |
@@ -785,6 +787,14 @@ frame.len > 1000
 info contains "Query"
 (http or https) and not ip.dst == 192.168.1.1
 ```
+
+---
+
+## Hostname personalizzati
+
+Il pulsante **Hostname** apre un popup per definire override IP→hostname specifici del report. Il popup permette di scegliere solo IP realmente osservati nel PCAP tramite elenco: l'IP non viene scritto a mano. Dopo il salvataggio, una mappatura come `192.168.8.1 -> my_router` viene applicata alla copia visualizzata del report e la UI mostra `my_router` al posto dell'IP.
+
+Gli alias vengono salvati nel JSON dell'analisi nel campo `host_aliases`, quindi restano disponibili quando ricarichi un'analisi precedente. I dati originali del report rimangono basati su IP, mentre la webapp usa la versione con hostname per la visualizzazione.
 
 ---
 

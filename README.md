@@ -62,6 +62,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 - [Configuration and performance](#configuration-and-performance)
 - [Lightweight AI assistant](#lightweight-ai-assistant)
 - [Wireshark-style packet filters](#wireshark-style-packet-filters)
+- [Host aliases](#host-aliases)
 - [External IP enrichment](#external-ip-enrichment)
 - [5-tuple flows and advanced traces](#5-tuple-flows-and-advanced-traces)
 - [Security analysis](#security-analysis)
@@ -88,6 +89,7 @@ Upload a network capture and quickly inspect protocols, IP addresses, ports, con
 | **Top ports** | Most used TCP/UDP source and destination ports with service names. |
 | **Conversations** | Bidirectional IP-to-IP conversations sortable by packets or bytes. |
 | **Packet filters** | Wireshark-style syntax plus GUI controls for quick filtering. |
+| **Host aliases** | Per-report IP-to-hostname overrides. Pick an observed IP from the PCAP and display the chosen hostname across the web UI. |
 | **Hosts** | Collapsible IP detail view with role, flows, DNS, HTTP/SNI, ASN/geo, findings, and activity timeline. |
 | **Network graph** | Host-to-host graph based on 5-tuple flows, with finding-aware node colors. |
 | **DNS** | AdGuard-style DNS dashboard with queries, answers, rcodes, TTLs, suspicious TXT records, tunneling indicators, and optional reputation checks. |
@@ -663,6 +665,14 @@ frame.len > 1000
 info contains "Query"
 (http or https) and not ip.dst == 192.168.1.1
 ```
+
+---
+
+## Host aliases
+
+The dashboard includes a **Hostname** button that opens a modal for per-report IP overrides. The modal only allows choosing IPs already observed in the PCAP; users cannot type arbitrary IPs. After saving an alias such as `192.168.8.1 -> my_router`, the dashboard builds a display copy of the report and replaces that IP with `my_router` across the UI.
+
+Aliases are stored in the analysis JSON as `host_aliases`, so they are preserved when a saved analysis is reloaded. The original report data remains IP-based internally, while the web UI receives the aliased display version.
 
 ---
 
