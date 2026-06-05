@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
 
-from models import IPExternalInfo
+from models import IPExternalInfo, MACExternalInfo
 from config import EXTERNAL_MAX_WORKERS, HTTP_TIMEOUT_SECONDS, MAX_ENRICHMENT_IPS, SOCKET_TIMEOUT_SECONDS
 
 
@@ -32,6 +32,19 @@ def _fetch_json(url: str) -> Dict:
     )
     with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def _fetch_text(url: str) -> str:
+    """Scarica testo semplice da un servizio esterno usando solo stdlib."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "PCAPCaper/1.0 MAC enrichment",
+            "Accept": "text/plain",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        return response.read().decode("utf-8", errors="replace").strip()
 
 
 def _append_source(info: IPExternalInfo, source: str) -> None:
@@ -60,6 +73,32 @@ def _public_ip_or_skip(ip: str) -> Optional[ipaddress._BaseAddress]:
         return None
 
     return parsed
+
+
+def _normalize_mac(value: str) -> Optional[str]:
+    """Normalizza un indirizzo MAC in formato aa:bb:cc:dd:ee:ff."""
+    text = str(value or "").strip().lower().replace("-", ":")
+    if "." in text and ":" not in text:
+        compact = text.replace(".", "")
+        if len(compact) == 12:
+            text = ":".join(compact[i:i + 2] for i in range(0, 12, 2))
+
+    parts = text.split(":")
+    if len(parts) != 6:
+        return None
+
+    try:
+        return ":".join(f"{int(part, 16):02x}" for part in parts)
+    except ValueError:
+        return None
+
+
+def _is_lookupable_mac(mac: str) -> bool:
+    """Evita lookup esterni per MAC placeholder, broadcast o multicast."""
+    if mac in {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}:
+        return False
+    first_octet = int(mac.split(":")[0], 16)
+    return (first_octet & 1) == 0 and (first_octet & 2) == 0
 
 
 def _reverse_dns(ip: str, info: IPExternalInfo) -> None:
@@ -243,6 +282,42 @@ def enrich_ip(ip: str) -> IPExternalInfo:
     return info
 
 
+def enrich_mac(mac: str) -> MACExternalInfo:
+    """Arricchisce un singolo MAC recuperando il vendor dall'OUI pubblico."""
+    normalized = _normalize_mac(mac)
+    if normalized is None:
+        return MACExternalInfo(
+            mac=mac,
+            status="skipped",
+            reason="Indirizzo MAC non valido: non inviato a servizi esterni.",
+        )
+
+    oui = normalized[:8].upper().replace(":", "-")
+    if not _is_lookupable_mac(normalized):
+        return MACExternalInfo(
+            mac=normalized,
+            status="skipped",
+            reason="MAC broadcast, multicast, locale o placeholder: lookup vendor non utile.",
+            oui=oui,
+        )
+
+    info = MACExternalInfo(mac=normalized, status="enriched", oui=oui)
+    try:
+        vendor = _fetch_text(f"https://api.macvendors.com/{urllib.parse.quote(oui)}")
+        if vendor and "not found" not in vendor.lower():
+            info.vendor = vendor[:160]
+            _append_source(info, "MACVendors")
+        else:
+            info.status = "error"
+            info.reason = "Vendor OUI non trovato."
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+        info.status = "error"
+        info.reason = "Lookup vendor non riuscito."
+        info.errors.append(f"MACVendors: {exc}")
+
+    return info
+
+
 def enrich_ips(ips: List[str]) -> Dict[str, IPExternalInfo]:
     """Arricchisce una lista di IP con concorrenza limitata e ordine stabile."""
     unique_ips = list(dict.fromkeys(ip.strip() for ip in ips if isinstance(ip, str) and ip.strip()))
@@ -266,3 +341,39 @@ def enrich_ips(ips: List[str]) -> Dict[str, IPExternalInfo]:
                 )
 
     return {ip: results[ip] for ip in selected_ips if ip in results}
+
+
+def enrich_macs(macs: List[str]) -> Dict[str, MACExternalInfo]:
+    """Arricchisce una lista di MAC con lookup OUI e concorrenza limitata."""
+    unique_macs = []
+    seen = set()
+    for value in macs:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized = _normalize_mac(value)
+        key = normalized or value.strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_macs.append(key)
+
+    selected_macs = unique_macs
+    if not selected_macs:
+        return {}
+
+    results: Dict[str, MACExternalInfo] = {}
+    with ThreadPoolExecutor(max_workers=min(EXTERNAL_MAX_WORKERS, len(selected_macs))) as executor:
+        future_to_mac = {executor.submit(enrich_mac, mac): mac for mac in selected_macs}
+        for future in as_completed(future_to_mac):
+            mac = future_to_mac[future]
+            try:
+                info = future.result()
+                results[info.mac] = info
+            except Exception as exc:
+                results[mac] = MACExternalInfo(
+                    mac=mac,
+                    status="error",
+                    reason=f"Errore imprevisto durante il lookup vendor: {exc}",
+                )
+
+    return results

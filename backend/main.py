@@ -36,13 +36,14 @@ from models import (
     StoredAnalysisSummary,
 )
 from analyzer import analyze_pcap
-from external_enrichment import enrich_ips
+from external_enrichment import enrich_ips, enrich_macs
 from security_analysis import analyze_security
 from dns_intelligence import analyze_dns_reputation
 from ai_chat import AIModelError, ask_ai
 from analysis_storage import list_analyses, load_analysis, save_analysis, update_user_analysis
+from auth_store import ensure_auth_schema
 from auth_api import require_user, router as auth_router
-from config import AI_ENABLED, ANALYSIS_STORAGE_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
+from config import AI_ENABLED, ANALYSIS_STORAGE_ENABLED, AUTH_ENABLED, TEMP_DIR, UPLOAD_CHUNK_SIZE, UPLOAD_MAX_MB
 
 # ── Configurazione del logging ─────────────────────────────────────────────────
 # Mostra timestamp, livello e messaggio su stdout (visibile in `docker logs`)
@@ -81,6 +82,13 @@ app.include_router(auth_router)
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
 
 
+@app.on_event("startup")
+def startup_checks():
+    """Prepare runtime-owned resources before serving requests."""
+    if AUTH_ENABLED:
+        ensure_auth_schema()
+
+
 # ─── Endpoint: health check ───────────────────────────────────────────────────
 
 @app.get(
@@ -115,10 +123,19 @@ def enrich_ips_endpoint(payload: IPEnrichmentRequest, user=Depends(require_user)
     azione esplicita dell'utente dal pulsante "Analizza con tool esterni".
     """
     try:
-        logger.info("Avvio arricchimento esterno per %d IP", len(payload.ips))
+        logger.info(
+            "Avvio arricchimento esterno per %d IP e %d MAC",
+            len(payload.ips),
+            len(payload.macs),
+        )
         results = enrich_ips(payload.ips)
-        logger.info("Arricchimento esterno completato per %d IP", len(results))
-        return IPEnrichmentResponse(results=results)
+        mac_vendors = enrich_macs(payload.macs)
+        logger.info(
+            "Arricchimento esterno completato per %d IP e %d MAC",
+            len(results),
+            len(mac_vendors),
+        )
+        return IPEnrichmentResponse(results=results, mac_vendors=mac_vendors)
     except Exception as exc:
         # Un errore inatteso viene loggato per poter diagnosticare problemi di rete/API.
         logger.exception("Errore imprevisto durante l'arricchimento IP")

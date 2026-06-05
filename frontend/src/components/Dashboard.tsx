@@ -19,8 +19,8 @@
  * mantenere il codice organizzato e facile da manutenere.
  */
 import { useMemo, useState } from 'react'
-import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network, ArrowDownUp, Tags } from 'lucide-react'
-import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry } from '../types/analysis'
+import { FileText, Download, BarChart2, GitBranch, Search, ShieldAlert, Globe2, Server, Lock, Monitor, CheckCircle2, Network, ArrowDownUp, Tags, Cpu } from 'lucide-react'
+import type { AnalysisResult, IPEnrichmentResponse, IPExternalInfo, IPEntry, MACExternalInfo, MACIPCorrelation } from '../types/analysis'
 import SummaryCards       from './SummaryCards'
 import ProtocolChart      from './ProtocolChart'
 import TopIPsChart        from './TopIPsChart'
@@ -39,13 +39,14 @@ import HTTPAnalysisView from './HTTPAnalysisView'
 import TLSAnalysisView from './TLSAnalysisView'
 import HostsView from './HostsView'
 import NetworkGraphView from './NetworkGraphView'
+import MACIPCorrelationView from './MACIPCorrelationView'
 import AIChatWidget from './AIChatWidget'
 import FollowStreamView from './FollowStreamView'
 import HostAliasesModal from './HostAliasesModal'
 import { parsePacketFilter } from '../utils/packetFilters'
 import { applyHostAliases, collectAliasableIps } from '../utils/hostAliases'
 
-type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'follow-stream' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph'
+type ActiveTab = 'overview' | 'traces' | 'advanced-traces' | 'follow-stream' | 'security-analysis' | 'dns-analysis' | 'http-analysis' | 'tls-analysis' | 'hosts' | 'network-graph' | 'mac-ip'
 
 interface DashboardProps {
   result: AnalysisResult
@@ -75,11 +76,26 @@ function collectIPs(result: AnalysisResult): string[] {
   return [...ips]
 }
 
+function collectMACs(result: AnalysisResult): string[] {
+  // I MAC arrivano dalla sezione aggregata backend, cosi non dipendono dal limite della tabella pacchetti.
+  return [...new Set((result.mac_correlations ?? []).map((entry) => entry.mac))]
+}
+
 function mergeExternalInfo(entries: IPEntry[], external: Record<string, IPExternalInfo>): IPEntry[] {
   // Aggiorna solo gli IP per cui il backend ha restituito dati esterni.
   return entries.map((entry) => ({
     ...entry,
     external: external[entry.ip] ?? entry.external ?? null,
+  }))
+}
+
+function mergeMACExternalInfo(
+  entries: MACIPCorrelation[] | undefined,
+  external: Record<string, MACExternalInfo>,
+): MACIPCorrelation[] {
+  return (entries ?? []).map((entry) => ({
+    ...entry,
+    external: external[entry.mac] ?? entry.external ?? null,
   }))
 }
 
@@ -99,7 +115,8 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
     ? displayResult.packets
     : displayResult.packets.filter(parsedPacketFilter.predicate)
   const externalResultsCount = Object.keys(result.external_ip_info ?? {}).length
-  const externalFeatureActive = externalResultsCount > 0 || Boolean(externalSummary && !externalError)
+  const externalMACResultsCount = Object.keys(result.external_mac_info ?? {}).length
+  const externalFeatureActive = externalResultsCount > 0 || externalMACResultsCount > 0 || Boolean(externalSummary && !externalError)
 
   const openHost = (ip: string) => {
     // Permette alle viste con IP cliccabili di aprire direttamente la tab Hosts.
@@ -135,7 +152,8 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
     // La chiamata ai servizi esterni parte solo dopo il popup di consenso.
     setExternalConfirmOpen(false)
     const ips = collectIPs(result)
-    if (ips.length === 0) return
+    const macs = collectMACs(result)
+    if (ips.length === 0 && macs.length === 0) return
 
     setExternalLoading(true)
     setExternalError(null)
@@ -145,7 +163,7 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       const response = await fetch('/api/enrich-ips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ips }),
+        body: JSON.stringify({ ips, macs }),
       })
 
       if (!response.ok) {
@@ -156,18 +174,25 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
       const enrichment: IPEnrichmentResponse = await response.json()
       const enrichedCount = Object.values(enrichment.results).filter((item) => item.status === 'enriched').length
       const skippedCount = Object.values(enrichment.results).filter((item) => item.status === 'skipped').length
+      const macVendors = enrichment.mac_vendors ?? {}
+      const vendorCount = Object.values(macVendors).filter((item) => Boolean(item.vendor)).length
 
       onResultUpdate({
         ...result,
         top_src_ips: mergeExternalInfo(result.top_src_ips, enrichment.results),
         top_dst_ips: mergeExternalInfo(result.top_dst_ips, enrichment.results),
+        mac_correlations: mergeMACExternalInfo(result.mac_correlations, macVendors),
         external_ip_info: {
           ...(result.external_ip_info ?? {}),
           ...enrichment.results,
         },
+        external_mac_info: {
+          ...(result.external_mac_info ?? {}),
+          ...macVendors,
+        },
       })
 
-      setExternalSummary(`${enrichedCount} IP arricchiti, ${skippedCount} IP privati/locali non inviati`)
+      setExternalSummary(`${enrichedCount} IP arricchiti, ${skippedCount} IP privati/locali non inviati, ${vendorCount} vendor MAC rilevati`)
     } catch (err) {
       setExternalError(err instanceof Error ? err.message : "Errore sconosciuto durante l'arricchimento")
     } finally {
@@ -256,6 +281,16 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
             >
               <Network className="w-3.5 h-3.5" />
               Grafo
+            </button>
+            <button
+              onClick={() => setActiveTab('mac-ip')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${activeTab === 'mac-ip'
+                  ? 'bg-slate-600 text-slate-100 shadow'
+                  : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              MAC/IP
             </button>
             <button
               onClick={() => setActiveTab('security-analysis')}
@@ -431,6 +466,11 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
         <NetworkGraphView result={displayResult} />
       )}
 
+      {/* ── Tab: Correlazione MAC/IP ───────────────────────────────────── */}
+      {activeTab === 'mac-ip' && (
+        <MACIPCorrelationView result={result} onHostClick={openHost} />
+      )}
+
       {/* ── Tab: Security avanzata ────────────────────────────────────── */}
       {activeTab === 'security-analysis' && (
         <SecurityAnalysisView result={displayResult} />
@@ -471,9 +511,10 @@ export default function Dashboard({ result, onResultUpdate }: DashboardProps) {
                 <p className="mt-2 text-sm text-slate-300">
                   Verranno inviati solo gli IP pubblici osservati nel PCAP a servizi esterni per recuperare ASN,
                   RDAP, reverse DNS e dati GeoIP. Gli IP privati, locali e riservati saranno scartati dal backend.
+                  Per i MAC osservati sara inviato solo l'OUI necessario a cercare il produttore.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  Fonti usate: RDAP/IANA, Team Cymru, resolver DNS inverso e ip-api.
+                  Fonti usate: RDAP/IANA, Team Cymru, resolver DNS inverso, ip-api e MACVendors.
                 </p>
               </div>
             </div>
