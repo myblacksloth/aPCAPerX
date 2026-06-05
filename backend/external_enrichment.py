@@ -7,6 +7,8 @@ servizi terzi durante la normale analisi del file.
 """
 
 import ipaddress
+import csv
+import io
 import json
 import socket
 import urllib.error
@@ -14,7 +16,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from models import IPExternalInfo, MACExternalInfo
 from config import EXTERNAL_MAX_WORKERS, HTTP_TIMEOUT_SECONDS, MAX_ENRICHMENT_IPS, SOCKET_TIMEOUT_SECONDS
@@ -27,6 +29,19 @@ def _fetch_json(url: str) -> Dict:
         headers={
             # User-Agent esplicito per rendere identificabile l'applicazione.
             "User-Agent": "PCAPCaper/1.0 IP enrichment",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def _fetch_json_any(url: str) -> Any:
+    """Scarica e decodifica JSON quando la risposta puo essere dict o list."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "PCAPCaper/1.0 MAC enrichment",
             "Accept": "application/json",
         },
     )
@@ -93,12 +108,136 @@ def _normalize_mac(value: str) -> Optional[str]:
         return None
 
 
+def _mac_compact(mac: str) -> str:
+    """Restituisce il MAC normalizzato come 12 cifre esadecimali maiuscole."""
+    return mac.replace(":", "").upper()
+
+
+def _mac_oui(mac: str) -> str:
+    """Restituisce l'OUI MA-L come sei cifre esadecimali."""
+    return _mac_compact(mac)[:6]
+
+
 def _is_lookupable_mac(mac: str) -> bool:
-    """Evita lookup esterni per MAC placeholder, broadcast o multicast."""
+    """Evita lookup esterni solo per MAC placeholder, broadcast o multicast."""
     if mac in {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}:
         return False
     first_octet = int(mac.split(":")[0], 16)
-    return (first_octet & 1) == 0 and (first_octet & 2) == 0
+    return (first_octet & 1) == 0
+
+
+def _is_locally_administered_mac(mac: str) -> bool:
+    """Rileva MAC con bit U/L impostato: spesso randomizzati o virtuali."""
+    first_octet = int(mac.split(":")[0], 16)
+    return (first_octet & 2) != 0
+
+
+def _known_virtual_vendor(mac: str) -> Optional[Tuple[str, str]]:
+    """Riconosce prefissi virtuali/locali comuni che spesso non sono nei DB OUI."""
+    compact = _mac_compact(mac)
+    known_prefixes = {
+        "0242": "Docker container",
+        "525400": "QEMU/KVM virtual machine",
+        "080027": "Oracle VirtualBox",
+        "0A0027": "Oracle VirtualBox",
+        "000569": "VMware",
+        "000C29": "VMware",
+        "001C14": "VMware",
+        "005056": "VMware",
+        "00155D": "Microsoft Hyper-V",
+        "001C42": "Parallels",
+        "00163E": "Xen",
+        "0A580A": "Kubernetes/CNI virtual interface",
+    }
+    for prefix, vendor in sorted(known_prefixes.items(), key=lambda item: len(item[0]), reverse=True):
+        if compact.startswith(prefix):
+            return vendor, prefix
+    return None
+
+
+@lru_cache(maxsize=3)
+def _ieee_registry_map(registry: str) -> Dict[str, str]:
+    """Scarica e indicizza un registro pubblico IEEE OUI/MA-M/OUI36."""
+    filenames = {
+        "oui": "oui.csv",
+        "mam": "mam.csv",
+        "oui36": "oui36.csv",
+    }
+    filename = filenames[registry]
+    raw = _fetch_text(f"https://standards-oui.ieee.org/{registry}/{filename}")
+    vendors: Dict[str, str] = {}
+    for row in csv.DictReader(io.StringIO(raw)):
+        assignment = str(row.get("Assignment") or "").strip().upper().replace("-", "").replace(":", "")
+        organization = str(row.get("Organization Name") or "").strip()
+        if assignment and organization:
+            vendors[assignment] = organization
+    return vendors
+
+
+def _ieee_vendor(mac: str) -> Optional[Tuple[str, str, str]]:
+    """Cerca il vendor nei registri IEEE MA-L, MA-M e OUI36."""
+    compact = _mac_compact(mac)
+    lookups = [
+        ("IEEE OUI36", "oui36", compact[:9]),
+        ("IEEE MA-M", "mam", compact[:7]),
+        ("IEEE MA-L", "oui", compact[:6]),
+    ]
+    errors: List[str] = []
+    for source, registry, assignment in lookups:
+        try:
+            vendor = _ieee_registry_map(registry).get(assignment)
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError, csv.Error) as exc:
+            errors.append(f"{source}: {exc}")
+            continue
+        if vendor:
+            return vendor, source, assignment
+    if errors:
+        raise OSError("; ".join(errors))
+    return None
+
+
+def _macvendors_vendor(mac: str) -> Optional[str]:
+    """Consulta MACVendors provando sia MAC completo sia OUI compatto."""
+    compact = _mac_compact(mac)
+    candidates = [
+        mac,
+        compact,
+        compact[:6],
+        "-".join(compact[:6][i:i + 2] for i in range(0, 6, 2)),
+    ]
+    for candidate in candidates:
+        try:
+            vendor = _fetch_text(f"https://api.macvendors.com/{urllib.parse.quote(candidate)}")
+            if vendor and "not found" not in vendor.lower() and "no vendor" not in vendor.lower():
+                return vendor
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            continue
+    return None
+
+
+def _macvendorlookup_vendor(mac: str) -> Optional[str]:
+    """Consulta macvendorlookup.com, che risponde con una lista JSON."""
+    data = _fetch_json_any(f"https://www.macvendorlookup.com/api/v2/{urllib.parse.quote(mac)}")
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                vendor = _first_string([item.get("company"), item.get("vendorDetails"), item.get("name")])
+                if vendor:
+                    return vendor
+    if isinstance(data, dict):
+        return _first_string([data.get("company"), data.get("vendor"), data.get("organization"), data.get("name")])
+    return None
+
+
+def _maclookup_app_vendor(mac: str) -> Optional[str]:
+    """Consulta maclookup.app quando disponibile senza API key."""
+    data = _fetch_json_any(f"https://api.maclookup.app/v2/macs/{urllib.parse.quote(mac)}")
+    if not isinstance(data, dict):
+        return None
+    if data.get("found") is False or data.get("success") is False:
+        return None
+    return _first_string([data.get("company"), data.get("vendor"), data.get("organization")])
+
 
 
 def _reverse_dns(ip: str, info: IPExternalInfo) -> None:
@@ -283,7 +422,7 @@ def enrich_ip(ip: str) -> IPExternalInfo:
 
 
 def enrich_mac(mac: str) -> MACExternalInfo:
-    """Arricchisce un singolo MAC recuperando il vendor dall'OUI pubblico."""
+    """Arricchisce un singolo MAC recuperando il vendor da più fonti OUI."""
     normalized = _normalize_mac(mac)
     if normalized is None:
         return MACExternalInfo(
@@ -302,18 +441,55 @@ def enrich_mac(mac: str) -> MACExternalInfo:
         )
 
     info = MACExternalInfo(mac=normalized, status="enriched", oui=oui)
-    try:
-        vendor = _fetch_text(f"https://api.macvendors.com/{urllib.parse.quote(oui)}")
-        if vendor and "not found" not in vendor.lower():
-            info.vendor = vendor[:160]
-            _append_source(info, "MACVendors")
-        else:
-            info.status = "error"
-            info.reason = "Vendor OUI non trovato."
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
-        info.status = "error"
-        info.reason = "Lookup vendor non riuscito."
-        info.errors.append(f"MACVendors: {exc}")
+
+    known = _known_virtual_vendor(normalized)
+    if known:
+        vendor, prefix = known
+        info.vendor = vendor
+        info.oui = "-".join(prefix[:6][i:i + 2] for i in range(0, min(len(prefix), 6), 2))
+        _append_source(info, "Prefissi virtuali noti")
+        return info
+
+    source_attempts = [
+        ("IEEE", _ieee_vendor),
+        ("MACVendors", lambda value: (
+            (vendor, "MACVendors", _mac_oui(value))
+            if (vendor := _macvendors_vendor(value))
+            else None
+        )),
+        ("MacVendorLookup", lambda value: (
+            (vendor, "MacVendorLookup", _mac_oui(value))
+            if (vendor := _macvendorlookup_vendor(value))
+            else None
+        )),
+        ("MacLookup.app", lambda value: (
+            (vendor, "MacLookup.app", _mac_oui(value))
+            if (vendor := _maclookup_app_vendor(value))
+            else None
+        )),
+    ]
+
+    for source_name, lookup in source_attempts:
+        try:
+            match = lookup(normalized)
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+            info.errors.append(f"{source_name}: {exc}")
+            continue
+        if not match:
+            continue
+
+        vendor, source, assignment = match
+        info.vendor = vendor[:160]
+        if assignment:
+            info.oui = "-".join(assignment[:6][i:i + 2] for i in range(0, min(len(assignment), 6), 2))
+        _append_source(info, source)
+        return info
+
+    info.status = "error"
+    if _is_locally_administered_mac(normalized):
+        info.reason = "Vendor OUI non trovato; il MAC e localmente amministrato o randomizzato."
+    else:
+        info.reason = "Vendor OUI non trovato nelle fonti consultate."
 
     return info
 
