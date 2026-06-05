@@ -104,16 +104,38 @@ class IPExternalInfo(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class MACExternalInfo(BaseModel):
+    """Informazioni ottenute da servizi esterni per un indirizzo MAC/OUI."""
+    # Indirizzo MAC osservato nel PCAP
+    mac: str
+    # Stato dell'arricchimento: enriched, skipped o error
+    status: str
+    # Motivo sintetico in caso di skip o errore
+    reason: Optional[str] = None
+    # Servizi esterni che hanno restituito almeno un dato utile
+    sources: List[str] = Field(default_factory=list)
+    # Produttore associato all'OUI, quando disponibile
+    vendor: Optional[str] = None
+    # OUI normalizzato usato per la lookup
+    oui: Optional[str] = None
+    # Errori non bloccanti incontrati sui singoli servizi
+    errors: List[str] = Field(default_factory=list)
+
+
 class IPEnrichmentRequest(BaseModel):
     """Richiesta di arricchimento esterno per una lista di IP."""
     # Lista di indirizzi IP estratti dal report PCAP
     ips: List[str]
+    # Lista opzionale di indirizzi MAC osservati; viene usata solo dopo consenso utente.
+    macs: List[str] = Field(default_factory=list)
 
 
 class IPEnrichmentResponse(BaseModel):
-    """Risposta dell'arricchimento esterno indicizzata per indirizzo IP."""
+    """Risposta dell'arricchimento esterno indicizzata per IP e MAC."""
     # Mappa IP -> informazioni esterne recuperate
     results: Dict[str, IPExternalInfo]
+    # Mappa MAC -> produttore/OUI recuperato
+    mac_vendors: Dict[str, MACExternalInfo] = Field(default_factory=dict)
 
 
 class SecurityPacketObservation(BaseModel):
@@ -835,6 +857,36 @@ class PacketEntry(BaseModel):
     layers: List[LayerInfo] = Field(default_factory=list)  # albero dei layer protocollari
 
 
+class MACIPCorrelation(BaseModel):
+    """Correlazione osservata nel PCAP tra indirizzo MAC e indirizzi IP."""
+    # Indirizzo MAC normalizzato
+    mac: str
+    # IP osservati quando il MAC era sorgente L2
+    src_ips: List[str] = Field(default_factory=list)
+    # IP osservati quando il MAC era destinazione L2
+    dst_ips: List[str] = Field(default_factory=list)
+    # Tutti gli IP associati al MAC in qualunque direzione
+    ips: List[str] = Field(default_factory=list)
+    # Numero pacchetti in cui il MAC e stato osservato come sorgente
+    packets_sent: int = 0
+    # Numero pacchetti in cui il MAC e stato osservato come destinazione
+    packets_received: int = 0
+    # Byte osservati con il MAC come sorgente
+    bytes_sent: int = 0
+    # Byte osservati con il MAC come destinazione
+    bytes_received: int = 0
+    # Protocolli associati
+    protocols: List[str] = Field(default_factory=list)
+    # Peer MAC piu frequenti
+    peer_macs: List[str] = Field(default_factory=list)
+    # Primo timestamp osservato nella forma HH:MM:SS.mmm UTC
+    first_seen: Optional[str] = None
+    # Ultimo timestamp osservato nella forma HH:MM:SS.mmm UTC
+    last_seen: Optional[str] = None
+    # Informazioni opzionali ottenute con lookup OUI esterna
+    external: Optional[MACExternalInfo] = None
+
+
 class AIChatMessage(BaseModel):
     """Single chat message exchanged with the lightweight AI assistant."""
     role: str
@@ -997,9 +1049,13 @@ class AnalysisResult(BaseModel):
     tls: Optional[TLSAnalysisResult] = None
     # Vista host/IP aggregata
     hosts: Optional[HostAnalysisResult] = None
+    # Correlazione MAC/IP osservata a livello Ethernet/ARP
+    mac_correlations: List[MACIPCorrelation] = Field(default_factory=list)
     # Andamento del traffico nel tempo
     timeline: List[TimelinePoint]
     # Lista dettagliata dei pacchetti
     packets: List[PacketEntry]
     # Informazioni opzionali ottenute con l'arricchimento esterno manuale
     external_ip_info: Dict[str, IPExternalInfo] = Field(default_factory=dict)
+    # Informazioni opzionali OUI/vendor ottenute con l'arricchimento esterno manuale
+    external_mac_info: Dict[str, MACExternalInfo] = Field(default_factory=dict)

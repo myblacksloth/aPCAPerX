@@ -30,6 +30,7 @@ from models import (
     AnalysisResult, SummaryStats, ProtocolEntry, IPEntry,
     PortEntry, Conversation, TimelinePoint, PacketEntry,
     LayerField, LayerInfo, IPServiceEntry,
+    MACIPCorrelation,
 )
 from flow_analysis import FlowAnalyzer
 from stream_follow import FollowStreamAnalyzer
@@ -241,6 +242,125 @@ def _safe_dns_name(value) -> Optional[str]:
         return str(value).rstrip(".")
     except Exception:
         return None
+
+
+def _normalize_mac(value) -> Optional[str]:
+    """Normalizza un indirizzo MAC in formato aa:bb:cc:dd:ee:ff."""
+    if not value:
+        return None
+
+    text = str(value).strip().lower().replace("-", ":")
+    if not text:
+        return None
+
+    if "." in text and ":" not in text:
+        compact = text.replace(".", "")
+        if len(compact) == 12:
+            text = ":".join(compact[i:i + 2] for i in range(0, 12, 2))
+
+    parts = text.split(":")
+    if len(parts) != 6:
+        return None
+
+    try:
+        normalized = ":".join(f"{int(part, 16):02x}" for part in parts)
+    except ValueError:
+        return None
+
+    return normalized
+
+
+def _is_placeholder_mac(mac: Optional[str]) -> bool:
+    """Indica MAC non assegnabili a un host/vendor specifico."""
+    if not mac:
+        return True
+    if mac in {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}:
+        return True
+    first_octet = int(mac.split(":")[0], 16)
+    return (first_octet & 1) != 0
+
+
+def _remember_mac_ip(
+    mac_data: Dict[str, Dict],
+    mac_ip_counts: Counter,
+    mac: Optional[str],
+    ip: Optional[str],
+    peer_mac: Optional[str],
+    protocol: str,
+    length: int,
+    timestamp: str,
+    direction: str,
+) -> None:
+    """Aggiorna gli accumulatori MAC/IP senza effettuare lookup esterni."""
+    normalized = _normalize_mac(mac)
+    if _is_placeholder_mac(normalized):
+        return
+
+    data = mac_data[normalized]
+    data["protocols"].add(protocol)
+    data["first_seen"] = data["first_seen"] or timestamp
+    data["last_seen"] = timestamp
+
+    if direction == "src":
+        data["packets_sent"] += 1
+        data["bytes_sent"] += length
+    else:
+        data["packets_received"] += 1
+        data["bytes_received"] += length
+
+    if ip:
+        data[f"{direction}_ips"].add(ip)
+        mac_ip_counts[(normalized, direction, ip)] += 1
+
+    normalized_peer = _normalize_mac(peer_mac)
+    if normalized_peer and normalized_peer != normalized and not _is_placeholder_mac(normalized_peer):
+        data["peer_macs"][normalized_peer] += 1
+
+
+def _build_mac_correlations(
+    mac_data: Dict[str, Dict],
+    mac_ip_counts: Counter,
+) -> List[MACIPCorrelation]:
+    """Costruisce la lista ordinata di correlazioni MAC/IP."""
+    entries: List[MACIPCorrelation] = []
+    for mac, data in mac_data.items():
+        src_ips = sorted(
+            data["src_ips"],
+            key=lambda ip: mac_ip_counts[(mac, "src", ip)],
+            reverse=True,
+        )
+        dst_ips = sorted(
+            data["dst_ips"],
+            key=lambda ip: mac_ip_counts[(mac, "dst", ip)],
+            reverse=True,
+        )
+        all_ips = sorted(
+            data["src_ips"] | data["dst_ips"],
+            key=lambda ip: (
+                mac_ip_counts[(mac, "src", ip)] + mac_ip_counts[(mac, "dst", ip)]
+            ),
+            reverse=True,
+        )
+        entries.append(MACIPCorrelation(
+            mac=mac,
+            src_ips=src_ips[:20],
+            dst_ips=dst_ips[:20],
+            ips=all_ips[:30],
+            packets_sent=data["packets_sent"],
+            packets_received=data["packets_received"],
+            bytes_sent=data["bytes_sent"],
+            bytes_received=data["bytes_received"],
+            protocols=sorted(data["protocols"]),
+            peer_macs=[peer for peer, _ in data["peer_macs"].most_common(12)],
+            first_seen=data["first_seen"],
+            last_seen=data["last_seen"],
+        ))
+
+    return sorted(
+        entries,
+        key=lambda entry: entry.bytes_sent + entry.bytes_received,
+        reverse=True,
+    )
 
 
 def _raw_payload_bytes(pkt) -> Optional[bytes]:
@@ -557,6 +677,21 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     ip_peers: Dict[str, Counter] = defaultdict(Counter)
     dns_hostnames: Dict[str, set] = defaultdict(set)
 
+    # Correlazioni MAC/IP osservate localmente nel PCAP.
+    mac_data: Dict[str, Dict] = defaultdict(lambda: {
+        "src_ips": set(),
+        "dst_ips": set(),
+        "packets_sent": 0,
+        "packets_received": 0,
+        "bytes_sent": 0,
+        "bytes_received": 0,
+        "protocols": set(),
+        "peer_macs": Counter(),
+        "first_seen": None,
+        "last_seen": None,
+    })
+    mac_ip_counts: Counter = Counter()
+
     # Conversazioni bidirezionali tra coppie di IP.
     # Chiave: (min(ip1,ip2), max(ip1,ip2)) così A→B e B→A sono la stessa coppia.
     conv_data: Dict[Tuple[str, str], Dict] = defaultdict(
@@ -628,6 +763,33 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
                     # ARP: usa i campi IP del protocollo ARP
                     src_ip = pkt[ARP].psrc
                     dst_ip = pkt[ARP].pdst
+
+                try:
+                    ts_display = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S.%f")[:-3]
+                except Exception:
+                    ts_display = "00:00:00.000"
+
+                # ── Correlazione locale MAC/IP ───────────────────────────
+                # Ethernet fornisce i MAC L2 visibili; ARP aggiunge i campi
+                # hardware quando disponibili anche in catture non Ethernet.
+                src_mac: Optional[str] = None
+                dst_mac: Optional[str] = None
+                if pkt.haslayer(Ether):
+                    src_mac = pkt[Ether].src
+                    dst_mac = pkt[Ether].dst
+                if pkt.haslayer(ARP):
+                    arp = pkt[ARP]
+                    src_mac = getattr(arp, "hwsrc", src_mac)
+                    dst_mac = getattr(arp, "hwdst", dst_mac)
+
+                _remember_mac_ip(
+                    mac_data, mac_ip_counts,
+                    src_mac, src_ip, dst_mac, protocol, pkt_len, ts_display, "src",
+                )
+                _remember_mac_ip(
+                    mac_data, mac_ip_counts,
+                    dst_mac, dst_ip, src_mac, protocol, pkt_len, ts_display, "dst",
+                )
 
                 # Aggiorna i contatori degli indirizzi IP
                 if src_ip:
@@ -708,11 +870,6 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
 
                 raw_payload = _raw_payload_bytes(pkt) if (pkt.haslayer(TCP) or pkt.haslayer(UDP)) else None
                 raw_tcp_payload = raw_payload if pkt.haslayer(TCP) else None
-
-                try:
-                    ts_display = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S.%f")[:-3]
-                except Exception:
-                    ts_display = "00:00:00.000"
 
                 # ── Follow stream payload collection ─────────────────────
                 # The stream analyzer stores only bounded Raw payload bytes and
@@ -898,6 +1055,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
     dns_result = dns_analyzer.to_result(flows)
     http_result = http_analyzer.to_result()
     tls_result = tls_analyzer.to_result(dns_hostnames)
+    mac_correlations = _build_mac_correlations(mac_data, mac_ip_counts)
     hosts_result = build_hosts(
         packets=packet_list,
         flows=flows,
@@ -923,6 +1081,7 @@ def analyze_pcap(file_path: str, filename: str) -> AnalysisResult:
         http          = http_result,
         tls           = tls_result,
         hosts         = hosts_result,
+        mac_correlations = mac_correlations,
         timeline      = timeline,
         packets       = packet_list,
     )

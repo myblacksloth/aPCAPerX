@@ -33,6 +33,7 @@ from auth_store import (
     delete_session,
     disable_totp,
     enable_totp,
+    ensure_auth_schema,
     get_passkey_by_credential,
     get_user_by_id,
     get_user_by_session,
@@ -121,6 +122,7 @@ def require_user(request: Request) -> Dict[str, Any]:
     """Resolve the current authenticated user or reject the request."""
     if not AUTH_ENABLED:
         return {"id": "00000000-0000-0000-0000-000000000000", "username": "disabled", "display_name": "Auth disabled"}
+    ensure_auth_schema()
     token = request.cookies.get(SESSION_COOKIE_NAME, "")
     user = get_user_by_session(token)
     if not user:
@@ -131,6 +133,7 @@ def require_user(request: Request) -> Dict[str, Any]:
 @router.post("/login", response_model=UserProfile)
 def login(payload: LoginRequest, response: Response):
     """Authenticate with username/password plus TOTP when MFA is enabled."""
+    ensure_auth_schema()
     user = get_user_by_username(payload.username)
     if not user or not verify_password(user, payload.password):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
@@ -147,6 +150,7 @@ def login(payload: LoginRequest, response: Response):
 @router.post("/register", response_model=UserProfile)
 def register(payload: RegisterRequest, response: Response):
     """Create a new user account and start an authenticated session."""
+    ensure_auth_schema()
     try:
         user = create_user(payload.username, payload.password, payload.display_name)
     except ValueError as exc:
@@ -158,6 +162,7 @@ def register(payload: RegisterRequest, response: Response):
 @router.post("/recover", response_model=UserProfile)
 def recover_account(payload: AccountRecoveryRequest, response: Response):
     """Authenticate with a username and one unused recovery code."""
+    ensure_auth_schema()
     user = get_user_by_username(payload.username)
     if not user or not verify_recovery_code(str(user["id"]), payload.recovery_code):
         raise HTTPException(status_code=401, detail="Invalid username or recovery code.")

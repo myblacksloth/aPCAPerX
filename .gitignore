@@ -1,4 +1,5 @@
 
+.priv*
 
 # dotenv environment variable files
 .env

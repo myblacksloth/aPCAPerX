@@ -114,6 +114,8 @@ services:
       - pcapcaper_net
 
     depends_on:
+      db:
+        condition: service_healthy
       ai:
         condition: service_healthy
 

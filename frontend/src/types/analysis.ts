@@ -100,10 +100,30 @@ export interface IPExternalInfo {
   errors: string[]
 }
 
+/** Informazioni esterne OUI/vendor per un MAC */
+export interface MACExternalInfo {
+  /** Indirizzo MAC arricchito */
+  mac: string
+  /** Stato dell'arricchimento: enriched, skipped o error */
+  status: string
+  /** Motivo sintetico in caso di skip o errore */
+  reason: string | null
+  /** Fonti che hanno restituito dati utili */
+  sources: string[]
+  /** Produttore associato all'OUI */
+  vendor: string | null
+  /** OUI normalizzato */
+  oui: string | null
+  /** Errori non bloccanti incontrati */
+  errors: string[]
+}
+
 /** Risposta dell'arricchimento esterno IP */
 export interface IPEnrichmentResponse {
   /** Mappa IP -> dati esterni recuperati */
   results: Record<string, IPExternalInfo>
+  /** Mappa MAC -> vendor/OUI recuperato */
+  mac_vendors?: Record<string, MACExternalInfo>
 }
 
 /** Pacchetto compatto inviato alla tab Security avanzata */
@@ -635,6 +655,23 @@ export interface PacketEntry {
   layers: LayerInfo[]
 }
 
+/** Correlazione MAC/IP osservata nel PCAP */
+export interface MACIPCorrelation {
+  mac: string
+  src_ips: string[]
+  dst_ips: string[]
+  ips: string[]
+  packets_sent: number
+  packets_received: number
+  bytes_sent: number
+  bytes_received: number
+  protocols: string[]
+  peer_macs: string[]
+  first_seen: string | null
+  last_seen: string | null
+  external?: MACExternalInfo | null
+}
+
 /** Risultato completo dell'analisi di un file PCAP — oggetto radice */
 export interface AnalysisResult {
   /** Stable backend identifier when the report was persisted */
@@ -675,10 +712,14 @@ export interface AnalysisResult {
   tls?: TLSAnalysisResult | null
   /** Vista aggregata host/IP */
   hosts?: HostAnalysisResult | null
+  /** Correlazioni MAC/IP osservate nel PCAP */
+  mac_correlations?: MACIPCorrelation[]
   /** Andamento del traffico nel tempo */
   timeline: TimelinePoint[]
   /** Lista dettagliata dei primi 1000 pacchetti */
   packets: PacketEntry[]
   /** Informazioni opzionali ottenute con l'arricchimento esterno manuale */
   external_ip_info?: Record<string, IPExternalInfo>
+  /** Informazioni opzionali OUI/vendor ottenute con l'arricchimento esterno manuale */
+  external_mac_info?: Record<string, MACExternalInfo>
 }
